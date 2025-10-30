@@ -24,8 +24,30 @@ jobs:
         python-version: "3.13"
 
     - name: Install dependencies
-      run: uv sync --frozen
+      run: uv sync --frozen --group dev
 
-    - name: Run tests
-      run: uv run pytest test_estimator_vs_notebook.py -v -s
+    - name: Run tests with coverage
+      run: uv run pytest test_estimator_vs_notebook.py -v -s --cov=load_model_estimator --cov-report=xml --cov-report=html --cov-report=term --junitxml=junit.xml
+
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      if: always()
+      with:
+        files: junit.xml
+        check_name: Test Results
+
+    - name: Upload coverage reports to artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports
+        path: |
+          coverage.xml
+          htmlcov/
+
+    - name: Coverage Comment
+      uses: py-cov-action/python-coverage-comment-action@v4
+      with:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        MINIMUM_GREEN: 80
+        MINIMUM_ORANGE: 60
 
