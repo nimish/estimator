@@ -39,7 +39,7 @@ def _(Path, mo, pd):
         # years = [2020]
         df_list = []
         for _yr in years:
-            fp = Path('.') / 'ISO_Data' / f'{_yr}_smd_hourly.xlsx' 
+            fp = Path('.') / 'ISO_Data' / f'{_yr}_smd_hourly.xlsx'
             df = pd.read_excel(fp, sheet_name=sheet)
             df['year'] = _yr
             df.index = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Hr_End'].map(lambda x: f"{x-1}:00:00")) + pd.Timedelta(hours=1)
