@@ -77,6 +77,10 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         Fitted AR coefficients (if fit_ar=True).
     ar_intercept_ : float or None
         Fitted AR intercept (if fit_ar=True).
+    ar_noise_loc_ : float or None
+        Fitted location parameter for Laplace noise distribution (if fit_ar=True).
+    ar_noise_scale_ : float or None
+        Fitted scale parameter for Laplace noise distribution (if fit_ar=True).
     n_features_in_ : int
         Number of features seen during fit.
 
@@ -254,7 +258,7 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             exog_pred = np.einsum('ifl,fl->i', Hs_stack, exog_coef)
             return np.nan_to_num(exog_pred, nan=0.0)
 
-    def _running_view(self, arr, window, axis=-1):
+    def _running_view(self, arr, window, lag=1,axis=-1):
         """
         Create running view of array for AR terms.
 
@@ -272,7 +276,7 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         view : ndarray
             Running view with extra dimension.
         """
-        mod_arr = np.r_[np.ones(window) * np.nan, arr[:-1]]
+        mod_arr = np.r_[np.ones(window + lag - 1) * np.nan, arr[:-1]]
         shape = list(mod_arr.shape)
         shape[axis] -= (window-1)
         assert(shape[axis] > 0)
@@ -496,6 +500,8 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         # Fit AR model on residuals if requested
         self.ar_coef_ = None
         self.ar_intercept_ = None
+        self.ar_noise_loc_ = None
+        self.ar_noise_scale_ = None
 
         if self.fit_ar:
             self._fit_ar_model(F, Hs, exog_vars, y, valid_mask)
@@ -537,6 +543,11 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             assert constant.value is not None, "AR intercept should be set"
             self.ar_coef_ = theta.value
             self.ar_intercept_ = constant.value
+
+            # Fit Laplace distribution to AR model residuals (as in notebook)
+            ar_model = B[ar_valid_mask] @ theta.value + constant.value
+            ar_residuals = residuals[ar_valid_mask] - ar_model
+            self.ar_noise_loc_, self.ar_noise_scale_ = stats.laplace.fit(ar_residuals)
 
     def predict(self, X):
         """
@@ -624,17 +635,21 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         """Generate samples with AR noise."""
         assert self.ar_coef_ is not None and self.ar_intercept_ is not None, \
             "AR coefficients must be set before generating samples"
+        assert self.ar_noise_loc_ is not None and self.ar_noise_scale_ is not None, \
+            "AR noise distribution parameters must be set before generating samples"
         ar_coef = self.ar_coef_
         ar_intercept = self.ar_intercept_
 
         samples = np.zeros((n_samples, len(baseline_pred)))
         for i in range(n_samples):
             window = stats.laplace.rvs(
-                loc=0, scale=0.1, size=self.ar_lags, random_state=random_state
+                loc=self.ar_noise_loc_, scale=self.ar_noise_scale_, size=self.ar_lags, random_state=random_state
             )
             ar_noise = np.zeros(len(baseline_pred))
             for t in range(len(baseline_pred)):
-                ar_val = ar_coef @ window + ar_intercept
+                ar_val = ar_coef @ window + ar_intercept + stats.laplace.rvs(
+                    loc=self.ar_noise_loc_, scale=self.ar_noise_scale_, random_state=random_state
+                )
                 ar_noise[t] = ar_val
                 window = np.roll(window, -1)
                 window[-1] = ar_val

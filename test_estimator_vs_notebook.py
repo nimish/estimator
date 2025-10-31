@@ -190,6 +190,40 @@ def test_ar_coefficients_match_notebook(fitted_estimator, notebook_coefficients)
     )
 
 
+def test_ar_noise_distribution_match_notebook(fitted_estimator):
+    """Test that Laplace noise distribution parameters match notebook."""
+    estimator, _, _, _ = fitted_estimator
+
+    # Expected values from notebook
+    notebook_lap_loc = -0.000361
+    notebook_lap_scale = 0.012968
+
+    assert estimator.ar_noise_loc_ is not None, "AR noise location parameter should be set"
+    assert estimator.ar_noise_scale_ is not None, "AR noise scale parameter should be set"
+
+    np.testing.assert_allclose(
+        estimator.ar_noise_loc_,
+        notebook_lap_loc,
+        rtol=1e-5,
+        atol=1e-5,
+        err_msg=f"AR noise location doesn't match notebook: estimator={estimator.ar_noise_loc_:.6f}, notebook={notebook_lap_loc:.6f}"
+    )
+
+    np.testing.assert_allclose(
+        estimator.ar_noise_scale_,
+        notebook_lap_scale,
+        rtol=1e-5,
+        atol=1e-5,
+        err_msg=f"AR noise scale doesn't match notebook: estimator={estimator.ar_noise_scale_:.6f}, notebook={notebook_lap_scale:.6f}"
+    )
+
+    print("\nLaplace noise distribution parameters comparison:")
+    print(f"  Location - Estimator:  {estimator.ar_noise_loc_:.6f}, Notebook: {notebook_lap_loc:.6f}")
+    print(f"  Scale    - Estimator:  {estimator.ar_noise_scale_:.6f}, Notebook: {notebook_lap_scale:.6f}")
+    print(f"  Location absolute diff: {abs(estimator.ar_noise_loc_ - notebook_lap_loc):.6e}")
+    print(f"  Scale absolute diff:    {abs(estimator.ar_noise_scale_ - notebook_lap_scale):.6e}")
+
+
 def test_ar_coefficients_constraint(fitted_estimator, notebook_coefficients):
     """Test that AR coefficients satisfy L1 constraint (matches notebook)."""
     estimator, _, _, _ = fitted_estimator
@@ -399,6 +433,120 @@ def test_notebook_reproducibility(fitted_estimator, notebook_coefficients):
         atol=1e-6,
         err_msg=f"AR L1 norm {estimator_ar_sum_abs:.10f} matches notebook {notebook_ar_sum_abs:.10f}"
     )
+
+    # Check Laplace noise distribution parameters
+    notebook_lap_loc = -0.000361
+    notebook_lap_scale = 0.012968
+    np.testing.assert_allclose(
+        estimator.ar_noise_loc_,
+        notebook_lap_loc,
+        rtol=1e-5,
+        atol=1e-5,
+        err_msg=f"AR noise location {estimator.ar_noise_loc_:.6f} doesn't match notebook {notebook_lap_loc:.6f}"
+    )
+    np.testing.assert_allclose(
+        estimator.ar_noise_scale_,
+        notebook_lap_scale,
+        rtol=1e-5,
+        atol=1e-5,
+        err_msg=f"AR noise scale {estimator.ar_noise_scale_:.6f} doesn't match notebook {notebook_lap_scale:.6f}"
+    )
+
+
+def test_running_view_lag1_backward_compatibility():
+    """Test that lag=1 matches original behavior (backward compatibility)."""
+    estimator = LoadForecastRegressor()
+    arr = np.array([1, 2, 3, 4, 5])
+    window = 2
+
+    # Test explicit lag=1
+    result_lag1 = estimator._running_view(arr, window, lag=1)
+
+    # Test default (should be lag=1)
+    result_default = estimator._running_view(arr, window)
+
+    np.testing.assert_array_equal(result_lag1, result_default)
+
+
+def test_running_view_lag_uses_correct_values():
+    """Test that different lag values access the correct historical values."""
+    estimator = LoadForecastRegressor()
+    arr = np.array([10, 20, 30, 40, 50, 60, 70])
+    window = 3
+
+    # Test lag=1 (standard AR)
+    result_lag1 = estimator._running_view(arr, window, lag=1)
+    # At position 5: should use arr[4], arr[3], arr[2] = [50, 40, 30]
+    # The actual order in window may vary, but should contain these values
+    assert result_lag1[5, 0] in [30, 40, 50]
+    assert result_lag1[5, 1] in [30, 40, 50]
+    assert result_lag1[5, 2] in [30, 40, 50]
+    assert 30 in result_lag1[5]
+    assert 40 in result_lag1[5]
+    assert 50 in result_lag1[5]
+
+    # Test lag=2
+    result_lag2 = estimator._running_view(arr, window, lag=2)
+    # At position 5: should use arr[3], arr[2], arr[1] = [40, 30, 20]
+    assert 20 in result_lag2[5]
+    assert 30 in result_lag2[5]
+    assert 40 in result_lag2[5]
+    # Should NOT contain values from lag=1 (50 should not be present)
+    assert 50 not in result_lag2[5]
+
+    # Test lag=3
+    result_lag3 = estimator._running_view(arr, window, lag=3)
+    # At position 5: should use arr[2], arr[1], arr[0] = [30, 20, 10]
+    assert 10 in result_lag3[5]
+    assert 20 in result_lag3[5]
+    assert 30 in result_lag3[5]
+    # Should NOT contain values from lag=1 or lag=2
+    assert 40 not in result_lag3[5]
+    assert 50 not in result_lag3[5]
+
+
+def test_running_view_lag_padding():
+    """Test that larger lags require more padding (more NaN values at start)."""
+    estimator = LoadForecastRegressor()
+    arr = np.array([10, 20, 30, 40, 50])
+    window = 2
+
+    result_lag1 = estimator._running_view(arr, window, lag=1)
+    result_lag2 = estimator._running_view(arr, window, lag=2)
+    result_lag3 = estimator._running_view(arr, window, lag=3)
+
+    # Larger lag should have more NaN rows at the start
+    assert np.all(np.isnan(result_lag1[0]))
+    assert np.all(np.isnan(result_lag2[0]))
+    assert np.all(np.isnan(result_lag2[1]))  # lag=2 needs 2 rows of NaN
+    assert np.all(np.isnan(result_lag3[0]))
+    assert np.all(np.isnan(result_lag3[1]))
+    assert np.all(np.isnan(result_lag3[2]))  # lag=3 needs 3 rows of NaN
+
+
+def test_running_view_lag_verification():
+    """Detailed verification of lagged running view on specific example."""
+    estimator = LoadForecastRegressor()
+    arr = np.array([10, 20, 30, 40, 50, 60, 70])
+    window = 3
+
+    result_lag1 = estimator._running_view(arr, window, lag=1)
+    result_lag2 = estimator._running_view(arr, window, lag=2)
+    result_lag3 = estimator._running_view(arr, window, lag=3)
+
+    # At position 5 (i=5), verify correct values are used
+    print(f"\nPosition 5 verification:")
+    print(f"  Lag=1: {result_lag1[5]} (should use arr[4], arr[3], arr[2] = [50, 40, 30])")
+    print(f"  Lag=2: {result_lag2[5]} (should use arr[3], arr[2], arr[1] = [40, 30, 20])")
+    print(f"  Lag=3: {result_lag3[5]} (should use arr[2], arr[1], arr[0] = [30, 20, 10])")
+
+    # Verify lag=2 uses older values than lag=1
+    assert max(result_lag2[5]) <= max(result_lag1[5]), "Lag=2 should use older values than lag=1"
+    assert min(result_lag2[5]) <= min(result_lag1[5]), "Lag=2 should use older values than lag=1"
+
+    # Verify lag=3 uses older values than lag=2
+    assert max(result_lag3[5]) <= max(result_lag2[5]), "Lag=3 should use older values than lag=2"
+    assert min(result_lag3[5]) <= min(result_lag2[5]), "Lag=3 should use older values than lag=2"
 
 
 if __name__ == "__main__":
