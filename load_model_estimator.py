@@ -5,7 +5,7 @@ This module provides a LoadForecastRegressor that combines multi-Fourier time fe
 cubic spline or linear exogenous variables with lead/lag, and optional AR residual modeling.
 """
 
-from typing import Any
+from typing import Any, Callable, Optional
 import numpy as np
 import cvxpy as cvx
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -16,9 +16,6 @@ from itertools import combinations
 import scipy.stats as stats
 from spcqe import make_basis_matrix
 from spcqe.functions import initialize_arrays
-
-
-
 
 class LoadForecastRegressor(BaseEstimator, RegressorMixin):
     """
@@ -149,6 +146,7 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         if not 0 <= ar_l1_constraint <= 1:
             raise ValueError("ar_l1_constraint must be between 0 and 1")
 
+        # Store parameters
         self.num_harmonics = num_harmonics
         self.periods = periods
         self.exog_mode = exog_mode
@@ -213,20 +211,48 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         H : ndarray
             Original basis matrix.
         offset : int
-            Lead/lag offset.
+            Lead/lag offset (positive = lag, negative = lead).
 
         Returns
         -------
         newH : ndarray
             Offset basis matrix with NaN padding.
         """
-        newH = np.copy(H)
-        newH = np.roll(newH, -offset, axis=0)
+        newH = np.roll(np.copy(H), -offset, axis=0)
         if offset > 0:
             newH[-offset:] = np.nan
-        else:
+        elif offset < 0:
             newH[:-offset] = np.nan
         return newH
+
+    def _compute_exog_prediction(self, Hs, exog_coef, valid_mask=None):
+        """
+        Compute exogenous variable prediction using einsum.
+
+        Parameters
+        ----------
+        Hs : list of ndarray
+            List of basis matrices, one per lag.
+        exog_coef : ndarray
+            Exogenous coefficients of shape (n_features, n_lags).
+        valid_mask : ndarray or None, default=None
+            Boolean mask for valid samples. If None, uses all samples.
+
+        Returns
+        -------
+        exog_pred : ndarray
+            Exogenous predictions.
+        """
+        Hs_stack = np.stack(Hs, axis=-1)  # Shape: (n_samples, n_features, n_lags)
+        if valid_mask is not None:
+            exog_pred = np.einsum('ifl,fl->i', Hs_stack[valid_mask], exog_coef)
+            # Pad with NaNs for invalid samples
+            full_pred = np.full(len(Hs_stack), np.nan)
+            full_pred[valid_mask] = exog_pred
+            return full_pred
+        else:
+            exog_pred = np.einsum('ifl,fl->i', Hs_stack, exog_coef)
+            return np.nan_to_num(exog_pred, nan=0.0)
 
     def _running_view(self, arr, window, axis=-1):
         """
@@ -257,7 +283,7 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
 
     def _solve_optimization_problem(self, problem, exog_coef):
         """
-        Solve optimization problem with CLARABEL, fallback to SCS.
+        Solve optimization problem with specified solver.
 
         Parameters
         ----------
@@ -273,20 +299,30 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         exog_coef_value : array or None
             Fitted exogenous coefficients (or None if not applicable).
         """
-        # Try CLARABEL first (like notebook), then fallback
         problem.solve(solver=self.cvxpy_solver, verbose=self.cvxpy_verbose)
         if problem.status in ["optimal", "optimal_inaccurate"]:
             if self.debug:
                 self._last_problem_value_ = problem.value
                 self._last_problem_status_ = problem.status
-            # Extract results after solving
             time_coef = problem.variables()[0].value
             exog_coef_value = getattr(exog_coef, 'value', None)
             return time_coef, exog_coef_value
         else:
             raise RuntimeError(f"{self.cvxpy_solver} failed with status: {problem.status}")
 
-    def _build_Hs(self, exog_vars, h_func):
+    def _get_exog_basis_func(self) -> Callable:
+        """Get the basis function for exogenous variables based on exog_mode."""
+        if self.exog_mode == 'spline':
+            return lambda x: self._make_H(x, self.knots_, include_offset=False)
+        elif self.exog_mode == 'linear':
+            return lambda x: np.column_stack([np.ones(len(x)), x])
+        else:
+            raise ValueError(f"exog_mode must be 'spline' or 'linear', got {self.exog_mode}")
+
+    def _build_Hs(self, exog_vars, h_func: Optional[Callable] = None):
+        """Build basis matrices for exogenous variables with lead/lag."""
+        if h_func is None:
+            h_func = self._get_exog_basis_func()
         Hs: list[Any] = []
         for lag in self.exog_lags:
             H_lag = []
@@ -408,26 +444,18 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
 
         # Handle exogenous variables
         if exog_vars is not None:
+            # Compute knots for spline mode if needed
             if self.exog_mode == 'spline':
-                # Compute knots if not provided
                 if self.knots is None:
                     if self.n_knots is None:
                         raise ValueError("Either knots or n_knots must be provided when exog_mode='spline'")
-                    # Use knots across all exogenous variables
                     exog_min = np.min(exog_vars)
                     exog_max = np.max(exog_vars)
                     self.knots_ = np.linspace(exog_min, exog_max, self.n_knots)
                 else:
                     self.knots_ = np.array(self.knots)
-                Hs = self._build_Hs(exog_vars, lambda x: self._make_H(x, self.knots_, include_offset=False)) # noqa: E731
-                # Build spline basis matrices with lead/lag
 
-            elif self.exog_mode == 'linear':
-                # Build linear basis matrices with lead/lag
-                Hs = self._build_Hs(exog_vars, lambda x: np.column_stack([np.ones(len(x)), x])) # noqa: E731
-            else:
-                raise ValueError(f"exog_mode must be 'spline' or 'linear', got {self.exog_mode}")
-
+            Hs = self._build_Hs(exog_vars)
             # Find valid samples (no NaN from lead/lag operations)
             valid_mask = np.all(np.all(~np.isnan(np.asarray(Hs)), axis=-1), axis=0)
 
@@ -455,6 +483,7 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         else:
             # No exogenous variables
             valid_mask = np.ones(len(y), dtype=bool)
+            Hs = None
             a = cvx.Variable(F.shape[1])
             error = cvx.sum_squares(y[valid_mask] - F[valid_mask] @ a) / np.sum(valid_mask)
             regularization = self.fourier_reg_weight * cvx.sum_squares(Wf @ a)
@@ -465,24 +494,20 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             self.time_coef_, self.exog_coef_ = self._solve_optimization_problem(problem, None)
 
         # Fit AR model on residuals if requested
-
-
         self.ar_coef_ = None
         self.ar_intercept_ = None
 
-        if not self.fit_ar:
-            return self
+        if self.fit_ar:
+            self._fit_ar_model(F, Hs, exog_vars, y, valid_mask)
 
+        return self
+
+    def _fit_ar_model(self, F, Hs, exog_vars, y, valid_mask):
+        """Fit AR model on baseline residuals."""
         baseline_pred = F[valid_mask] @ self.time_coef_
-        if self.exog_coef_ is not None:
-            # Use einsum for efficient computation: stack Hs and compute sum over lags
-            # Hs is list of (n_samples, n_features) matrices, one per lag
-            # exog_coef_ is (n_features, n_lags)
-            # Result should be (n_valid_samples,) = sum over lags of (H[valid_mask] @ exog_coef_[:, lag])
-            # Stack as (n_samples, n_features, n_lags) for more efficient indexing and einsum
-            Hs_stack = np.stack(Hs, axis=-1)  # Shape: (n_samples, n_features, n_lags)
-            exog_pred = np.einsum('ifl,fl->i', Hs_stack[valid_mask], self.exog_coef_)
-            baseline_pred += exog_pred
+        if self.exog_coef_ is not None and Hs is not None:
+            exog_pred = self._compute_exog_prediction(Hs, self.exog_coef_, valid_mask)
+            baseline_pred += exog_pred[valid_mask]
 
         residuals = y[valid_mask] - baseline_pred
 
@@ -491,12 +516,12 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         ar_valid_mask = np.all(~np.isnan(B), axis=1)
 
         if self.debug:
-            self._B_running_view_ = B  # AR design matrix (running view)
-            self._ar_valid_mask_ = ar_valid_mask  # Valid samples for AR fitting
-            self._baseline_residuals_ = residuals  # Baseline residuals used for AR
+            self._B_running_view_ = B
+            self._ar_valid_mask_ = ar_valid_mask
+            self._baseline_residuals_ = residuals
 
-        if not np.sum(ar_valid_mask) > 0:
-            return self
+        if not np.any(ar_valid_mask):
+            return
 
         theta = cvx.Variable(self.ar_lags)
         constant = cvx.Variable()
@@ -512,8 +537,6 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             assert constant.value is not None, "AR intercept should be set"
             self.ar_coef_ = theta.value
             self.ar_intercept_ = constant.value
-
-        return self
 
     def predict(self, X):
         """
@@ -538,13 +561,12 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             raise ValueError(f"Expected {self.n_features_in_} features, got {X.shape[1]}")
 
         # Extract time indices and exogenous variables
-        time_idx = X[:, 0]
         exog_vars = X[:, 1:] if X.shape[1] > 1 else None
 
         # Build Fourier basis matrix
         F = make_basis_matrix(
             num_harmonics=self.num_harmonics,
-            length=len(time_idx),
+            length=len(X),
             periods=self.periods
         )
 
@@ -553,18 +575,8 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
 
         # Add exogenous component if present
         if exog_vars is not None and self.exog_coef_ is not None:
-            if self.exog_mode == 'spline':
-                Hs = self._build_Hs(exog_vars, lambda x: self._make_H(x, self.knots_, include_offset=False)) # noqa: E731
-            elif self.exog_mode == 'linear':
-                Hs = self._build_Hs(exog_vars, lambda x: np.column_stack([np.ones(len(x)), x])) # noqa: E731
-
-            # Handle NaN values from lead/lag operations
-            # Use einsum for efficient computation
-            # Stack as (n_samples, n_features, n_lags) for more efficient einsum
-            Hs_stack = np.stack(Hs, axis=-1)  # Shape: (n_samples, n_features, n_lags)
-            exog_pred = np.einsum('ifl,fl->i', Hs_stack, self.exog_coef_)
-            # Replace NaN values with 0 (no exogenous effect)
-            exog_pred = np.nan_to_num(exog_pred, nan=0.0)
+            Hs = self._build_Hs(exog_vars)
+            exog_pred = self._compute_exog_prediction(Hs, self.exog_coef_)
             baseline_pred += exog_pred
 
         return baseline_pred
@@ -597,29 +609,34 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         baseline_pred = self.predict(X)
 
         if self.ar_coef_ is not None and self.ar_intercept_ is not None:
-            # Generate AR noise
-            samples = np.zeros((n_samples, len(baseline_pred)))
-
-            for i in range(n_samples):
-                # Initialize AR window with random values
-                window = stats.laplace.rvs(loc=0, scale=0.1, size=self.ar_lags,
-                                        random_state=random_state)
-
-                ar_noise = np.zeros(len(baseline_pred))
-                for t in range(len(baseline_pred)):
-                    # Generate AR component
-                    ar_val = self.ar_coef_ @ window + self.ar_intercept_
-                    ar_noise[t] = ar_val
-
-                    # Update window
-                    window = np.roll(window, -1)
-                    window[-1] = ar_val
-
-                samples[i] = baseline_pred + ar_noise
+            samples = self._generate_ar_samples(baseline_pred, n_samples, random_state)
         else:
             # No AR model, just add small noise
-            noise = stats.laplace.rvs(loc=0, scale=0.1, size=(n_samples, len(baseline_pred)),
-                                    random_state=random_state)
+            noise = stats.laplace.rvs(
+                loc=0, scale=0.1, size=(n_samples, len(baseline_pred)),
+                random_state=random_state
+            )
             samples = baseline_pred + noise
 
+        return samples
+
+    def _generate_ar_samples(self, baseline_pred, n_samples, random_state):
+        """Generate samples with AR noise."""
+        assert self.ar_coef_ is not None and self.ar_intercept_ is not None, \
+            "AR coefficients must be set before generating samples"
+        ar_coef = self.ar_coef_
+        ar_intercept = self.ar_intercept_
+
+        samples = np.zeros((n_samples, len(baseline_pred)))
+        for i in range(n_samples):
+            window = stats.laplace.rvs(
+                loc=0, scale=0.1, size=self.ar_lags, random_state=random_state
+            )
+            ar_noise = np.zeros(len(baseline_pred))
+            for t in range(len(baseline_pred)):
+                ar_val = ar_coef @ window + ar_intercept
+                ar_noise[t] = ar_val
+                window = np.roll(window, -1)
+                window[-1] = ar_val
+            samples[i] = baseline_pred + ar_noise
         return samples
