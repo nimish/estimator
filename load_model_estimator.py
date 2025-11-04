@@ -68,7 +68,9 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
     Attributes
     ----------
     time_coef_ : array-like
-        Fitted Fourier coefficients.
+        Fitted Fourier coefficients (without constant term).
+    intercept_ : float
+        Fitted constant/intercept term from Fourier basis.
     exog_coef_ : array-like
         Fitted exogenous variable coefficients.
     knots_ : array-like or None
@@ -338,7 +340,8 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
 
     def _make_regularization_matrix(self, num_harmonics, weight, periods,
                                    standing_wave=False, trend=False,
-                                   max_cross_k=None, custom_basis=None):
+                                   max_cross_k=None, custom_basis=None,
+                                   drop_constant=False):
         """
         Create regularization matrix for Fourier coefficients.
 
@@ -358,6 +361,8 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             Maximum cross terms.
         custom_basis : dict or None, default=None
             Custom basis matrices.
+        drop_constant : bool, default=False
+            Whether to drop constant term from regularization.
 
         Returns
         -------
@@ -398,6 +403,10 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             first_block = [np.zeros(1)]
         else:
             first_block = [np.zeros(2)]
+
+        if drop_constant:
+            first_block = first_block[1:] if first_block else []
+
         coeff_i = np.concatenate(first_block + blocks_original + blocks_cross)
 
         # Create diagonal matrix
@@ -432,18 +441,21 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         exog_vars = X[:, 1:] if X.shape[1] > 1 else None
 
         # Build Fourier basis matrix
-        F = make_basis_matrix(
+        F_full = make_basis_matrix(
             num_harmonics=self.num_harmonics,
             length=len(y),
             periods=self.periods
         )
+        # Separate constant term (first column) from Fourier terms
+        F = F_full[:, 1:]  # Fourier basis without constant
 
-        # Build regularization matrix for Fourier coefficients
+        # Build regularization matrix for Fourier coefficients (without constant)
         # Note: notebook uses weight=1, then multiplies by 1e-4 in objective
         Wf = self._make_regularization_matrix(
             num_harmonics=self.num_harmonics,
             weight=1.0,  # Match notebook
-            periods=self.periods
+            periods=self.periods,
+            drop_constant=True
         )
 
         # Handle exogenous variables
@@ -464,14 +476,15 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             valid_mask = np.all(np.all(~np.isnan(np.asarray(Hs)), axis=-1), axis=0)
 
             # Solve optimization problem
-            a = cvx.Variable(F.shape[1])  # Fourier coefficients
+            a = cvx.Variable(F.shape[1])  # Fourier coefficients (without constant)
+            intercept = cvx.Variable()  # Constant/intercept term
             c = cvx.Variable((Hs[0].shape[1], len(Hs)))  # Exogenous coefficients
 
             # Build exogenous term
             exog_term = cvx.sum(expr=[H[valid_mask] @ c[:, _ix] for _ix, H in enumerate(Hs)])
 
             # Objective function
-            error = cvx.sum_squares(y[valid_mask] - F[valid_mask] @ a - exog_term) / np.sum(valid_mask)
+            error = cvx.sum_squares(y[valid_mask] - F[valid_mask] @ a - intercept - exog_term) / np.sum(valid_mask)
             regularization = (self.fourier_reg_weight * cvx.sum_squares(Wf @ a) +
                             self.exog_reg_weight * cvx.sum_squares(c))
 
@@ -482,20 +495,27 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             problem = cvx.Problem(cvx.Minimize(error + regularization))
 
             # Solve using helper method
-            self.time_coef_, self.exog_coef_ = self._solve_optimization_problem(problem, c)
+            time_coef_full, self.exog_coef_ = self._solve_optimization_problem(problem, c)
+            # Extract intercept and store separately (intercept is the second variable)
+            self.intercept_ = intercept.value
+            self.time_coef_ = time_coef_full
 
         else:
             # No exogenous variables
             valid_mask = np.ones(len(y), dtype=bool)
             Hs = None
             a = cvx.Variable(F.shape[1])
-            error = cvx.sum_squares(y[valid_mask] - F[valid_mask] @ a) / np.sum(valid_mask)
+            intercept = cvx.Variable()
+            error = cvx.sum_squares(y[valid_mask] - F[valid_mask] @ a - intercept) / np.sum(valid_mask)
             regularization = self.fourier_reg_weight * cvx.sum_squares(Wf @ a)
 
             problem = cvx.Problem(cvx.Minimize(error + regularization))
 
             # Solve using helper method
-            self.time_coef_, self.exog_coef_ = self._solve_optimization_problem(problem, None)
+            time_coef_full, self.exog_coef_ = self._solve_optimization_problem(problem, None)
+            # Extract intercept and store separately
+            self.intercept_ = intercept.value
+            self.time_coef_ = time_coef_full
 
         # Fit AR model on residuals if requested
         self.ar_coef_ = None
@@ -510,7 +530,7 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
 
     def _fit_ar_model(self, F, Hs, exog_vars, y, valid_mask):
         """Fit AR model on baseline residuals."""
-        baseline_pred = F[valid_mask] @ self.time_coef_
+        baseline_pred = F[valid_mask] @ self.time_coef_ + self.intercept_
         if self.exog_coef_ is not None and Hs is not None:
             exog_pred = self._compute_exog_prediction(Hs, self.exog_coef_, valid_mask)
             baseline_pred += exog_pred[valid_mask]
@@ -565,7 +585,7 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
             Predicted values.
         """
 
-        check_is_fitted(self, ['time_coef_', 'exog_coef_'])
+        check_is_fitted(self, ['time_coef_', 'intercept_', 'exog_coef_'])
         X = check_array(X, ensure_min_features=self.n_features_in_)
 
         if X.shape[1] != self.n_features_in_:
@@ -574,15 +594,16 @@ class LoadForecastRegressor(BaseEstimator, RegressorMixin):
         # Extract time indices and exogenous variables
         exog_vars = X[:, 1:] if X.shape[1] > 1 else None
 
-        # Build Fourier basis matrix
-        F = make_basis_matrix(
+        # Build Fourier basis matrix (without constant, matching fit)
+        F_full = make_basis_matrix(
             num_harmonics=self.num_harmonics,
             length=len(X),
             periods=self.periods
         )
+        F = F_full[:, 1:]  # Fourier basis without constant
 
         # Compute baseline prediction
-        baseline_pred = F @ self.time_coef_
+        baseline_pred = F @ self.time_coef_ + self.intercept_
 
         # Add exogenous component if present
         if exog_vars is not None and self.exog_coef_ is not None:

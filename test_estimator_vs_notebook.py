@@ -107,22 +107,48 @@ def test_baseline_optimal_value(fitted_estimator):
     print(f"  Relative difference: {relative_diff*100:.6f}%")
 
 
+def test_baseline_intercept_match_notebook(fitted_estimator, notebook_coefficients):
+    """Test that baseline intercept matches notebook value."""
+    estimator, _, _, _ = fitted_estimator
+
+    notebook_time_coef = notebook_coefficients['time_coef']
+    notebook_intercept = notebook_time_coef[0]  # First element is the intercept
+
+    assert hasattr(estimator, 'intercept_'), "Estimator should have intercept_ attribute"
+    assert estimator.intercept_ is not None, "Intercept should be set"
+
+    np.testing.assert_allclose(
+        estimator.intercept_,
+        notebook_intercept,
+        rtol=1e-5,
+        atol=1e-5,
+        err_msg=f"Intercept doesn't match notebook: estimator={estimator.intercept_:.10e}, notebook={notebook_intercept:.10e}"
+    )
+
+    print("\nIntercept comparison:")
+    print(f"  Estimator:  {estimator.intercept_:.10e}")
+    print(f"  Notebook:   {notebook_intercept:.10e}")
+    print(f"  Absolute difference: {abs(estimator.intercept_ - notebook_intercept):.10e}")
+    print(f"  Relative difference: {abs((estimator.intercept_ - notebook_intercept) / notebook_intercept) * 100:.6f}%")
+
+
 def test_baseline_coefficients_match_notebook(fitted_estimator, notebook_coefficients):
     """Test that baseline coefficients match notebook (with absolute and relative tolerance)."""
     estimator, _, _, _ = fitted_estimator
 
     notebook_time_coef = notebook_coefficients['time_coef']
+    notebook_time_coef_no_intercept = notebook_time_coef[1:]  # Exclude intercept (first element)
     notebook_temp_coef = notebook_coefficients['temp_coef']
 
-    assert estimator.time_coef_.shape == notebook_time_coef.shape, \
-        f"Time coefficients shape {estimator.time_coef_.shape} != notebook {notebook_time_coef.shape}"
+    assert estimator.time_coef_.shape == notebook_time_coef_no_intercept.shape, \
+        f"Time coefficients shape {estimator.time_coef_.shape} != notebook {notebook_time_coef_no_intercept.shape}"
 
     assert estimator.exog_coef_.shape == notebook_temp_coef.shape, \
         f"Temperature coefficients shape {estimator.exog_coef_.shape} != notebook {notebook_temp_coef.shape}"
 
     np.testing.assert_allclose(
         estimator.time_coef_,
-        notebook_time_coef,
+        notebook_time_coef_no_intercept,
         rtol=2.0,
         atol=2e-3,
         err_msg="Time coefficients don't match notebook"
@@ -135,8 +161,8 @@ def test_baseline_coefficients_match_notebook(fitted_estimator, notebook_coeffic
         atol=1e-6,
         err_msg="Temperature coefficients don't match notebook"
     )
-    time_abs_diff = np.abs(estimator.time_coef_ - notebook_time_coef)
-    time_rel_diff = np.abs((estimator.time_coef_ - notebook_time_coef) / (np.abs(notebook_time_coef) + 1e-12))
+    time_abs_diff = np.abs(estimator.time_coef_ - notebook_time_coef_no_intercept)
+    time_rel_diff = np.abs((estimator.time_coef_ - notebook_time_coef_no_intercept) / (np.abs(notebook_time_coef_no_intercept) + 1e-12))
     temp_abs_diff = np.abs(estimator.exog_coef_ - notebook_temp_coef)
     temp_rel_diff = np.abs((estimator.exog_coef_ - notebook_temp_coef) / (np.abs(notebook_temp_coef) + 1e-12))
 
@@ -388,13 +414,23 @@ def test_notebook_reproducibility(fitted_estimator, notebook_coefficients):
     )
 
     notebook_time_coef = notebook_coefficients['time_coef']
+    notebook_time_coef_no_intercept = notebook_time_coef[1:]  # Exclude intercept
+    notebook_intercept = notebook_time_coef[0]  # Intercept is first element
     notebook_temp_coef = notebook_coefficients['temp_coef']
     notebook_ar_coef = notebook_coefficients['ar_coef']
     notebook_ar_intercept = notebook_coefficients['ar_intercept']
 
     np.testing.assert_allclose(
+        estimator.intercept_,
+        notebook_intercept,
+        rtol=1e-5,
+        atol=1e-5,
+        err_msg="Intercept doesn't match notebook"
+    )
+
+    np.testing.assert_allclose(
         estimator.time_coef_,
-        notebook_time_coef,
+        notebook_time_coef_no_intercept,
         rtol=2.0,
         atol=2e-3,
         err_msg="Time coefficients don't match notebook"
