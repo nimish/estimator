@@ -9,6 +9,7 @@ from sklearn.base import RegressorMixin, BaseEstimator, check_array, check_is_fi
 from sklearn.utils import check_X_y
 from spcqe import make_basis_matrix
 from spcqe.functions import initialize_arrays
+import pandas as pd
 
 @dataclass
 class TsgamMultiHarmonicConfig:
@@ -48,6 +49,7 @@ class TsgamEstimatorConfig:
     ar_config: TsgamArConfig | None
     solver_config: TsgamSolverConfig
     random_state: RandomState | None
+    freq: str  # Required: pandas frequency string (e.g., 'h' for hourly, 'H' also accepted)
     debug: bool = False
 
 
@@ -59,6 +61,139 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         super().__init__(**kwargs)
         self.config = config
 
+    def _extract_timestamps(self, X):
+        """
+        Extract timestamps from X.
+
+        Parameters
+        ----------
+        X : array-like or DataFrame
+            Input data. If DataFrame with DatetimeIndex, extracts index.
+            If DataFrame, checks first column for datetime.
+            Otherwise raises ValueError.
+
+        Returns
+        -------
+        timestamps : DatetimeIndex
+            Extracted timestamps.
+        """
+        if isinstance(X, pd.DataFrame):
+            # Check if index is DatetimeIndex
+            if isinstance(X.index, pd.DatetimeIndex):
+                return X.index
+            # Check if first column is datetime
+            elif len(X.columns) > 0 and pd.api.types.is_datetime64_any_dtype(X.iloc[:, 0]):
+                return pd.DatetimeIndex(X.iloc[:, 0])
+            else:
+                raise ValueError(
+                    "X must have DatetimeIndex or first column must be datetime. "
+                    "Got DataFrame without datetime index or datetime column."
+                )
+        else:
+            raise ValueError(
+                "X must be a pandas DataFrame with DatetimeIndex or datetime column. "
+                f"Got {type(X)} instead."
+            )
+
+    def _timestamps_to_indices(self, timestamps, reference):
+        """
+        Convert timestamps to numeric indices (hours since reference).
+
+        Parameters
+        ----------
+        timestamps : DatetimeIndex
+            Timestamps to convert.
+        reference : Timestamp
+            Reference timestamp (time 0).
+
+        Returns
+        -------
+        indices : ndarray
+            Numeric indices in hours since reference.
+        """
+        return (timestamps - reference).total_seconds() / 3600.0
+
+    def _validate_frequency(self, timestamps, expected_freq):
+        """
+        Validate that timestamps match expected frequency.
+
+        Parameters
+        ----------
+        timestamps : DatetimeIndex
+            Timestamps to validate.
+        expected_freq : str
+            Expected pandas frequency string (e.g., 'h' for hourly, 'H' also accepted).
+
+        Raises
+        ------
+        ValueError
+            If frequency doesn't match or timestamps are not regular.
+        """
+        if len(timestamps) < 2:
+            return  # Can't validate frequency with < 2 samples
+
+        # Normalize 'H' to 'h' for backward compatibility
+        normalized_freq = expected_freq.lower() if expected_freq == 'H' else expected_freq
+
+        # Infer frequency from timestamps
+        inferred_freq = pd.infer_freq(timestamps)
+
+        if inferred_freq is None:
+            raise ValueError(
+                f"Could not infer frequency from timestamps. "
+                f"Timestamps must be regularly spaced with frequency '{expected_freq}'."
+            )
+
+        # Normalize inferred frequency for comparison ('H' -> 'h')
+        normalized_inferred = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
+
+        if normalized_inferred != normalized_freq:
+            # Try to create expected range and compare
+            try:
+                expected_range = pd.date_range(
+                    start=timestamps[0],
+                    periods=len(timestamps),
+                    freq=normalized_freq
+                )
+                if not timestamps.equals(expected_range):
+                    raise ValueError(
+                        f"Timestamps frequency '{inferred_freq}' does not match "
+                        f"expected frequency '{expected_freq}'."
+                    )
+            except Exception as e:
+                raise ValueError(
+                    f"Timestamps frequency '{inferred_freq}' does not match "
+                    f"expected frequency '{expected_freq}': {e}"
+                )
+
+    def _ensure_timestamp_index(self, X):
+        """
+        Ensure X has proper timestamp index/column, extracting timestamps.
+
+        Parameters
+        ----------
+        X : array-like or DataFrame
+            Input data.
+
+        Returns
+        -------
+        timestamps : DatetimeIndex
+            Extracted timestamps.
+        X_array : ndarray
+            X as array without timestamp column if it was extracted.
+        """
+        timestamps = self._extract_timestamps(X)
+
+        # If X is DataFrame and first column was datetime, remove it
+        if isinstance(X, pd.DataFrame) and not isinstance(X.index, pd.DatetimeIndex):
+            if pd.api.types.is_datetime64_any_dtype(X.iloc[:, 0]):
+                X_array = X.iloc[:, 1:].values
+            else:
+                X_array = X.values
+        else:
+            X_array = X.values if isinstance(X, pd.DataFrame) else X
+
+        return timestamps, X_array
 
     def _make_regularization_matrix(self, num_harmonics,
                                    weight: float,
@@ -199,9 +334,11 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             newH[:-offset] = np.nan
         return newH
 
-    def _process_exog_config(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray):
+    def _build_exog_Hs(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None):
         """
-        Process an exogenous variable configuration to build basis matrices and coefficients.
+        Build basis matrices for an exogenous variable with lead/lag.
+
+        This is a helper method that can be reused in both fit and predict.
 
         Parameters
         ----------
@@ -209,6 +346,42 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             Configuration for the exogenous variable.
         exog_var : ndarray
             Single exogenous variable column (shape: (n_samples,)).
+        knots : ndarray or None, default=None
+            Knot locations for spline (if None and spline config, will be computed or error).
+
+        Returns
+        -------
+        Hs : list of ndarray
+            List of basis matrices, one for each lag in exog_cfg.lags.
+        """
+        Hs = []
+
+        for lag in exog_cfg.lags:
+            if isinstance(exog_cfg, TsgamSplineConfig):
+                if knots is None:
+                    raise ValueError("knots must be provided for TsgamSplineConfig")
+                H0 = self._make_H(exog_var, knots, include_offset=False)
+                H_lag = self._make_offset_H(H0, lag)
+            else:  # TsgamLinearConfig
+                H0 = exog_var
+                H_lag = self._make_offset_H(H0, lag)
+
+            Hs.append(H_lag)
+
+        return Hs
+
+    def _process_exog_config(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None):
+        """
+        Process an exogenous variable configuration to build basis matrices.
+
+        Parameters
+        ----------
+        exog_cfg : TsgamSplineConfig or TsgamLinearConfig
+            Configuration for the exogenous variable.
+        exog_var : ndarray
+            Single exogenous variable column (shape: (n_samples,)).
+        knots : ndarray or None, optional
+            Pre-computed knots to use (for prediction). If None, computes from config or data.
 
         Returns
         -------
@@ -216,44 +389,31 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             Boolean mask indicating valid samples (no NaN from lead/lag operations).
         Hs : list of ndarray
             List of basis matrices, one for each lag in exog_cfg.lags.
-        exog_coef : cvxpy.Variable
-            CVXPY variable for exogenous coefficients.
         """
-        Hs = []
-
-        # Build basis matrices for each lag
-        for lag in exog_cfg.lags:
+        # Get knots if spline config
+        if knots is None:
             if isinstance(exog_cfg, TsgamSplineConfig):
-                # Spline mode: use knots from config
-                # For now, assume knots are provided per exogenous variable
-                # If only one set of knots provided, use it; otherwise use the first
-                knots = exog_cfg.knots[0] if exog_cfg.knots else None
-                if knots is None:
-                    # Generate knots if not provided
+                # Empty list means knots not specified, need to compute from n_knots
+                if not exog_cfg.knots:  # Handles both None and empty list
                     if exog_cfg.n_knots:
-                        n_knots = exog_cfg.n_knots[0] if isinstance(exog_cfg.n_knots, list) else exog_cfg.n_knots
-                        knots = np.linspace(np.min(exog_var), np.max(exog_var), n_knots)
+                        knots = np.linspace(np.min(exog_var), np.max(exog_var), exog_cfg.n_knots)
                     else:
                         raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
-                H0 = self._make_H(exog_var, knots, include_offset=False)
-                H_lag = self._make_offset_H(H0, lag)
-            else:  # TsgamLinearConfig
-                # Linear mode: just X with lag
-                H0 = exog_var
-                H_lag = self._make_offset_H(H0, lag)
+                else:
+                    knots = np.asarray(exog_cfg.knots)
+            else:
+                knots = None
 
-            Hs.append(H_lag)
+        # Build Hs using helper method
+        # Ensure knots is a numpy array if provided
+        if knots is not None:
+            knots = np.asarray(knots)
+        Hs = self._build_exog_Hs(exog_cfg, exog_var, knots)
 
         # Find valid samples (no NaN from lead/lag operations)
         valid_mask = np.all(np.all(~np.isnan(np.asarray(Hs)), axis=-1), axis=0)
 
-        # Create CVXPY variable for coefficients
-        # Shape: (basis_dim, num_lags)
-        basis_dim = Hs[0].shape[1]
-        num_lags = len(exog_cfg.lags)
-        exog_coef = cvxpy.Variable((basis_dim, num_lags))
-
-        return valid_mask, Hs, exog_coef
+        return valid_mask, Hs
 
     def _get_min_samples_required(self):
         """
@@ -294,10 +454,24 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         return min_samples
 
     def fit(self, X, y, sample_weight=None):
-        # must have as many columns in X as there are exog_config
-        # must have as many rows in X as there are rows in y
+        # Extract timestamps before check_X_y converts DataFrame to array
+        timestamps, X_array = self._ensure_timestamp_index(X)
 
-        X, y = check_X_y(X, y,
+        # Validate frequency
+        self._validate_frequency(timestamps, self.config.freq)
+
+        # Store frequency and reference timestamp
+        # Normalize 'H' to 'h' for consistency
+        normalized_freq = self.config.freq.lower() if self.config.freq == 'H' else self.config.freq
+        self.freq_ = normalized_freq
+        self.time_reference_ = timestamps[0]
+
+        # Convert timestamps to numeric indices (hours since reference)
+        time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
+        self.time_indices_ = time_indices
+
+        # Now validate X and y with the array version
+        X_array, y = check_X_y(X_array, y,
             ensure_min_features=len(self.config.exog_config or []),
             ensure_min_samples=self._get_min_samples_required())
 
@@ -305,34 +479,62 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         self.variables_ = {
             'constant': cvxpy.Variable(),
         }
-        self.exog_terms_ = []
+        self.exog_knots_ = []  # Store knots only when auto-computed from training data
         model_term = self.variables_['constant']
         regularization_term = 0
         self.combined_valid_mask_ = np.ones(len(y), dtype=bool)
 
         if self.config.exog_config:
             for ix, exog_cfg in enumerate(self.config.exog_config):
-                valid_mask, Hs, exog_coef = self._process_exog_config(exog_cfg, X[:, ix])
+                valid_mask, Hs = self._process_exog_config(exog_cfg, X_array[:, ix])
+
+                # Store knots only if auto-computed (not provided in config)
+                if isinstance(exog_cfg, TsgamSplineConfig):
+                    # Empty list means knots not specified, need to compute from n_knots
+                    if not exog_cfg.knots:  # Handles both None and empty list
+                        if exog_cfg.n_knots:
+                            knots = np.linspace(np.min(X_array[:, ix]), np.max(X_array[:, ix]), exog_cfg.n_knots)
+                            # Store auto-computed knots (need to reuse for prediction)
+                            self.exog_knots_.append(knots)
+                        else:
+                            raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
+                    else:
+                        # Knots provided in config, don't need to store
+                        self.exog_knots_.append(None)
+                else:
+                    self.exog_knots_.append(None)
+
+                # Create CVXPY variable for coefficients
+                # Shape: (basis_dim, num_lags)
+                basis_dim = Hs[0].shape[1]
+                num_lags = len(exog_cfg.lags)
+                exog_coef = cvxpy.Variable((basis_dim, num_lags))
+
                 self.variables_[f'exog_coef_{ix}'] = exog_coef
                 regularization_term += cvxpy.sum_squares(exog_coef) * exog_cfg.reg_weight
                 if len(exog_cfg.lags) > 1:
                     regularization_term += cvxpy.sum_squares(cvxpy.diff(exog_coef, axis=1)) * exog_cfg.diff_reg_weight
-                self.exog_terms_.append(Hs)
                 self.combined_valid_mask_ &= valid_mask
 
-            for ix, Hs in enumerate(self.exog_terms_):
+            for ix, exog_cfg in enumerate(self.config.exog_config):
+                # Rebuild Hs to build model term (Hs are only needed during fit)
+                valid_mask, Hs = self._process_exog_config(exog_cfg, X_array[:, ix])
                 # Sum over lags: H @ exog_coef[:, lag_ix] for each lag
                 model_term += cvxpy.sum(expr=[H[self.combined_valid_mask_] @ self.variables_[f'exog_coef_{ix}'][:, lag_ix] for lag_ix, H in enumerate(Hs)])
 
 
 
         if self.config.multi_harmonic_config:
-
-            F = make_basis_matrix(
+            # Generate basis matrix for max index + 1, then index with time_indices
+            # This ensures correct phase alignment (as shown in notebook)
+            max_idx = int(np.max(time_indices))
+            F_full = make_basis_matrix(
                 num_harmonics=self.config.multi_harmonic_config.num_harmonics,
-                length=len(y),
+                length=max_idx + 1,
                 periods=self.config.multi_harmonic_config.periods
-            )[:, 1:]
+            )
+            # Index with time_indices to get correct rows
+            F = F_full[time_indices.astype(int), 1:]  # Drop constant column
 
             Wf = self._make_regularization_matrix(
                 num_harmonics=self.config.multi_harmonic_config.num_harmonics,
@@ -353,8 +555,73 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
-        check_is_fitted(self, ['problem_'])
-        X = check_array(X, ensure_min_features=len(self.config.exog_config or []))
+        check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
+
+        # Extract timestamps and validate
+        timestamps, X_array = self._ensure_timestamp_index(X)
+
+        # Validate frequency matches
+        self._validate_frequency(timestamps, self.freq_)
+
+        # Convert timestamps to indices using stored reference
+        time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
+
+        # Validate X_array shape
+        X_array = check_array(X_array, ensure_min_features=len(self.config.exog_config or []))
+
+        # Initialize prediction with constant term
+        predictions = np.full(len(X_array), self.variables_['constant'].value)
+
+        # Add exogenous terms if present
+        if self.config.exog_config:
+            for ix, exog_cfg in enumerate(self.config.exog_config):
+                exog_var = X_array[:, ix]
+
+                # Get stored knots if available (auto-computed during fit), otherwise None
+                stored_knots = self.exog_knots_[ix] if isinstance(exog_cfg, TsgamSplineConfig) else None
+
+                # Use _process_exog_config with stored knots (will use config knots if stored_knots is None)
+                _, Hs_pred = self._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
+
+                # Compute exogenous prediction
+                exog_coef = self.variables_[f'exog_coef_{ix}'].value
+                if exog_coef is None:
+                    raise ValueError(f"Exogenous coefficients for variable {ix} are None. Model may not have converged.")
+                exog_pred = np.sum([H @ exog_coef[:, lag_ix] for lag_ix, H in enumerate(Hs_pred)], axis=0)
+                predictions += exog_pred
+
+        # Add Fourier terms if present
+        if self.config.multi_harmonic_config:
+            # Generate basis matrix for max index + 1, then index with time_indices
+            max_idx = int(np.max(time_indices))
+            min_idx = int(np.min(time_indices))
+
+            # Handle negative indices (prediction before fit period)
+            # Generate basis matrix from 0 to max_idx, then adjust indices
+            if min_idx < 0:
+                # Generate enough basis matrix to cover negative indices
+                # We'll shift indices to be non-negative
+                offset = -min_idx
+                adjusted_indices = time_indices.astype(int) + offset
+                basis_length = max_idx + offset + 1
+            else:
+                adjusted_indices = time_indices.astype(int)
+                basis_length = max_idx + 1
+
+            F_full = make_basis_matrix(
+                num_harmonics=self.config.multi_harmonic_config.num_harmonics,
+                length=basis_length,
+                periods=self.config.multi_harmonic_config.periods
+            )
+            # Index with adjusted_indices to get correct rows
+            F = F_full[adjusted_indices, 1:]  # Drop constant column
+
+            fourier_coef = self.variables_['fourier_coef'].value
+            if fourier_coef is None:
+                raise ValueError("Fourier coefficients are None. Model may not have converged.")
+            predictions += F @ fourier_coef
+
+        return predictions
 
 
 
@@ -388,12 +655,9 @@ if __name__ == "__main__":
     df = load_notebook_data(sheet='RI', years=[2020, 2021])
 
     # Prepare y (log-transformed RT_Demand) and X (temperature only)
-    y = np.log(df.loc["2020":"2021"]["RT_Demand"]).values
-    x_temp = df.loc["2020":"2021"]["Dry_Bulb"].values
-    X = x_temp.reshape(-1, 1)  # Shape: (n_samples, 1) - just temperature
-
-    print(f"Data loaded: {len(y)} samples")
-    print(f"Temperature range: [{np.min(x_temp):.2f}, {np.max(x_temp):.2f}]")
+    df_subset = df.loc["2020":"2021"]
+    y = np.log(df_subset["RT_Demand"]).values
+    X = pd.DataFrame({'temp': df_subset["Dry_Bulb"].values}, index=df_subset.index)
 
     # Multi-harmonic configuration for time features
     multi_harmonic_config = TsgamMultiHarmonicConfig(
@@ -428,6 +692,7 @@ if __name__ == "__main__":
         ar_config=ar_config,
         solver_config=solver_config,
         random_state=None,
+        freq='h',  # Hourly frequency (lowercase 'h' preferred, 'H' also accepted)
         debug=False
     )
 
