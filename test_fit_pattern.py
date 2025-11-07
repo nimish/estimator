@@ -62,18 +62,27 @@ def test_fit_uses_correct_pattern():
     assert estimator.time_indices_[-1] == n_samples - 1, f"Last index should be {n_samples - 1}"
     assert len(estimator.time_indices_) == n_samples, "Should have n_samples indices"
 
-    # Verify basis matrix generation matches
-    # Our code generates: length=max(time_indices) + 1 = (n_samples-1) + 1 = n_samples
-    # Which matches notebook: length=len(y) = n_samples
-
-    # The basis matrix rows should match
-    # Notebook: F_notebook[0:len(y)] which is all rows
-    # Our code: F_full[time_indices] where time_indices = [0, 1, 2, ..., n_samples-1]
-    # So we get F_full[0:n_samples] which is the same
-
     # Verify that max(time_indices) + 1 equals len(y)
     max_idx = int(np.max(estimator.time_indices_))
     assert max_idx + 1 == len(y), "max(time_indices) + 1 should equal len(y)"
+
+    # Verify basis matrix generation matches notebook pattern
+    # Notebook: F_notebook with length=len(y), uses all rows implicitly
+    # Our code: F_full with length=max(time_indices) + 1, then F_full[time_indices]
+    # Reconstruct what our estimator generates
+    F_ours_full = make_basis_matrix(
+        num_harmonics=[6, 4, 3],
+        length=max_idx + 1,
+        periods=[365.2425 * 24, 7 * 24, 24]
+    )
+    F_ours = F_ours_full[estimator.time_indices_.astype(int), :]
+
+    # Should match (notebook uses all rows, we use time_indices which are [0, 1, ..., n_samples-1])
+    np.testing.assert_array_equal(
+        F_notebook,
+        F_ours,
+        err_msg="Basis matrix should match notebook pattern during fit"
+    )
 
 
 if __name__ == "__main__":

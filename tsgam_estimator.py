@@ -4,9 +4,10 @@ from numpy import ndarray
 import numpy as np
 import cvxpy
 from numpy.random import RandomState
+from scipy import stats
 from scipy.sparse import spdiags
 from sklearn.base import RegressorMixin, BaseEstimator, check_array, check_is_fitted
-from sklearn.utils import check_X_y
+from sklearn.utils import check_X_y, check_random_state
 from spcqe import make_basis_matrix
 from spcqe.functions import initialize_arrays
 import pandas as pd
@@ -334,6 +335,36 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             newH[:-offset] = np.nan
         return newH
 
+    def _running_view(self, arr, window, lag=1, axis=-1):
+        """
+        Create running view of array for AR terms.
+
+        Parameters
+        ----------
+        arr : array-like
+            Input array.
+        window : int
+            Window size (number of AR lags).
+        lag : int, default=1
+            Lag offset (typically 1 for standard AR).
+        axis : int, default=-1
+            Axis along which to create running view.
+
+        Returns
+        -------
+        view : ndarray
+            Running view with extra dimension of shape (len(arr), window).
+        """
+        mod_arr = np.r_[np.ones(window + lag - 1) * np.nan, arr[:-1]]
+        shape = list(mod_arr.shape)
+        shape[axis] -= (window - 1)
+        assert shape[axis] > 0, f"Array too short for window={window}, lag={lag}"
+        return np.lib.stride_tricks.as_strided(
+            mod_arr,
+            shape=shape + [window],
+            strides=mod_arr.strides + (mod_arr.strides[axis],)
+        )
+
     def _build_exog_Hs(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None):
         """
         Build basis matrices for an exogenous variable with lead/lag.
@@ -551,8 +582,102 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term))
         self.problem_.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
 
+        # Fit AR model if configured
+        if self.config.ar_config is not None:
+            self._fit_ar_model(X_array, y, time_indices)
 
         return self
+
+    def _fit_ar_model(self, X_array, y, time_indices):
+        """
+        Fit AR model on baseline residuals.
+
+        Parameters
+        ----------
+        X_array : ndarray
+            Exogenous variables array.
+        y : ndarray
+            Target values.
+        time_indices : ndarray
+            Time indices for Fourier basis.
+        """
+        # Get baseline predictions
+        baseline_pred = np.full(len(y), self.variables_['constant'].value)
+
+        # Add exogenous terms if present
+        if self.config.exog_config:
+            for ix, exog_cfg in enumerate(self.config.exog_config):
+                exog_var = X_array[:, ix]
+                stored_knots = self.exog_knots_[ix] if isinstance(exog_cfg, TsgamSplineConfig) else None
+                _, Hs = self._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
+                exog_coef = self.variables_[f'exog_coef_{ix}'].value
+                if exog_coef is not None:
+                    exog_pred = np.sum([H @ exog_coef[:, lag_ix] for lag_ix, H in enumerate(Hs)], axis=0)
+                    baseline_pred += exog_pred
+
+        # Add Fourier terms if present
+        if self.config.multi_harmonic_config:
+            max_idx = int(np.max(time_indices))
+            F_full = make_basis_matrix(
+                num_harmonics=self.config.multi_harmonic_config.num_harmonics,
+                length=max_idx + 1,
+                periods=self.config.multi_harmonic_config.periods
+            )
+            F = F_full[time_indices.astype(int), 1:]  # Drop constant column
+            fourier_coef = self.variables_['fourier_coef'].value
+            if fourier_coef is not None:
+                baseline_pred += F @ fourier_coef
+
+        # Compute residuals on valid samples
+        residuals = y[self.combined_valid_mask_] - baseline_pred[self.combined_valid_mask_]
+
+        # Build AR design matrix
+        if self.config.ar_config is None:
+            return
+        ar_config = self.config.ar_config
+        ar_lags = len(ar_config.lags)
+        B = self._running_view(residuals, ar_lags)
+        ar_valid_mask = np.all(~np.isnan(B), axis=1)
+
+        if self.config.debug:
+            self._B_running_view_ = B
+            self._ar_valid_mask_ = ar_valid_mask
+            self._baseline_residuals_ = residuals
+
+        if not np.any(ar_valid_mask):
+            # Not enough data for AR model
+            self.ar_coef_ = None
+            self.ar_intercept_ = None
+            self.ar_noise_loc_ = None
+            self.ar_noise_scale_ = None
+            return
+
+        # Fit AR model using CVXPY
+        theta = cvxpy.Variable(ar_lags)
+        constant = cvxpy.Variable()
+
+        ar_problem = cvxpy.Problem(
+            cvxpy.Minimize(cvxpy.sum_squares(residuals[ar_valid_mask] - B[ar_valid_mask] @ theta - constant)),
+            [cvxpy.norm1(theta) <= ar_config.l1_constraint]
+        )
+        ar_problem.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
+
+        if ar_problem.status not in ["infeasible", "unbounded"]:
+            assert theta.value is not None, "AR coefficients should be set"
+            assert constant.value is not None, "AR intercept should be set"
+            self.ar_coef_ = theta.value
+            self.ar_intercept_ = constant.value
+
+            # Fit Laplace distribution to AR model residuals
+            ar_model = B[ar_valid_mask] @ theta.value + constant.value
+            ar_residuals = residuals[ar_valid_mask] - ar_model
+            self.ar_noise_loc_, self.ar_noise_scale_ = stats.laplace.fit(ar_residuals)
+        else:
+            # AR model failed to solve
+            self.ar_coef_ = None
+            self.ar_intercept_ = None
+            self.ar_noise_loc_ = None
+            self.ar_noise_scale_ = None
 
     def predict(self, X):
         check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
@@ -622,6 +747,100 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             predictions += F @ fourier_coef
 
         return predictions
+
+    def sample(self, X, n_samples=1, random_state=None):
+        """
+        Generate sample predictions with AR noise rollout.
+
+        Parameters
+        ----------
+        X : array-like or DataFrame
+            Input data with timestamps.
+        n_samples : int, default=1
+            Number of samples to generate.
+        random_state : int, RandomState instance or None, default=None
+            Random state for reproducible results.
+
+        Returns
+        -------
+        samples : ndarray of shape (n_samples, n_pred_samples)
+            Sample predictions in log scale. If AR model is fitted, includes AR noise rollout.
+            Otherwise, adds small Laplace noise.
+        """
+        check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
+        random_state = check_random_state(random_state)
+
+        # Get baseline predictions
+        baseline_pred = self.predict(X)
+
+        if self.config.ar_config is not None and hasattr(self, 'ar_coef_') and self.ar_coef_ is not None:
+            samples = self._generate_ar_samples(baseline_pred, n_samples, random_state)
+        else:
+            # No AR model, just add small noise
+            noise = stats.laplace.rvs(
+                loc=0, scale=0.1, size=(n_samples, len(baseline_pred)),
+                random_state=random_state
+            )
+            samples = baseline_pred + noise
+
+        return samples
+
+    def _generate_ar_samples(self, baseline_pred, n_samples, random_state):
+        """
+        Generate samples with AR noise rollout using residuals.
+
+        Parameters
+        ----------
+        baseline_pred : ndarray
+            Baseline predictions in log scale.
+        n_samples : int
+            Number of samples to generate.
+        random_state : RandomState
+            Random state for reproducible results.
+
+        Returns
+        -------
+        samples : ndarray of shape (n_samples, len(baseline_pred))
+            Sample predictions with AR noise in log scale.
+        """
+        assert self.ar_coef_ is not None and self.ar_intercept_ is not None, \
+            "AR coefficients must be set before generating samples"
+        assert self.ar_noise_loc_ is not None and self.ar_noise_scale_ is not None, \
+            "AR noise distribution parameters must be set before generating samples"
+
+        ar_coef = self.ar_coef_
+        ar_intercept = self.ar_intercept_
+        ar_lags = len(ar_coef)
+
+        samples = np.zeros((n_samples, len(baseline_pred)))
+        for i in range(n_samples):
+            # Initialize window with random noise (as in notebook)
+            window = stats.laplace.rvs(
+                loc=self.ar_noise_loc_,
+                scale=self.ar_noise_scale_,
+                size=ar_lags,
+                random_state=random_state
+            )
+            # Generate AR noise with burn-in period (matching notebook)
+            # Notebook generates length + ar_lags * 2 values, then uses last length values
+            length = len(baseline_pred)
+            nvals = length + ar_lags * 2
+            gen_data = np.empty(nvals, dtype=float)
+            for it in range(nvals):
+                # Generate AR value: ar_coef @ window + intercept + noise
+                ar_val = ar_coef @ window + ar_intercept + stats.laplace.rvs(
+                    loc=self.ar_noise_loc_,
+                    scale=self.ar_noise_scale_,
+                    random_state=random_state
+                )
+                gen_data[it] = ar_val
+                # Update window: roll and replace last element
+                window = np.roll(window, -1)
+                window[-1] = ar_val
+            # Use last length values (after burn-in)
+            ar_noise = gen_data[-length:]
+            samples[i] = baseline_pred + ar_noise
+        return samples
 
 
 
