@@ -1,0 +1,1167 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Reference &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="estimator Documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-tsgam_estimator">TsgamEstimator</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamArConfig"><code class="docutils literal notranslate"><span class="pre">TsgamArConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamArConfig.l1_constraint"><code class="docutils literal notranslate"><span class="pre">TsgamArConfig.l1_constraint</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamArConfig.lags"><code class="docutils literal notranslate"><span class="pre">TsgamArConfig.lags</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.problem_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.problem_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.freq_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.freq_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.time_reference_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.time_reference_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.time_indices_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.time_indices_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.variables_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.variables_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.exog_knots_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.exog_knots_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.combined_valid_mask_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.combined_valid_mask_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.ar_coef_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.ar_coef_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.ar_intercept_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.ar_intercept_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.ar_noise_loc_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.ar_noise_loc_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.ar_noise_scale_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.ar_noise_scale_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.fit"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.fit()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.predict"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.predict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.sample"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.set_fit_request"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.set_fit_request()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.set_score_request"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.set_score_request()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.ar_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.ar_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.debug"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.debug</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.exog_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.exog_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.multi_harmonic_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.multi_harmonic_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.random_state"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.random_state</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.solver_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.solver_config</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamLinearConfig"><code class="docutils literal notranslate"><span class="pre">TsgamLinearConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamLinearConfig.diff_reg_weight"><code class="docutils literal notranslate"><span class="pre">TsgamLinearConfig.diff_reg_weight</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamLinearConfig.lags"><code class="docutils literal notranslate"><span class="pre">TsgamLinearConfig.lags</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamLinearConfig.reg_weight"><code class="docutils literal notranslate"><span class="pre">TsgamLinearConfig.reg_weight</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig"><code class="docutils literal notranslate"><span class="pre">TsgamMultiHarmonicConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig.num_harmonics"><code class="docutils literal notranslate"><span class="pre">TsgamMultiHarmonicConfig.num_harmonics</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig.periods"><code class="docutils literal notranslate"><span class="pre">TsgamMultiHarmonicConfig.periods</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig.reg_weight"><code class="docutils literal notranslate"><span class="pre">TsgamMultiHarmonicConfig.reg_weight</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamSolverConfig"><code class="docutils literal notranslate"><span class="pre">TsgamSolverConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamSolverConfig.solver"><code class="docutils literal notranslate"><span class="pre">TsgamSolverConfig.solver</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamSolverConfig.verbose"><code class="docutils literal notranslate"><span class="pre">TsgamSolverConfig.verbose</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamSplineConfig"><code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamSplineConfig.diff_reg_weight"><code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig.diff_reg_weight</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamSplineConfig.knots"><code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig.knots</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamSplineConfig.lags"><code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig.lags</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamSplineConfig.n_knots"><code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig.n_knots</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamSplineConfig.reg_weight"><code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig.reg_weight</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-load_model_estimator">LoadForecastRegressor</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.time_coef_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.time_coef_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.intercept_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.intercept_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.exog_coef_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.exog_coef_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.knots_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.knots_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.ar_coef_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.ar_coef_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.ar_intercept_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.ar_intercept_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.ar_noise_loc_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.ar_noise_loc_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.ar_noise_scale_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.ar_noise_scale_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.n_features_in_"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.n_features_in_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.fit"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.fit()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.predict"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.predict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.sample"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.set_fit_request"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.set_fit_request()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor.set_score_request"><code class="docutils literal notranslate"><span class="pre">LoadForecastRegressor.set_score_request()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">API Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/api.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="api-reference">
+<h1>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h1>
+<p>This page provides detailed API documentation for the estimator package.</p>
+<section id="module-tsgam_estimator">
+<span id="tsgamestimator"></span><h2>TsgamEstimator<a class="headerlink" href="#module-tsgam_estimator" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamArConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamArConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lags</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l1_constraint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.95</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamArConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamArConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Configuration for autoregressive (AR) residual modeling.</p>
+<p>After fitting the baseline model (Fourier + exogenous), this config enables
+fitting an AR model on the residuals to capture remaining temporal dependencies.
+The AR model uses L1 regularization to encourage sparsity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>lags</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>]</em>) – AR lags to include in the model. Typically [1] for AR(1), [1, 2] for AR(2), etc.
+Only positive lags are meaningful (looking back in time).</p></li>
+<li><p><strong>l1_constraint</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=0.95</em>) – L1 norm constraint for AR coefficients. This controls sparsity - lower values
+allow fewer non-zero coefficients. Typical range: 0.5 to 1.0.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># AR(1) model</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamArConfig</span><span class="p">(</span><span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">l1_constraint</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># AR(2) model with tighter constraint</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamArConfig</span><span class="p">(</span><span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">l1_constraint</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamArConfig.l1_constraint">
+<span class="sig-name descname"><span class="pre">l1_constraint</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.95</span></em><a class="headerlink" href="#tsgam_estimator.TsgamArConfig.l1_constraint" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamArConfig.lags">
+<span class="sig-name descname"><span class="pre">lags</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tsgam_estimator.TsgamArConfig.lags" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamEstimator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig" title="tsgam_estimator.TsgamEstimatorConfig"><span class="pre">TsgamEstimatorConfig</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamEstimator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamEstimator" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.BaseEstimator.html#sklearn.base.BaseEstimator" title="(in scikit-learn v1.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEstimator</span></code></a>, <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.RegressorMixin.html#sklearn.base.RegressorMixin" title="(in scikit-learn v1.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">RegressorMixin</span></code></a></p>
+<p>Time Series Generalized Additive Model (TSGAM) Estimator.</p>
+<p>This estimator fits a GAM model for time series forecasting that combines:</p>
+<ul class="simple">
+<li><p>Multi-harmonic Fourier basis functions for seasonal patterns</p></li>
+<li><p>Cubic spline or linear basis functions for exogenous variables with lead/lag</p></li>
+<li><p>Optional autoregressive (AR) modeling of residuals</p></li>
+</ul>
+<p>The model uses regularized optimization via CVXPY to fit coefficients.
+While the model can work with targets in any scale, log transformation is
+commonly used when components are multiplicative rather than additive.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> (<a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig" title="tsgam_estimator.TsgamEstimatorConfig"><em>TsgamEstimatorConfig</em></a>) – Configuration object containing all model settings.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.problem_">
+<span class="sig-name descname"><span class="pre">problem_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.problem_" title="Link to this definition"></a></dt>
+<dd><p>The solved optimization problem. Check <cite>problem_.status</cite> to verify
+convergence (should be ‘optimal’ or ‘optimal_inaccurate’).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>cvxpy.Problem</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.freq_">
+<span class="sig-name descname"><span class="pre">freq_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.freq_" title="Link to this definition"></a></dt>
+<dd><p>Inferred frequency of the time series (e.g., ‘h’ for hourly).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.time_reference_">
+<span class="sig-name descname"><span class="pre">time_reference_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.time_reference_" title="Link to this definition"></a></dt>
+<dd><p>Reference timestamp used for phase alignment (first timestamp from fit).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Timestamp</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.time_indices_">
+<span class="sig-name descname"><span class="pre">time_indices_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.time_indices_" title="Link to this definition"></a></dt>
+<dd><p>Numeric time indices (hours since reference) used during fit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.variables_">
+<span class="sig-name descname"><span class="pre">variables_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.variables_" title="Link to this definition"></a></dt>
+<dd><p>Dictionary of CVXPY variables containing fitted coefficients:
+- ‘constant’: intercept term
+- ‘fourier_coef’: Fourier coefficients (if multi_harmonic_config provided)
+- ‘exog_coef_{i}’: Exogenous variable coefficients for variable i</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.exog_knots_">
+<span class="sig-name descname"><span class="pre">exog_knots_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.exog_knots_" title="Link to this definition"></a></dt>
+<dd><p>List of knot locations for spline exogenous variables (auto-computed
+during fit, reused during predict).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.combined_valid_mask_">
+<span class="sig-name descname"><span class="pre">combined_valid_mask_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.combined_valid_mask_" title="Link to this definition"></a></dt>
+<dd><p>Boolean mask indicating valid samples (no NaN from lead/lag operations).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.ar_coef_">
+<span class="sig-name descname"><span class="pre">ar_coef_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.ar_coef_" title="Link to this definition"></a></dt>
+<dd><p>Fitted AR coefficients (if ar_config provided and model converged).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.ar_intercept_">
+<span class="sig-name descname"><span class="pre">ar_intercept_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.ar_intercept_" title="Link to this definition"></a></dt>
+<dd><p>Fitted AR intercept (if ar_config provided and model converged).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.ar_noise_loc_">
+<span class="sig-name descname"><span class="pre">ar_noise_loc_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.ar_noise_loc_" title="Link to this definition"></a></dt>
+<dd><p>Location parameter of Laplace noise distribution for AR model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.ar_noise_scale_">
+<span class="sig-name descname"><span class="pre">ar_noise_scale_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.ar_noise_scale_" title="Link to this definition"></a></dt>
+<dd><p>Scale parameter of Laplace noise distribution for AR model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tsgam_estimator</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="gp">... </span>    <span class="n">TsgamEstimator</span><span class="p">,</span> <span class="n">TsgamEstimatorConfig</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">TsgamMultiHarmonicConfig</span><span class="p">,</span> <span class="n">TsgamSplineConfig</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create configuration</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">multi_harmonic</span> <span class="o">=</span> <span class="n">TsgamMultiHarmonicConfig</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">num_harmonics</span><span class="o">=</span><span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">periods</span><span class="o">=</span><span class="p">[</span><span class="mf">365.2425</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">]</span>  <span class="c1"># yearly, weekly, daily</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">exog_config</span> <span class="o">=</span> <span class="p">[</span><span class="n">TsgamSplineConfig</span><span class="p">(</span><span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamEstimatorConfig</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">multi_harmonic_config</span><span class="o">=</span><span class="n">multi_harmonic</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">exog_config</span><span class="o">=</span><span class="n">exog_config</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create estimator</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">estimator</span> <span class="o">=</span> <span class="n">TsgamEstimator</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Prepare data (X must be DataFrame with DatetimeIndex)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dates</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2020-01-01&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;h&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;temp&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">)},</span> <span class="n">index</span><span class="o">=</span><span class="n">dates</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="mi">50</span><span class="p">)</span>  <span class="c1"># log-transform optional</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Fit model</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">estimator</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Make predictions</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X_pred</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;temp&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">100</span><span class="p">)},</span>
+<span class="gp">... </span>                      <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2021-01-01&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;h&#39;</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">predictions</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_pred</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamEstimator.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.fit" title="Link to this definition"></a></dt>
+<dd><p>Fit the TSGAM model to training data.</p>
+<p>This method:
+1. Extracts and validates timestamps from X
+2. Builds Fourier basis matrices for seasonal patterns
+3. Builds spline/linear basis matrices for exogenous variables
+4. Solves the regularized optimization problem
+5. Optionally fits an AR model on residuals</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> (<em>DataFrame</em>) – Training data with exogenous variables. Must have DatetimeIndex or
+first column must be datetime. Remaining columns are exogenous variables
+(e.g., temperature). Column order must match exog_config order.</p></li>
+<li><p><strong>y</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em>) – Target values. Can be in any scale, though log transformation is
+commonly used for multiplicative components. Must not contain NaN.</p></li>
+<li><p><strong>sample_weight</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em><em>, </em><em>default=None</em>) – Sample weights. Currently not used but included for sklearn compatibility.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>self</strong> – Returns self for method chaining.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#tsgam_estimator.TsgamEstimator" title="tsgam_estimator.TsgamEstimator">TsgamEstimator</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If X doesn’t have proper timestamp index/column, if frequency doesn’t
+    match, or if insufficient samples for configured lags.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dates</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2020-01-01&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;h&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;temp&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">)},</span> <span class="n">index</span><span class="o">=</span><span class="n">dates</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="mi">50</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">estimator</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="go">TsgamEstimator(...)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamEstimator.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.predict" title="Link to this definition"></a></dt>
+<dd><p>Predict target values for new data.</p>
+<p>Predictions are made using the fitted model components:
+- Constant term
+- Fourier basis (seasonal patterns)
+- Exogenous variable basis (splines/linear)
+- AR model is NOT included in predictions (use sample() for AR noise)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>X</strong> (<em>DataFrame</em>) – Input data with exogenous variables. Must have DatetimeIndex or
+first column must be datetime. Must have same frequency as training data.
+Column order must match training data.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>predictions</strong> – Predicted values in the same scale as training data. If training data
+was log-transformed, predictions will be in log space and can be
+converted back using np.exp(predictions).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray of shape (n_samples,)</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If model not fitted, if X doesn’t have proper timestamp index/column,
+    if frequency doesn’t match training data, or if model didn’t converge.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># After fitting</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X_pred</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;temp&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">100</span><span class="p">)},</span>
+<span class="gp">... </span>                      <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2021-01-01&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;h&#39;</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">predictions</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_pred</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Convert back to original scale</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">predictions_original</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamEstimator.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.sample" title="Link to this definition"></a></dt>
+<dd><p>Generate sample predictions with AR noise rollout.</p>
+<p>This method generates multiple sample paths by adding noise to baseline
+predictions. If an AR model was fitted, it uses AR noise rollout to generate
+temporally correlated noise. Otherwise, it adds independent Laplace noise.</p>
+<p>The AR noise rollout:
+1. Initializes with random noise from fitted Laplace distribution
+2. Generates AR noise using: noise[t] = AR_coef &#64; noise[t-lags] + intercept + new_noise
+3. Adds burn-in period before using samples</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> (<em>DataFrame</em>) – Input data with timestamps. Same format as predict().</p></li>
+<li><p><strong>n_samples</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=1</em>) – Number of sample paths to generate.</p></li>
+<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>RandomState instance</em><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random state for reproducible results. If None, uses estimator’s
+random_state from config.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>samples</strong> – Sample predictions in the same scale as training data. Each row is one
+sample path. If AR model is fitted, includes temporally correlated AR
+noise. Otherwise, adds independent small Laplace noise (scale=0.1).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray of shape (n_samples, n_pred_samples)</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If model not fitted or if AR model was configured but didn’t converge.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Generate 100 sample paths</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">samples</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">X_pred</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># samples shape: (100, n_pred_samples)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># If data was log-transformed, convert back to original scale</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">samples_original</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Compute percentiles</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p5</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">samples_original</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p95</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">samples_original</span><span class="p">,</span> <span class="mi">95</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.set_fit_request">
+<span class="sig-name descname"><span class="pre">set_fit_request</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'$UNCHANGED$'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator" title="tsgam_estimator.TsgamEstimator"><span class="pre">TsgamEstimator</span></a></span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.set_fit_request" title="Link to this definition"></a></dt>
+<dd><p>Configure whether metadata should be requested to be passed to the <code class="docutils literal notranslate"><span class="pre">fit</span></code> method.</p>
+<p>Note that this method is only relevant when this estimator is used as a
+sub-estimator within a <a class="reference external" href="https://scikit-learn.org/stable/glossary.html#term-meta-estimator" title="(in scikit-learn v1.7)"><span class="xref std std-term">meta-estimator</span></a> and metadata routing is enabled
+with <code class="docutils literal notranslate"><span class="pre">enable_metadata_routing=True</span></code> (see <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.set_config.html#sklearn.set_config" title="(in scikit-learn v1.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">sklearn.set_config()</span></code></a>).
+Please check the <a class="reference external" href="https://scikit-learn.org/stable/metadata_routing.html#metadata-routing" title="(in scikit-learn v1.7)"><span class="xref std std-ref">User Guide</span></a> on how the routing
+mechanism works.</p>
+<p>The options for each parameter are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">True</span></code>: metadata is requested, and passed to <code class="docutils literal notranslate"><span class="pre">fit</span></code> if provided. The request is ignored if metadata is not provided.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">False</span></code>: metadata is not requested and the meta-estimator will not pass it to <code class="docutils literal notranslate"><span class="pre">fit</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code>: metadata is not requested, and the meta-estimator will raise an error if the user provides it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str</span></code>: metadata should be passed to the meta-estimator with this given alias instead of the original name.</p></li>
+</ul>
+<p>The default (<code class="docutils literal notranslate"><span class="pre">sklearn.utils.metadata_routing.UNCHANGED</span></code>) retains the
+existing request. This allows you to change the request for some
+parameters and not others.</p>
+<div class="versionadded">
+<p><span class="versionmodified added">Added in version 1.3.</span></p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>sample_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>True</em><em>, </em><em>False</em><em>, or </em><em>None</em><em>,                     </em><em>default=sklearn.utils.metadata_routing.UNCHANGED</em>) – Metadata routing for <code class="docutils literal notranslate"><span class="pre">sample_weight</span></code> parameter in <code class="docutils literal notranslate"><span class="pre">fit</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>self</strong> – The updated object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.set_score_request">
+<span class="sig-name descname"><span class="pre">set_score_request</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'$UNCHANGED$'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator" title="tsgam_estimator.TsgamEstimator"><span class="pre">TsgamEstimator</span></a></span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.set_score_request" title="Link to this definition"></a></dt>
+<dd><p>Configure whether metadata should be requested to be passed to the <code class="docutils literal notranslate"><span class="pre">score</span></code> method.</p>
+<p>Note that this method is only relevant when this estimator is used as a
+sub-estimator within a <a class="reference external" href="https://scikit-learn.org/stable/glossary.html#term-meta-estimator" title="(in scikit-learn v1.7)"><span class="xref std std-term">meta-estimator</span></a> and metadata routing is enabled
+with <code class="docutils literal notranslate"><span class="pre">enable_metadata_routing=True</span></code> (see <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.set_config.html#sklearn.set_config" title="(in scikit-learn v1.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">sklearn.set_config()</span></code></a>).
+Please check the <a class="reference external" href="https://scikit-learn.org/stable/metadata_routing.html#metadata-routing" title="(in scikit-learn v1.7)"><span class="xref std std-ref">User Guide</span></a> on how the routing
+mechanism works.</p>
+<p>The options for each parameter are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">True</span></code>: metadata is requested, and passed to <code class="docutils literal notranslate"><span class="pre">score</span></code> if provided. The request is ignored if metadata is not provided.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">False</span></code>: metadata is not requested and the meta-estimator will not pass it to <code class="docutils literal notranslate"><span class="pre">score</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code>: metadata is not requested, and the meta-estimator will raise an error if the user provides it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str</span></code>: metadata should be passed to the meta-estimator with this given alias instead of the original name.</p></li>
+</ul>
+<p>The default (<code class="docutils literal notranslate"><span class="pre">sklearn.utils.metadata_routing.UNCHANGED</span></code>) retains the
+existing request. This allows you to change the request for some
+parameters and not others.</p>
+<div class="versionadded">
+<p><span class="versionmodified added">Added in version 1.3.</span></p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>sample_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>True</em><em>, </em><em>False</em><em>, or </em><em>None</em><em>,                     </em><em>default=sklearn.utils.metadata_routing.UNCHANGED</em>) – Metadata routing for <code class="docutils literal notranslate"><span class="pre">sample_weight</span></code> parameter in <code class="docutils literal notranslate"><span class="pre">score</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>self</strong> – The updated object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamEstimatorConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multi_harmonic_config:</span> <span class="pre">~tsgam_estimator.TsgamMultiHarmonicConfig</span> <span class="pre">|</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exog_config:</span> <span class="pre">list[~tsgam_estimator.TsgamSplineConfig</span> <span class="pre">|</span> <span class="pre">~tsgam_estimator.TsgamLinearConfig]</span> <span class="pre">|</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ar_config:</span> <span class="pre">~tsgam_estimator.TsgamArConfig</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solver_config:</span> <span class="pre">~tsgam_estimator.TsgamSolverConfig</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state:</span> <span class="pre">~numpy.random.mtrand.RandomState</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamEstimatorConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Main configuration for TsgamEstimator.</p>
+<p>This config combines all component configurations (Fourier, exogenous, AR)
+and solver settings into a single configuration object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>multi_harmonic_config</strong> (<a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig" title="tsgam_estimator.TsgamMultiHarmonicConfig"><em>TsgamMultiHarmonicConfig</em></a><em> or </em><em>None</em>) – Configuration for multi-harmonic Fourier basis functions. If None,
+no time-based seasonal patterns are modeled.</p></li>
+<li><p><strong>exog_config</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> of </em><a class="reference internal" href="#tsgam_estimator.TsgamSplineConfig" title="tsgam_estimator.TsgamSplineConfig"><em>TsgamSplineConfig</em></a><em> or </em><a class="reference internal" href="#tsgam_estimator.TsgamLinearConfig" title="tsgam_estimator.TsgamLinearConfig"><em>TsgamLinearConfig</em></a><em>, or </em><em>None</em>) – List of configurations for exogenous variables. Each element corresponds
+to one exogenous variable in X. Order must match column order in X.
+If None, no exogenous variables are used.</p></li>
+<li><p><strong>ar_config</strong> (<a class="reference internal" href="#tsgam_estimator.TsgamArConfig" title="tsgam_estimator.TsgamArConfig"><em>TsgamArConfig</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Configuration for AR residual modeling. If None, no AR model is fitted.</p></li>
+<li><p><strong>solver_config</strong> (<a class="reference internal" href="#tsgam_estimator.TsgamSolverConfig" title="tsgam_estimator.TsgamSolverConfig"><em>TsgamSolverConfig</em></a><em>, </em><em>default=TsgamSolverConfig</em><em>(</em><em>)</em>) – Solver configuration for CVXPY optimization.</p></li>
+<li><p><strong>random_state</strong> (<em>RandomState</em><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random state for reproducible results. Used in AR sampling if ar_config
+is provided.</p></li>
+<li><p><strong>debug</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, stores additional debug attributes (e.g., _baseline_residuals_,
+_B_running_view_) for inspection.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">multi_harmonic</span> <span class="o">=</span> <span class="n">TsgamMultiHarmonicConfig</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">num_harmonics</span><span class="o">=</span><span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">periods</span><span class="o">=</span><span class="p">[</span><span class="mf">365.2425</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">]</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">exog</span> <span class="o">=</span> <span class="p">[</span><span class="n">TsgamSplineConfig</span><span class="p">(</span><span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ar</span> <span class="o">=</span> <span class="n">TsgamArConfig</span><span class="p">(</span><span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamEstimatorConfig</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">multi_harmonic_config</span><span class="o">=</span><span class="n">multi_harmonic</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">exog_config</span><span class="o">=</span><span class="n">exog</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">ar_config</span><span class="o">=</span><span class="n">ar</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig.ar_config">
+<span class="sig-name descname"><span class="pre">ar_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#tsgam_estimator.TsgamArConfig" title="tsgam_estimator.TsgamArConfig"><span class="pre">TsgamArConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.ar_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig.debug">
+<span class="sig-name descname"><span class="pre">debug</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.debug" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig.exog_config">
+<span class="sig-name descname"><span class="pre">exog_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#tsgam_estimator.TsgamSplineConfig" title="tsgam_estimator.TsgamSplineConfig"><span class="pre">TsgamSplineConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="#tsgam_estimator.TsgamLinearConfig" title="tsgam_estimator.TsgamLinearConfig"><span class="pre">TsgamLinearConfig</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.exog_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig.multi_harmonic_config">
+<span class="sig-name descname"><span class="pre">multi_harmonic_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig" title="tsgam_estimator.TsgamMultiHarmonicConfig"><span class="pre">TsgamMultiHarmonicConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.multi_harmonic_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig.random_state">
+<span class="sig-name descname"><span class="pre">random_state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/random/legacy.html#numpy.random.RandomState" title="(in NumPy v2.3)"><span class="pre">RandomState</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.random_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig.solver_config">
+<span class="sig-name descname"><span class="pre">solver_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#tsgam_estimator.TsgamSolverConfig" title="tsgam_estimator.TsgamSolverConfig"><span class="pre">TsgamSolverConfig</span></a></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.solver_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamLinearConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamLinearConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lags:</span> <span class="pre">list[int]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_weight:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diff_reg_weight:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamLinearConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamLinearConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Configuration for linear basis functions for exogenous variables.</p>
+<p>This config defines how an exogenous variable is modeled using simple linear
+terms with optional lead/lag. Use this instead of TsgamSplineConfig when
+you expect a linear relationship.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>lags</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>]</em><em>, </em><em>default=</em><em>[</em><em>0</em><em>]</em>) – Lead/lag offsets for the exogenous variable. Positive values = lag
+(looking back), negative values = lead (looking forward). For example,
+[-1, 0, 1] includes 1 hour ahead, current, and 1 hour back.</p></li>
+<li><p><strong>reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1.0e-4</em>) – Regularization weight for linear coefficients. Higher values increase
+regularization. Typical range: 1e-5 to 1e-3.</p></li>
+<li><p><strong>diff_reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Regularization weight for differences between coefficients at different
+lags. This encourages smooth transitions across lags. Higher values make
+lag coefficients more similar.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamLinearConfig</span><span class="p">(</span><span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamLinearConfig.diff_reg_weight">
+<span class="sig-name descname"><span class="pre">diff_reg_weight</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></em><a class="headerlink" href="#tsgam_estimator.TsgamLinearConfig.diff_reg_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamLinearConfig.lags">
+<span class="sig-name descname"><span class="pre">lags</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tsgam_estimator.TsgamLinearConfig.lags" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamLinearConfig.reg_weight">
+<span class="sig-name descname"><span class="pre">reg_weight</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0001</span></em><a class="headerlink" href="#tsgam_estimator.TsgamLinearConfig.reg_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamMultiHarmonicConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamMultiHarmonicConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_harmonics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">periods</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0001</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamMultiHarmonicConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamMultiHarmonicConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Configuration for multi-harmonic Fourier basis functions.</p>
+<p>This config defines the seasonal/periodic patterns in the time series using
+Fourier basis functions with multiple harmonics and periods. Each period
+can have multiple harmonics to capture complex seasonal patterns.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num_harmonics</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>]</em>) – Number of harmonics for each period. Each element corresponds to a period.
+For example, [6, 4, 3] means 6 harmonics for the first period,
+4 for the second, and 3 for the third.</p></li>
+<li><p><strong>periods</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>]</em>) – Periods for each harmonic block, in hours. Must have same length as
+num_harmonics. Common values:
+- 24: daily pattern
+- 168 (7*24): weekly pattern
+- 8766 (365.2425*24): yearly pattern</p></li>
+<li><p><strong>reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1.0e-4</em>) – Regularization weight for Fourier coefficients. Higher values increase
+smoothness of the seasonal patterns. Typical range: 1e-5 to 1e-3.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamMultiHarmonicConfig</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">num_harmonics</span><span class="o">=</span><span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">periods</span><span class="o">=</span><span class="p">[</span><span class="mf">365.2425</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">]</span>  <span class="c1"># yearly, weekly, daily</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamMultiHarmonicConfig.num_harmonics">
+<span class="sig-name descname"><span class="pre">num_harmonics</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tsgam_estimator.TsgamMultiHarmonicConfig.num_harmonics" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamMultiHarmonicConfig.periods">
+<span class="sig-name descname"><span class="pre">periods</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tsgam_estimator.TsgamMultiHarmonicConfig.periods" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamMultiHarmonicConfig.reg_weight">
+<span class="sig-name descname"><span class="pre">reg_weight</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0001</span></em><a class="headerlink" href="#tsgam_estimator.TsgamMultiHarmonicConfig.reg_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSolverConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamSolverConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">solver</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'CLARABEL'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamSolverConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamSolverConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Configuration for the CVXPY solver used in optimization.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>solver</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>default='CLARABEL'</em>) – CVXPY solver name. Common options:
+- ‘CLARABEL’: Fast, modern solver (recommended)
+- ‘ECOS’: Reliable, slower
+- ‘OSQP’: Good for quadratic problems
+- ‘SCS’: General purpose</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether to print solver output during optimization. Useful for debugging
+but can be verbose for large problems.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamSolverConfig</span><span class="p">(</span><span class="n">solver</span><span class="o">=</span><span class="s1">&#39;CLARABEL&#39;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSolverConfig.solver">
+<span class="sig-name descname"><span class="pre">solver</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CLARABEL'</span></em><a class="headerlink" href="#tsgam_estimator.TsgamSolverConfig.solver" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSolverConfig.verbose">
+<span class="sig-name descname"><span class="pre">verbose</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#tsgam_estimator.TsgamSolverConfig.verbose" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSplineConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamSplineConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_knots:</span> <span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lags:</span> <span class="pre">list[int]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reg_weight:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diff_reg_weight:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots:</span> <span class="pre">list[float]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamSplineConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamSplineConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Configuration for cubic spline basis functions for exogenous variables.</p>
+<p>This config defines how an exogenous variable (e.g., temperature) is modeled
+using cubic splines with optional lead/lag terms. Splines allow for non-linear
+relationships between the exogenous variable and the target.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_knots</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em>) – Number of knots for the spline basis. Knots will be evenly spaced between
+min and max of the variable. If None, knots must be provided explicitly.
+Ignored if knots is non-empty.</p></li>
+<li><p><strong>lags</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>]</em><em>, </em><em>default=</em><em>[</em><em>0</em><em>]</em>) – Lead/lag offsets for the exogenous variable. Positive values = lag
+(looking back), negative values = lead (looking forward). For example,
+[-3, -2, -1, 0, 1, 2, 3] includes 3 hours ahead, current, and 3 hours back.</p></li>
+<li><p><strong>reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1.0e-4</em>) – Regularization weight for spline coefficients. Higher values increase
+smoothness. Typical range: 1e-5 to 1e-3.</p></li>
+<li><p><strong>diff_reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Regularization weight for differences between coefficients at different
+lags. This encourages smooth transitions across lags. Higher values make
+lag coefficients more similar.</p></li>
+<li><p><strong>knots</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>]</em><em>, </em><em>default=</em><em>[</em><em>]</em>) – Explicit knot locations for the spline. If empty list, knots will be
+auto-generated using n_knots. If provided, n_knots is ignored.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Auto-generate 10 knots</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamSplineConfig</span><span class="p">(</span><span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Use explicit knots</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamSplineConfig</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">knots</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">70</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">90</span><span class="p">,</span> <span class="mi">100</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSplineConfig.diff_reg_weight">
+<span class="sig-name descname"><span class="pre">diff_reg_weight</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></em><a class="headerlink" href="#tsgam_estimator.TsgamSplineConfig.diff_reg_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSplineConfig.knots">
+<span class="sig-name descname"><span class="pre">knots</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tsgam_estimator.TsgamSplineConfig.knots" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSplineConfig.lags">
+<span class="sig-name descname"><span class="pre">lags</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tsgam_estimator.TsgamSplineConfig.lags" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSplineConfig.n_knots">
+<span class="sig-name descname"><span class="pre">n_knots</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#tsgam_estimator.TsgamSplineConfig.n_knots" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamSplineConfig.reg_weight">
+<span class="sig-name descname"><span class="pre">reg_weight</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0001</span></em><a class="headerlink" href="#tsgam_estimator.TsgamSplineConfig.reg_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-load_model_estimator">
+<span id="loadforecastregressor"></span><h2>LoadForecastRegressor<a class="headerlink" href="#module-load_model_estimator" title="Link to this heading"></a></h2>
+<p>Load forecasting estimator compatible with scikit-learn.</p>
+<p>This module provides a LoadForecastRegressor that combines multi-Fourier time features,
+cubic spline or linear exogenous variables with lead/lag, and optional AR residual modeling.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">load_model_estimator.</span></span><span class="sig-name descname"><span class="pre">LoadForecastRegressor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_harmonics</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[1]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">periods</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[24]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exog_mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_knots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exog_lags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fourier_reg_weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exog_reg_weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exog_diff_reg_weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_ar</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ar_lags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ar_l1_constraint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.95</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cvxpy_solver</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'CLARABEL'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cvxpy_verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/load_model_estimator.html#LoadForecastRegressor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.BaseEstimator.html#sklearn.base.BaseEstimator" title="(in scikit-learn v1.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEstimator</span></code></a>, <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.RegressorMixin.html#sklearn.base.RegressorMixin" title="(in scikit-learn v1.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">RegressorMixin</span></code></a></p>
+<p>Load forecasting regressor with multi-Fourier, exogenous, and AR components.</p>
+<p>This estimator fits a load forecasting model that combines:
+- Multi-Fourier basis functions for seasonal patterns
+- Cubic spline or linear basis functions for exogenous variables with lead/lag
+- Optional autoregressive modeling of residuals</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num_harmonics</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=</em><em>[</em><em>1</em><em>]</em>) – Number of harmonics for each Fourier period.</p></li>
+<li><p><strong>periods</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=</em><em>[</em><em>24</em><em>]</em>) – Periods for Fourier basis functions (in hours).</p></li>
+<li><p><strong>exog_mode</strong> (<em>{'spline'</em><em>, </em><em>'linear'}</em><em>, </em><em>default='linear'</em>) – Treatment of exogenous variables. ‘spline’ uses cubic splines,
+‘linear’ uses simple linear terms.</p></li>
+<li><p><strong>n_knots</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Number of knots for spline basis (only used if exog_mode=’spline’).
+If None, knots must be provided explicitly.</p></li>
+<li><p><strong>knots</strong> (<em>array-like</em><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Explicit knot locations for spline basis (only used if exog_mode=’spline’).
+If None, knots are auto-generated using n_knots.</p></li>
+<li><p><strong>exog_lags</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=</em><em>[</em><em>0</em><em>]</em>) – Lead/lag offsets for exogenous variables.</p></li>
+<li><p><strong>fourier_reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1e-4</em>) – Regularization weight for Fourier coefficients.</p></li>
+<li><p><strong>exog_reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1e-4</em>) – Regularization weight for exogenous variable coefficients.</p></li>
+<li><p><strong>exog_diff_reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Regularization weight for differences between lag coefficients.</p></li>
+<li><p><strong>fit_ar</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=False</em>) – Whether to fit AR model on residuals.</p></li>
+<li><p><strong>ar_lags</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=1</em><em> (</em><em>only used if fit_ar=True</em><em>)</em>) – Number of AR lags to use.</p></li>
+<li><p><strong>ar_l1_constraint</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=0.95</em><em> (</em><em>only used if fit_ar=True</em><em>)</em>) – L1 norm constraint for AR coefficients.</p></li>
+<li><p><strong>cvxpy_solver</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>default='CLARABEL'</em>) – CVXPY solver to use.</p></li>
+<li><p><strong>cvxpy_verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=False</em>) – Whether to use verbose CVXPY output.</p></li>
+<li><p><strong>debug</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=False</em>) – Whether to save debug variables (e.g., _last_problem_value_,
+_baseline_residuals_, _B_running_view_, etc.) for testing/debugging.</p></li>
+<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>RandomState instance</em><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random state for reproducible results.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.time_coef_">
+<span class="sig-name descname"><span class="pre">time_coef_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.time_coef_" title="Link to this definition"></a></dt>
+<dd><p>Fitted Fourier coefficients (without constant term).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>array-like</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.intercept_">
+<span class="sig-name descname"><span class="pre">intercept_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.intercept_" title="Link to this definition"></a></dt>
+<dd><p>Fitted constant/intercept term from Fourier basis.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.exog_coef_">
+<span class="sig-name descname"><span class="pre">exog_coef_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.exog_coef_" title="Link to this definition"></a></dt>
+<dd><p>Fitted exogenous variable coefficients.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>array-like</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.knots_">
+<span class="sig-name descname"><span class="pre">knots_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.knots_" title="Link to this definition"></a></dt>
+<dd><p>Knot locations used for spline basis (if exog_mode=’spline’).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>array-like or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.ar_coef_">
+<span class="sig-name descname"><span class="pre">ar_coef_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.ar_coef_" title="Link to this definition"></a></dt>
+<dd><p>Fitted AR coefficients (if fit_ar=True).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>array-like or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.ar_intercept_">
+<span class="sig-name descname"><span class="pre">ar_intercept_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.ar_intercept_" title="Link to this definition"></a></dt>
+<dd><p>Fitted AR intercept (if fit_ar=True).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.ar_noise_loc_">
+<span class="sig-name descname"><span class="pre">ar_noise_loc_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.ar_noise_loc_" title="Link to this definition"></a></dt>
+<dd><p>Fitted location parameter for Laplace noise distribution (if fit_ar=True).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.ar_noise_scale_">
+<span class="sig-name descname"><span class="pre">ar_noise_scale_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.ar_noise_scale_" title="Link to this definition"></a></dt>
+<dd><p>Fitted scale parameter for Laplace noise distribution (if fit_ar=True).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.n_features_in_">
+<span class="sig-name descname"><span class="pre">n_features_in_</span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.n_features_in_" title="Link to this definition"></a></dt>
+<dd><p>Number of features seen during fit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">load_modeling.load_model_estimator</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoadForecastRegressor</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Generate sample data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">n_samples</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">time_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">temperature</span> <span class="o">=</span> <span class="mi">20</span> <span class="o">+</span> <span class="mi">10</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">time_idx</span> <span class="o">/</span> <span class="mi">24</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">load</span> <span class="o">=</span> <span class="mi">100</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">temperature</span> <span class="o">+</span> <span class="mi">5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">time_idx</span> <span class="o">/</span> <span class="mi">24</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Prepare data (time index + exogenous variables)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">time_idx</span><span class="p">,</span> <span class="n">temperature</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">load</span><span class="p">)</span>  <span class="c1"># Model works in log space</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Fit estimator</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">estimator</span> <span class="o">=</span> <span class="n">LoadForecastRegressor</span><span class="p">(</span><span class="n">exog_mode</span><span class="o">=</span><span class="s1">&#39;linear&#39;</span><span class="p">,</span> <span class="n">fit_ar</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">estimator</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Make predictions</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">predictions</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/load_model_estimator.html#LoadForecastRegressor.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.fit" title="Link to this definition"></a></dt>
+<dd><p>Fit the load forecasting model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>, </em><em>n_features</em><em>)</em>) – Training data. First column should be time indices, remaining columns
+are exogenous variables.</p></li>
+<li><p><strong>y</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em>) – Target values (should be log-transformed).</p></li>
+<li><p><strong>sample_weight</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>) or </em><em>None</em><em>, </em><em>default=None</em>) – Sample weights (not currently used).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>self</strong> – Fitted estimator.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor" title="load_model_estimator.LoadForecastRegressor">LoadForecastRegressor</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/load_model_estimator.html#LoadForecastRegressor.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.predict" title="Link to this definition"></a></dt>
+<dd><p>Make predictions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>X</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>, </em><em>n_features</em><em>)</em>) – Input data. First column should be time indices, remaining columns
+are exogenous variables.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>y_pred</strong> – Predicted values.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray of shape (n_samples,)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/load_model_estimator.html#LoadForecastRegressor.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.sample" title="Link to this definition"></a></dt>
+<dd><p>Generate sample predictions with AR noise.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>, </em><em>n_features</em><em>)</em>) – Input data.</p></li>
+<li><p><strong>n_samples</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=1</em>) – Number of samples to generate.</p></li>
+<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>RandomState instance</em><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random state for reproducible results.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>samples</strong> – Sample predictions.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray of shape (n_samples, n_pred_samples)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.set_fit_request">
+<span class="sig-name descname"><span class="pre">set_fit_request</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'$UNCHANGED$'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor" title="load_model_estimator.LoadForecastRegressor"><span class="pre">LoadForecastRegressor</span></a></span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.set_fit_request" title="Link to this definition"></a></dt>
+<dd><p>Configure whether metadata should be requested to be passed to the <code class="docutils literal notranslate"><span class="pre">fit</span></code> method.</p>
+<p>Note that this method is only relevant when this estimator is used as a
+sub-estimator within a <a class="reference external" href="https://scikit-learn.org/stable/glossary.html#term-meta-estimator" title="(in scikit-learn v1.7)"><span class="xref std std-term">meta-estimator</span></a> and metadata routing is enabled
+with <code class="docutils literal notranslate"><span class="pre">enable_metadata_routing=True</span></code> (see <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.set_config.html#sklearn.set_config" title="(in scikit-learn v1.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">sklearn.set_config()</span></code></a>).
+Please check the <a class="reference external" href="https://scikit-learn.org/stable/metadata_routing.html#metadata-routing" title="(in scikit-learn v1.7)"><span class="xref std std-ref">User Guide</span></a> on how the routing
+mechanism works.</p>
+<p>The options for each parameter are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">True</span></code>: metadata is requested, and passed to <code class="docutils literal notranslate"><span class="pre">fit</span></code> if provided. The request is ignored if metadata is not provided.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">False</span></code>: metadata is not requested and the meta-estimator will not pass it to <code class="docutils literal notranslate"><span class="pre">fit</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code>: metadata is not requested, and the meta-estimator will raise an error if the user provides it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str</span></code>: metadata should be passed to the meta-estimator with this given alias instead of the original name.</p></li>
+</ul>
+<p>The default (<code class="docutils literal notranslate"><span class="pre">sklearn.utils.metadata_routing.UNCHANGED</span></code>) retains the
+existing request. This allows you to change the request for some
+parameters and not others.</p>
+<div class="versionadded">
+<p><span class="versionmodified added">Added in version 1.3.</span></p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>sample_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>True</em><em>, </em><em>False</em><em>, or </em><em>None</em><em>,                     </em><em>default=sklearn.utils.metadata_routing.UNCHANGED</em>) – Metadata routing for <code class="docutils literal notranslate"><span class="pre">sample_weight</span></code> parameter in <code class="docutils literal notranslate"><span class="pre">fit</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>self</strong> – The updated object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="load_model_estimator.LoadForecastRegressor.set_score_request">
+<span class="sig-name descname"><span class="pre">set_score_request</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'$UNCHANGED$'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#load_model_estimator.LoadForecastRegressor" title="load_model_estimator.LoadForecastRegressor"><span class="pre">LoadForecastRegressor</span></a></span></span><a class="headerlink" href="#load_model_estimator.LoadForecastRegressor.set_score_request" title="Link to this definition"></a></dt>
+<dd><p>Configure whether metadata should be requested to be passed to the <code class="docutils literal notranslate"><span class="pre">score</span></code> method.</p>
+<p>Note that this method is only relevant when this estimator is used as a
+sub-estimator within a <a class="reference external" href="https://scikit-learn.org/stable/glossary.html#term-meta-estimator" title="(in scikit-learn v1.7)"><span class="xref std std-term">meta-estimator</span></a> and metadata routing is enabled
+with <code class="docutils literal notranslate"><span class="pre">enable_metadata_routing=True</span></code> (see <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.set_config.html#sklearn.set_config" title="(in scikit-learn v1.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">sklearn.set_config()</span></code></a>).
+Please check the <a class="reference external" href="https://scikit-learn.org/stable/metadata_routing.html#metadata-routing" title="(in scikit-learn v1.7)"><span class="xref std std-ref">User Guide</span></a> on how the routing
+mechanism works.</p>
+<p>The options for each parameter are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">True</span></code>: metadata is requested, and passed to <code class="docutils literal notranslate"><span class="pre">score</span></code> if provided. The request is ignored if metadata is not provided.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">False</span></code>: metadata is not requested and the meta-estimator will not pass it to <code class="docutils literal notranslate"><span class="pre">score</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code>: metadata is not requested, and the meta-estimator will raise an error if the user provides it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str</span></code>: metadata should be passed to the meta-estimator with this given alias instead of the original name.</p></li>
+</ul>
+<p>The default (<code class="docutils literal notranslate"><span class="pre">sklearn.utils.metadata_routing.UNCHANGED</span></code>) retains the
+existing request. This allows you to change the request for some
+parameters and not others.</p>
+<div class="versionadded">
+<p><span class="versionmodified added">Added in version 1.3.</span></p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>sample_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>True</em><em>, </em><em>False</em><em>, or </em><em>None</em><em>,                     </em><em>default=sklearn.utils.metadata_routing.UNCHANGED</em>) – Metadata routing for <code class="docutils literal notranslate"><span class="pre">sample_weight</span></code> parameter in <code class="docutils literal notranslate"><span class="pre">score</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>self</strong> – The updated object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="estimator Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
