@@ -25,3 +25,4 @@ dev = [
 
 [tool.coverage.run]
 relative_files = true
+source = ["tsgam_estimator", "load_model_estimator"]
