@@ -35,7 +35,7 @@ class TsgamLinearConfig:
 @dataclass
 class TsgamArConfig:
     lags: list[int]
-    l1_constraint: float
+    l1_constraint: float = 0.95
 
 
 @dataclass
@@ -47,11 +47,26 @@ class TsgamSolverConfig:
 class TsgamEstimatorConfig:
     multi_harmonic_config: TsgamMultiHarmonicConfig | None
     exog_config: list[TsgamSplineConfig | TsgamLinearConfig] | None
-    ar_config: TsgamArConfig | None
-    solver_config: TsgamSolverConfig
-    random_state: RandomState | None
-    freq: str  # Required: pandas frequency string (e.g., 'h' for hourly, 'H' also accepted)
+    ar_config: TsgamArConfig | None = None
+    solver_config: TsgamSolverConfig = field(default_factory=TsgamSolverConfig)
+    random_state: RandomState | None = None
     debug: bool = False
+
+
+PERIOD_HOURLY_DAILY = 24
+PERIOD_HOURLY_WEEKLY = 24 * 7
+PERIOD_HOURLY_YEARLY = 24 * 365.2425
+
+PERIOD_DAILY_YEARLY = 365.2425
+PERIOD_WEEKLY_YEARLY = 52.1775
+
+PERIOD_MONTHLY_YEARLY = 12
+PERIOD_QUARTERLY_YEARLY = 4
+PERIOD_YEARLY_YEARLY = 1
+
+# common periods: 1m, 5m, 15m, 60m/1h
+# todo(nimish): helper functions to set proper periods based on data's inferred frequency
+# infer frequency of data and then compute values for periods automatically
 
 
 class TsgamEstimator(BaseEstimator, RegressorMixin):
@@ -487,13 +502,13 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     def fit(self, X, y, sample_weight=None):
         # Extract timestamps before check_X_y converts DataFrame to array
         timestamps, X_array = self._ensure_timestamp_index(X)
-
+        inferred_freq = pd.infer_freq(timestamps)
         # Validate frequency
-        self._validate_frequency(timestamps, self.config.freq)
+        self._validate_frequency(timestamps, inferred_freq)
 
         # Store frequency and reference timestamp
         # Normalize 'H' to 'h' for consistency
-        normalized_freq = self.config.freq.lower() if self.config.freq == 'H' else self.config.freq
+        normalized_freq = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
         self.freq_ = normalized_freq
         self.time_reference_ = timestamps[0]
 
@@ -681,6 +696,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
     def predict(self, X):
         check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
+
+        # todo: check for nan in predict provided data
 
         # Extract timestamps and validate
         timestamps, X_array = self._ensure_timestamp_index(X)
@@ -911,7 +928,6 @@ if __name__ == "__main__":
         ar_config=ar_config,
         solver_config=solver_config,
         random_state=None,
-        freq='h',  # Hourly frequency (lowercase 'h' preferred, 'H' also accepted)
         debug=False
     )
 

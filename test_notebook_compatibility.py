@@ -60,7 +60,6 @@ def test_matches_notebook_pattern():
         ar_config=None,
         solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
         random_state=None,
-        freq='h',
         debug=False
     )
 
@@ -114,7 +113,6 @@ def test_continuous_indices_match_notebook():
         ar_config=None,
         solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
         random_state=None,
-        freq='h',
         debug=False
     )
 
@@ -177,7 +175,6 @@ def test_phase_alignment_matches_notebook():
         ar_config=None,
         solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
         random_state=None,
-        freq='h',
         debug=False
     )
 

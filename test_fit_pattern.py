@@ -39,7 +39,6 @@ def test_fit_uses_correct_pattern():
         ar_config=None,
         solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
         random_state=None,
-        freq='h',
         debug=False
     )
 

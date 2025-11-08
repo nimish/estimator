@@ -71,7 +71,6 @@ def tsgam_estimator_baseline(notebook_data):
         ar_config=None,
         solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
         random_state=None,
-        freq='h',
         debug=False
     )
 

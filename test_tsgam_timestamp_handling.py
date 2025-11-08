@@ -45,7 +45,6 @@ def basic_config():
         ar_config=None,
         solver_config=solver_config,
         random_state=None,
-        freq='h',
         debug=False
     )
 
@@ -314,7 +313,6 @@ class TestBasicFunctionality:
             ar_config=None,
             solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
             random_state=None,
-            freq='h',
             debug=False
         )
 
@@ -330,12 +328,12 @@ class TestBasicFunctionality:
 class TestErrorCases:
     """Test error cases."""
 
-    def test_fit_without_freq_error(self, hourly_data):
-        """Test that fit requires freq parameter."""
+    def test_fit_infers_frequency(self, hourly_data):
+        """Test that fit infers frequency from data timestamps."""
         timestamps, temp, y = hourly_data
         X = pd.DataFrame({'temp': temp}, index=timestamps)
 
-        # Config without freq should fail
+        # Config without freq - frequency is inferred from data
         config = TsgamEstimatorConfig(
             multi_harmonic_config=TsgamMultiHarmonicConfig(
                 num_harmonics=[2],
@@ -345,13 +343,14 @@ class TestErrorCases:
             ar_config=None,
             solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
             random_state=None,
-            freq='h',  # Actually required now
             debug=False
         )
 
         estimator = TsgamEstimator(config=config)
-        # Should work since freq is required field
+        # Should work - frequency is inferred from timestamps
         estimator.fit(X, y)
+        # Verify frequency was inferred correctly
+        assert estimator.freq_ == 'h'
 
     def test_predict_before_fit_error(self, hourly_data, basic_config):
         """Test that predict raises error if called before fit."""
@@ -366,23 +365,23 @@ class TestErrorCases:
         """Test error when predict frequency doesn't match fit frequency."""
         timestamps, temp, y = hourly_data
 
-        # Create config with daily frequency
-        config_daily = TsgamEstimatorConfig(
-            multi_harmonic_config=basic_config.multi_harmonic_config,
-            exog_config=basic_config.exog_config,
-            ar_config=basic_config.ar_config,
-            solver_config=basic_config.solver_config,
-            random_state=None,
-            freq='D',  # Daily
-            debug=False
-        )
-
-        # But use hourly data
+        # Use hourly data - frequency will be inferred as 'h'
         X = pd.DataFrame({'temp': temp[:50]}, index=timestamps[:50])
 
-        estimator = TsgamEstimator(config=config_daily)
+        estimator = TsgamEstimator(config=basic_config)
+        # Should work - frequency is inferred from data
+        estimator.fit(X, y[:50])
+
+        # Now try to predict with daily frequency data - should fail
+        daily_timestamps = pd.date_range(
+            start=timestamps[50],
+            periods=10,
+            freq='D'  # Daily instead of hourly
+        )
+        X_daily = pd.DataFrame({'temp': temp[50:60]}, index=daily_timestamps)
+
         with pytest.raises(ValueError, match="frequency"):
-            estimator.fit(X, y[:50])
+            estimator.predict(X_daily)
 
 
 class TestEdgeCases:

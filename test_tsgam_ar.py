@@ -79,7 +79,6 @@ def tsgam_estimator_with_ar(notebook_data):
         ar_config=ar_config,
         solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
         random_state=None,
-        freq='h',
         debug=True
     )
 
@@ -262,7 +261,6 @@ def test_sample_method_without_ar():
         ar_config=None,  # No AR model
         solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
         random_state=None,
-        freq='h',
         debug=False
     )
 
