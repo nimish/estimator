@@ -819,11 +819,10 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
         self.time_indices_ = time_indices
 
-        # Now validate X and y with the array version
+        # Now validate X and y with the array version - check_X_y will reject NaN's
         X_array, y = check_X_y(X_array, y,
             ensure_min_features=len(self.config.exog_config or []),
             ensure_min_samples=self._get_min_samples_required())
-
 
         self.variables_ = {
             'constant': cvxpy.Variable(),
@@ -831,7 +830,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         self.exog_knots_ = []  # Store knots only when auto-computed from training data
         model_term = self.variables_['constant']
         regularization_term = 0
-        self.combined_valid_mask_ = np.ones(len(y), dtype=bool)
+        # Start with mask excluding NaN's in y (defensive programming - check_X_y should have rejected them)
+        self.combined_valid_mask_ = ~np.isnan(y)
 
         if self.config.exog_config:
             for ix, exog_cfg in enumerate(self.config.exog_config):
