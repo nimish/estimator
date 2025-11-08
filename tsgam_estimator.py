@@ -17,12 +17,81 @@ import pandas as pd
 
 @dataclass
 class TsgamMultiHarmonicConfig:
+    """
+    Configuration for multi-harmonic Fourier basis functions.
+
+    This config defines the seasonal/periodic patterns in the time series using
+    Fourier basis functions with multiple harmonics and periods. Each period
+    can have multiple harmonics to capture complex seasonal patterns.
+
+    Parameters
+    ----------
+    num_harmonics : list[int]
+        Number of harmonics for each period. Each element corresponds to a period.
+        For example, [6, 4, 3] means 6 harmonics for the first period,
+        4 for the second, and 3 for the third.
+    periods : list[float]
+        Periods for each harmonic block, in hours. Must have same length as
+        num_harmonics. Common values:
+        - 24: daily pattern
+        - 168 (7*24): weekly pattern
+        - 8766 (365.2425*24): yearly pattern
+    reg_weight : float, default=1.0e-4
+        Regularization weight for Fourier coefficients. Higher values increase
+        smoothness of the seasonal patterns. Typical range: 1e-5 to 1e-3.
+
+    Examples
+    --------
+    >>> config = TsgamMultiHarmonicConfig(
+    ...     num_harmonics=[6, 4, 3],
+    ...     periods=[365.2425 * 24, 7 * 24, 24]  # yearly, weekly, daily
+    ... )
+    """
     num_harmonics: list[int]
     periods: list[float]
     reg_weight: float = 1.0e-4
 
 @dataclass
 class TsgamSplineConfig:
+    """
+    Configuration for cubic spline basis functions for exogenous variables.
+
+    This config defines how an exogenous variable (e.g., temperature) is modeled
+    using cubic splines with optional lead/lag terms. Splines allow for non-linear
+    relationships between the exogenous variable and the target.
+
+    Parameters
+    ----------
+    n_knots : int or None
+        Number of knots for the spline basis. Knots will be evenly spaced between
+        min and max of the variable. If None, knots must be provided explicitly.
+        Ignored if knots is non-empty.
+    lags : list[int], default=[0]
+        Lead/lag offsets for the exogenous variable. Positive values = lag
+        (looking back), negative values = lead (looking forward). For example,
+        [-3, -2, -1, 0, 1, 2, 3] includes 3 hours ahead, current, and 3 hours back.
+    reg_weight : float, default=1.0e-4
+        Regularization weight for spline coefficients. Higher values increase
+        smoothness. Typical range: 1e-5 to 1e-3.
+    diff_reg_weight : float, default=1.0
+        Regularization weight for differences between coefficients at different
+        lags. This encourages smooth transitions across lags. Higher values make
+        lag coefficients more similar.
+    knots : list[float], default=[]
+        Explicit knot locations for the spline. If empty list, knots will be
+        auto-generated using n_knots. If provided, n_knots is ignored.
+
+    Examples
+    --------
+    >>> # Auto-generate 10 knots
+    >>> config = TsgamSplineConfig(n_knots=10, lags=[-1, 0, 1])
+    >>>
+    >>> # Use explicit knots
+    >>> config = TsgamSplineConfig(
+    ...     knots=[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+    ...     lags=[0]
+    ... )
+    """
     n_knots: int | None
     lags: list[int] = field(default_factory=lambda:[0])
     reg_weight: float = 1.0e-4
@@ -31,23 +100,131 @@ class TsgamSplineConfig:
 
 @dataclass
 class TsgamLinearConfig:
+    """
+    Configuration for linear basis functions for exogenous variables.
+
+    This config defines how an exogenous variable is modeled using simple linear
+    terms with optional lead/lag. Use this instead of TsgamSplineConfig when
+    you expect a linear relationship.
+
+    Parameters
+    ----------
+    lags : list[int], default=[0]
+        Lead/lag offsets for the exogenous variable. Positive values = lag
+        (looking back), negative values = lead (looking forward). For example,
+        [-1, 0, 1] includes 1 hour ahead, current, and 1 hour back.
+    reg_weight : float, default=1.0e-4
+        Regularization weight for linear coefficients. Higher values increase
+        regularization. Typical range: 1e-5 to 1e-3.
+    diff_reg_weight : float, default=1.0
+        Regularization weight for differences between coefficients at different
+        lags. This encourages smooth transitions across lags. Higher values make
+        lag coefficients more similar.
+
+    Examples
+    --------
+    >>> config = TsgamLinearConfig(lags=[-2, -1, 0, 1, 2])
+    """
     lags: list[int] = field(default_factory=lambda:[0])
     reg_weight: float = 1.0e-4
     diff_reg_weight: float = 1.0
 
 @dataclass
 class TsgamArConfig:
+    """
+    Configuration for autoregressive (AR) residual modeling.
+
+    After fitting the baseline model (Fourier + exogenous), this config enables
+    fitting an AR model on the residuals to capture remaining temporal dependencies.
+    The AR model uses L1 regularization to encourage sparsity.
+
+    Parameters
+    ----------
+    lags : list[int]
+        AR lags to include in the model. Typically [1] for AR(1), [1, 2] for AR(2), etc.
+        Only positive lags are meaningful (looking back in time).
+    l1_constraint : float, default=0.95
+        L1 norm constraint for AR coefficients. This controls sparsity - lower values
+        allow fewer non-zero coefficients. Typical range: 0.5 to 1.0.
+
+    Examples
+    --------
+    >>> # AR(1) model
+    >>> config = TsgamArConfig(lags=[1], l1_constraint=0.95)
+    >>>
+    >>> # AR(2) model with tighter constraint
+    >>> config = TsgamArConfig(lags=[1, 2], l1_constraint=0.8)
+    """
     lags: list[int]
     l1_constraint: float = 0.95
 
 
 @dataclass
 class TsgamSolverConfig:
+    """
+    Configuration for the CVXPY solver used in optimization.
+
+    Parameters
+    ----------
+    solver : str, default='CLARABEL'
+        CVXPY solver name. Common options:
+        - 'CLARABEL': Fast, modern solver (recommended)
+        - 'ECOS': Reliable, slower
+        - 'OSQP': Good for quadratic problems
+        - 'SCS': General purpose
+    verbose : bool, default=True
+        Whether to print solver output during optimization. Useful for debugging
+        but can be verbose for large problems.
+
+    Examples
+    --------
+    >>> config = TsgamSolverConfig(solver='CLARABEL', verbose=False)
+    """
     solver: str = 'CLARABEL'
     verbose: bool = True
 
 @dataclass
 class TsgamEstimatorConfig:
+    """
+    Main configuration for TsgamEstimator.
+
+    This config combines all component configurations (Fourier, exogenous, AR)
+    and solver settings into a single configuration object.
+
+    Parameters
+    ----------
+    multi_harmonic_config : TsgamMultiHarmonicConfig or None
+        Configuration for multi-harmonic Fourier basis functions. If None,
+        no time-based seasonal patterns are modeled.
+    exog_config : list of TsgamSplineConfig or TsgamLinearConfig, or None
+        List of configurations for exogenous variables. Each element corresponds
+        to one exogenous variable in X. Order must match column order in X.
+        If None, no exogenous variables are used.
+    ar_config : TsgamArConfig or None, default=None
+        Configuration for AR residual modeling. If None, no AR model is fitted.
+    solver_config : TsgamSolverConfig, default=TsgamSolverConfig()
+        Solver configuration for CVXPY optimization.
+    random_state : RandomState or None, default=None
+        Random state for reproducible results. Used in AR sampling if ar_config
+        is provided.
+    debug : bool, default=False
+        If True, stores additional debug attributes (e.g., _baseline_residuals_,
+        _B_running_view_) for inspection.
+
+    Examples
+    --------
+    >>> multi_harmonic = TsgamMultiHarmonicConfig(
+    ...     num_harmonics=[6, 4, 3],
+    ...     periods=[365.2425 * 24, 7 * 24, 24]
+    ... )
+    >>> exog = [TsgamSplineConfig(n_knots=10, lags=[-1, 0, 1])]
+    >>> ar = TsgamArConfig(lags=[1])
+    >>> config = TsgamEstimatorConfig(
+    ...     multi_harmonic_config=multi_harmonic,
+    ...     exog_config=exog,
+    ...     ar_config=ar
+    ... )
+    """
     multi_harmonic_config: TsgamMultiHarmonicConfig | None
     exog_config: list[TsgamSplineConfig | TsgamLinearConfig] | None
     ar_config: TsgamArConfig | None = None
@@ -74,7 +251,88 @@ PERIOD_YEARLY_YEARLY = 1
 
 class TsgamEstimator(BaseEstimator, RegressorMixin):
     """
-    Tsgam estimator.
+    Time Series Generalized Additive Model (TSGAM) Estimator.
+
+    This estimator fits a GAM model for time series forecasting that combines:
+
+    - Multi-harmonic Fourier basis functions for seasonal patterns
+    - Cubic spline or linear basis functions for exogenous variables with lead/lag
+    - Optional autoregressive (AR) modeling of residuals
+
+    The model uses regularized optimization via CVXPY to fit coefficients.
+    While the model can work with targets in any scale, log transformation is
+    commonly used when components are multiplicative rather than additive.
+
+    Parameters
+    ----------
+    config : TsgamEstimatorConfig
+        Configuration object containing all model settings.
+
+    Attributes
+    ----------
+    problem_ : cvxpy.Problem
+        The solved optimization problem. Check `problem_.status` to verify
+        convergence (should be 'optimal' or 'optimal_inaccurate').
+    freq_ : str
+        Inferred frequency of the time series (e.g., 'h' for hourly).
+    time_reference_ : Timestamp
+        Reference timestamp used for phase alignment (first timestamp from fit).
+    time_indices_ : ndarray
+        Numeric time indices (hours since reference) used during fit.
+    variables_ : dict
+        Dictionary of CVXPY variables containing fitted coefficients:
+        - 'constant': intercept term
+        - 'fourier_coef': Fourier coefficients (if multi_harmonic_config provided)
+        - 'exog_coef_{i}': Exogenous variable coefficients for variable i
+    exog_knots_ : list
+        List of knot locations for spline exogenous variables (auto-computed
+        during fit, reused during predict).
+    combined_valid_mask_ : ndarray
+        Boolean mask indicating valid samples (no NaN from lead/lag operations).
+    ar_coef_ : ndarray or None
+        Fitted AR coefficients (if ar_config provided and model converged).
+    ar_intercept_ : float or None
+        Fitted AR intercept (if ar_config provided and model converged).
+    ar_noise_loc_ : float or None
+        Location parameter of Laplace noise distribution for AR model.
+    ar_noise_scale_ : float or None
+        Scale parameter of Laplace noise distribution for AR model.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> from tsgam_estimator import (
+    ...     TsgamEstimator, TsgamEstimatorConfig,
+    ...     TsgamMultiHarmonicConfig, TsgamSplineConfig
+    ... )
+    >>>
+    >>> # Create configuration
+    >>> multi_harmonic = TsgamMultiHarmonicConfig(
+    ...     num_harmonics=[6, 4, 3],
+    ...     periods=[365.2425 * 24, 7 * 24, 24]  # yearly, weekly, daily
+    ... )
+    >>> exog_config = [TsgamSplineConfig(n_knots=10, lags=[-1, 0, 1])]
+    >>> config = TsgamEstimatorConfig(
+    ...     multi_harmonic_config=multi_harmonic,
+    ...     exog_config=exog_config
+    ... )
+    >>>
+    >>> # Create estimator
+    >>> estimator = TsgamEstimator(config=config)
+    >>>
+    >>> # Prepare data (X must be DataFrame with DatetimeIndex)
+    >>> dates = pd.date_range('2020-01-01', periods=1000, freq='h')
+    >>> X = pd.DataFrame({'temp': np.random.randn(1000)}, index=dates)
+    >>> y = np.log(np.random.rand(1000) * 100 + 50)  # log-transform optional
+    >>>
+    >>> # Fit model
+    >>> estimator.fit(X, y)
+    >>>
+    >>> # Make predictions
+    >>> X_pred = pd.DataFrame({'temp': np.random.randn(100)},
+    ...                       index=pd.date_range('2021-01-01', periods=100, freq='h'))
+    >>> predictions = estimator.predict(X_pred)
     """
     def __init__(self, config: TsgamEstimatorConfig, **kwargs):
         super().__init__(**kwargs)
@@ -503,6 +761,48 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         return min_samples
 
     def fit(self, X, y, sample_weight=None):
+        """
+        Fit the TSGAM model to training data.
+
+        This method:
+        1. Extracts and validates timestamps from X
+        2. Builds Fourier basis matrices for seasonal patterns
+        3. Builds spline/linear basis matrices for exogenous variables
+        4. Solves the regularized optimization problem
+        5. Optionally fits an AR model on residuals
+
+        Parameters
+        ----------
+        X : DataFrame
+            Training data with exogenous variables. Must have DatetimeIndex or
+            first column must be datetime. Remaining columns are exogenous variables
+            (e.g., temperature). Column order must match exog_config order.
+        y : array-like of shape (n_samples,)
+            Target values. Can be in any scale, though log transformation is
+            commonly used for multiplicative components. Must not contain NaN.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Sample weights. Currently not used but included for sklearn compatibility.
+
+        Returns
+        -------
+        self : TsgamEstimator
+            Returns self for method chaining.
+
+        Raises
+        ------
+        ValueError
+            If X doesn't have proper timestamp index/column, if frequency doesn't
+            match, or if insufficient samples for configured lags.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> dates = pd.date_range('2020-01-01', periods=1000, freq='h')
+        >>> X = pd.DataFrame({'temp': np.random.randn(1000)}, index=dates)
+        >>> y = np.log(np.random.rand(1000) * 100 + 50)
+        >>> estimator.fit(X, y)
+        TsgamEstimator(...)
+        """
         # Extract timestamps before check_X_y converts DataFrame to array
         timestamps, X_array = self._ensure_timestamp_index(X)
         inferred_freq = pd.infer_freq(timestamps)
@@ -698,6 +998,44 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             self.ar_noise_scale_ = None
 
     def predict(self, X):
+        """
+        Predict target values for new data.
+
+        Predictions are made using the fitted model components:
+        - Constant term
+        - Fourier basis (seasonal patterns)
+        - Exogenous variable basis (splines/linear)
+        - AR model is NOT included in predictions (use sample() for AR noise)
+
+        Parameters
+        ----------
+        X : DataFrame
+            Input data with exogenous variables. Must have DatetimeIndex or
+            first column must be datetime. Must have same frequency as training data.
+            Column order must match training data.
+
+        Returns
+        -------
+        predictions : ndarray of shape (n_samples,)
+            Predicted values in the same scale as training data. If training data
+            was log-transformed, predictions will be in log space and can be
+            converted back using np.exp(predictions).
+
+        Raises
+        ------
+        ValueError
+            If model not fitted, if X doesn't have proper timestamp index/column,
+            if frequency doesn't match training data, or if model didn't converge.
+
+        Examples
+        --------
+        >>> # After fitting
+        >>> X_pred = pd.DataFrame({'temp': np.random.randn(100)},
+        ...                       index=pd.date_range('2021-01-01', periods=100, freq='h'))
+        >>> predictions = estimator.predict(X_pred)
+        >>> # Convert back to original scale
+        >>> predictions_original = np.exp(predictions)
+        """
         check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
 
         # todo: check for nan in predict provided data
@@ -772,20 +1110,47 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         """
         Generate sample predictions with AR noise rollout.
 
+        This method generates multiple sample paths by adding noise to baseline
+        predictions. If an AR model was fitted, it uses AR noise rollout to generate
+        temporally correlated noise. Otherwise, it adds independent Laplace noise.
+
+        The AR noise rollout:
+        1. Initializes with random noise from fitted Laplace distribution
+        2. Generates AR noise using: noise[t] = AR_coef @ noise[t-lags] + intercept + new_noise
+        3. Adds burn-in period before using samples
+
         Parameters
         ----------
-        X : array-like or DataFrame
-            Input data with timestamps.
+        X : DataFrame
+            Input data with timestamps. Same format as predict().
         n_samples : int, default=1
-            Number of samples to generate.
+            Number of sample paths to generate.
         random_state : int, RandomState instance or None, default=None
-            Random state for reproducible results.
+            Random state for reproducible results. If None, uses estimator's
+            random_state from config.
 
         Returns
         -------
         samples : ndarray of shape (n_samples, n_pred_samples)
-            Sample predictions in log scale. If AR model is fitted, includes AR noise rollout.
-            Otherwise, adds small Laplace noise.
+            Sample predictions in the same scale as training data. Each row is one
+            sample path. If AR model is fitted, includes temporally correlated AR
+            noise. Otherwise, adds independent small Laplace noise (scale=0.1).
+
+        Raises
+        ------
+        ValueError
+            If model not fitted or if AR model was configured but didn't converge.
+
+        Examples
+        --------
+        >>> # Generate 100 sample paths
+        >>> samples = estimator.sample(X_pred, n_samples=100, random_state=42)
+        >>> # samples shape: (100, n_pred_samples)
+        >>> # If data was log-transformed, convert back to original scale
+        >>> samples_original = np.exp(samples)
+        >>> # Compute percentiles
+        >>> p5 = np.percentile(samples_original, 5, axis=0)
+        >>> p95 = np.percentile(samples_original, 95, axis=0)
         """
         check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
         random_state = check_random_state(random_state)
@@ -812,7 +1177,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         Parameters
         ----------
         baseline_pred : ndarray
-            Baseline predictions in log scale.
+            Baseline predictions (same scale as training data).
         n_samples : int
             Number of samples to generate.
         random_state : RandomState
@@ -821,7 +1186,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         Returns
         -------
         samples : ndarray of shape (n_samples, len(baseline_pred))
-            Sample predictions with AR noise in log scale.
+            Sample predictions with AR noise (same scale as training data).
         """
         assert self.ar_coef_ is not None and self.ar_intercept_ is not None, \
             "AR coefficients must be set before generating samples"
