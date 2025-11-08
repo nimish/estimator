@@ -1,3 +1,6 @@
+# Copyright (c) 2025 Alliance for Sustainable Energy, LLC and Nimish Telang
+# SPDX-License-Identifier: BSD-3-Clause
+
 from dataclasses import dataclass, field
 from itertools import combinations
 from numpy import ndarray
