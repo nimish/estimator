@@ -912,11 +912,10 @@
         <span class="n">time_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timestamps_to_indices</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_reference_</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">time_indices_</span> <span class="o">=</span> <span class="n">time_indices</span>
 
-        <span class="c1"># Now validate X and y with the array version</span>
+        <span class="c1"># Now validate X and y with the array version - check_X_y will reject NaN&#39;s</span>
         <span class="n">X_array</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">check_X_y</span><span class="p">(</span><span class="n">X_array</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span>
             <span class="n">ensure_min_features</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[]),</span>
             <span class="n">ensure_min_samples</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_min_samples_required</span><span class="p">())</span>
-
 
         <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s1">&#39;constant&#39;</span><span class="p">:</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">(),</span>
@@ -924,7 +923,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Store knots only when auto-computed from training data</span>
         <span class="n">model_term</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span>
         <span class="n">regularization_term</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="c1"># Start with mask excluding NaN&#39;s in y (defensive programming - check_X_y should have rejected them)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span> <span class="o">=</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">exog_cfg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">):</span>
