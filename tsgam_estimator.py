@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from itertools import combinations
 from numpy import ndarray
 import numpy as np
@@ -159,6 +160,53 @@ class TsgamArConfig:
     l1_constraint: float = 0.95
 
 
+class TrendType(StrEnum):
+    NONE = 'none'
+    LINEAR = 'linear'
+    NONLINEAR = 'nonlinear'
+
+@dataclass
+class TsgamTrendConfig:
+    """
+    Configuration for trend term in the model.
+
+    The trend is constant per period (e.g., per day for hourly data). This allows
+    modeling long-term changes that are constant within each period but can vary
+    across periods.
+
+    Parameters
+    ----------
+    trend_type : str, default='none'
+        Type of trend to fit:
+        - 'none': No trend (trend = 0)
+        - 'linear': Linear trend with constant slope
+        - 'nonlinear': Non-linear monotonic decreasing trend
+    period_hours : float or None, default=None
+        Period length in hours. If None, will be inferred from data frequency
+        (defaults to daily: 24 hours for hourly data, 1 day for daily data, etc.).
+        For example:
+        - Hourly data: 24.0 for daily trend, 168.0 for weekly trend
+        - 15-minute data: 24.0 for daily trend (96 samples per day)
+        - Daily data: 7.0 for weekly trend, 365.2425 for yearly trend
+    reg_weight : float, default=10.0
+        Regularization weight for trend differences. Higher values encourage
+        smoother trends. Typical range: 1.0 to 100.0.
+
+    Examples
+    --------
+    >>> # Daily trend for hourly data (default)
+    >>> config = TsgamTrendConfig(trend_type='linear')
+    >>>
+    >>> # Weekly trend for hourly data
+    >>> config = TsgamTrendConfig(trend_type='nonlinear', period_hours=168.0)
+    >>>
+    >>> # No trend
+    >>> config = TsgamTrendConfig(trend_type='none')
+    """
+    type: TrendType = TrendType.NONE
+    grouping: float | None = None # todo: rename this to something better
+    reg_weight: float = 10.0
+
 @dataclass
 class TsgamSolverConfig:
     """
@@ -202,6 +250,10 @@ class TsgamEstimatorConfig:
         If None, no exogenous variables are used.
     ar_config : TsgamArConfig or None, default=None
         Configuration for AR residual modeling. If None, no AR model is fitted.
+    trend_config : TsgamTrendConfig or None, default=None
+        Configuration for trend term. If None, no trend is fitted (equivalent to
+        trend_type='none'). The trend is constant per period and can be linear,
+        nonlinear (monotonic decreasing), or none.
     solver_config : TsgamSolverConfig, default=TsgamSolverConfig()
         Solver configuration for CVXPY optimization.
     random_state : RandomState or None, default=None
@@ -228,6 +280,7 @@ class TsgamEstimatorConfig:
     multi_harmonic_config: TsgamMultiHarmonicConfig | None
     exog_config: list[TsgamSplineConfig | TsgamLinearConfig] | None
     ar_config: TsgamArConfig | None = None
+    trend_config: TsgamTrendConfig | None = None
     solver_config: TsgamSolverConfig = field(default_factory=TsgamSolverConfig)
     random_state: RandomState | None = None
     debug: bool = False
@@ -249,6 +302,245 @@ PERIOD_YEARLY_YEARLY = 1
 # infer frequency of data and then compute values for periods automatically
 
 
+def get_recommended_periods(X, include_harmonics=False) -> tuple[list[float], list[int]]:
+    """
+    Get recommended periods for Fourier basis based on data frequency.
+
+    This function infers the frequency of the input time series data and returns
+    recommended periods (in hours) that are appropriate for capturing seasonal
+    patterns at that time scale. Periods are calculated as multiples of the
+    data's base frequency, then converted to hours.
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Input data with DatetimeIndex or first column containing datetime values.
+    include_harmonics : bool, default=False
+        If True, also returns recommended number of harmonics for each period.
+
+    Returns
+    -------
+    periods : list[float]
+        Recommended periods in hours. Periods are calculated as multiples of the
+        data's base frequency, then converted to hours. For example:
+        - For 5-minute data: multiples [1, 3, 12, 288, 2016] of 5-minute intervals
+        - For hourly data: multiples [24, 168, 8765.82] of 1-hour intervals
+        - For daily data: multiples [7, 365.2425] of 1-day intervals
+
+        The periods capture:
+        - Short-term patterns (small multiples: 1x, 3x, 5x, etc.)
+        - Daily patterns (multiples corresponding to ~24 hours)
+        - Weekly patterns (multiples corresponding to ~168 hours)
+        - Yearly patterns (multiples corresponding to ~8766 hours) when appropriate
+    num_harmonics : list[int], optional
+        Recommended number of harmonics for each period. Only returned if
+        include_harmonics=True. Higher harmonics capture more complex patterns.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> from tsgam_estimator import get_recommended_periods
+    >>>
+    >>> # For 1-minute data: periods are multiples of 1-minute intervals
+    >>> dates = pd.date_range('2020-01-01', periods=1000, freq='1min')
+    >>> X = pd.DataFrame({'value': np.random.randn(1000)}, index=dates)
+    >>> periods = get_recommended_periods(X)
+    >>> # Returns periods like [1/60, 5/60, 15/60, 1, 24, 168] (hours)
+    >>> # These correspond to 1, 5, 15, 60, 1440, 10080 minutes
+    >>>
+    >>> # For 5-minute data: periods are multiples of 5-minute intervals
+    >>> dates = pd.date_range('2020-01-01', periods=1000, freq='5min')
+    >>> X = pd.DataFrame({'value': np.random.randn(1000)}, index=dates)
+    >>> periods = get_recommended_periods(X)
+    >>> # Returns periods like [5/60, 15/60, 1, 24, 168] (hours)
+    >>> # These correspond to 1, 3, 12, 288, 2016 five-minute intervals
+    >>>
+    >>> # For hourly data: periods are multiples of 1-hour intervals
+    >>> dates = pd.date_range('2020-01-01', periods=1000, freq='h')
+    >>> X = pd.DataFrame({'value': np.random.randn(1000)}, index=dates)
+    >>> periods, harmonics = get_recommended_periods(X, include_harmonics=True)
+    >>> # Returns periods like [24, 168, 8766] (hours)
+    >>> # These correspond to 24, 168, 8766 hourly intervals
+    """
+    # Extract timestamps
+    if isinstance(X, pd.DataFrame):
+        if isinstance(X.index, pd.DatetimeIndex):
+            timestamps = X.index
+        elif len(X.columns) > 0 and pd.api.types.is_datetime64_any_dtype(X.iloc[:, 0]):
+            timestamps = pd.DatetimeIndex(X.iloc[:, 0])
+        else:
+            raise ValueError(
+                "X must have DatetimeIndex or first column must be datetime. "
+                "Got DataFrame without datetime index or datetime column."
+            )
+    else:
+        raise ValueError(
+            "X must be a pandas DataFrame with DatetimeIndex or datetime column. "
+            f"Got {type(X)} instead."
+        )
+
+    if len(timestamps) < 2:
+        raise ValueError("Need at least 2 timestamps to infer frequency.")
+
+    # Infer frequency and calculate base time step
+    inferred_freq = pd.infer_freq(timestamps)
+    if inferred_freq is None:
+        # Try to infer from differences
+        diffs = timestamps[1:] - timestamps[:-1]
+        median_diff = diffs.median()
+        base_step_hours = median_diff.total_seconds() / 3600.0
+        # Convert to approximate frequency string
+        if median_diff <= pd.Timedelta(minutes=1):
+            inferred_freq = '1min'
+        elif median_diff <= pd.Timedelta(minutes=5):
+            inferred_freq = '5min'
+        elif median_diff <= pd.Timedelta(minutes=15):
+            inferred_freq = '15min'
+        elif median_diff <= pd.Timedelta(hours=1):
+            inferred_freq = 'h'
+            base_step_hours = 1.0
+        elif median_diff <= pd.Timedelta(days=1):
+            inferred_freq = 'D'
+            base_step_hours = 24.0
+        else:
+            raise ValueError(
+                "Could not infer frequency from timestamps. "
+                "Timestamps must be regularly spaced."
+            )
+    else:
+        # Calculate base step from frequency string
+        freq_str = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
+        if freq_str.endswith('min') or freq_str == 'T':
+            # Parse minutes
+            minutes_str = freq_str.replace('min', '').replace('T', '')
+            minutes = int(minutes_str) if minutes_str else 1
+            base_step_hours = minutes / 60.0
+        elif freq_str == 'h' or freq_str == 'hourly':
+            base_step_hours = 1.0
+        elif freq_str == 'd' or freq_str == 'daily':
+            base_step_hours = 24.0
+        elif freq_str == 'w' or freq_str == 'weekly':
+            base_step_hours = 24.0 * 7
+        elif freq_str == 'm' or freq_str == 'monthly':
+            base_step_hours = 24.0 * 30.44  # Approximate
+        elif freq_str == 'q' or freq_str == 'quarterly':
+            base_step_hours = 24.0 * 91.31  # Approximate
+        else:
+            # Fallback: calculate from actual differences
+            diffs = timestamps[1:] - timestamps[:-1]
+            base_step_hours = diffs.median().total_seconds() / 3600.0
+
+    # Normalize frequency string for period selection logic
+    freq_str = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
+
+    # Determine periods as multiples of base frequency, then convert to hours
+    periods = []
+    num_harmonics = []
+
+    # Parse frequency to determine appropriate multiples
+    # Handle pandas frequency strings like 'min', '5min', '15min', 'h', 'D', etc.
+    if freq_str.endswith('min') or freq_str == 'T':
+        # Minute-level data: periods are multiples of the minute interval
+        if freq_str == 'min' or freq_str == '1min' or freq_str == 'T':
+            # 1-minute data: recommend multiples [1, 5, 15, 60, 1440, 10080]
+            # These capture short-term, hourly, daily, and weekly patterns
+            period_multiples = [1, 5, 15, 60, 1440, 10080]
+            num_harmonics = [4, 3, 3, 6, 4, 3]
+        elif freq_str == '5min':
+            # 5-minute data: recommend multiples [1, 3, 12, 288, 2016]
+            # These capture short-term, hourly, daily, and weekly patterns
+            period_multiples = [1, 3, 12, 288, 2016]
+            num_harmonics = [3, 3, 6, 4, 3]
+        elif freq_str == '15min':
+            # 15-minute data: recommend multiples [1, 4, 96, 672]
+            # These capture short-term, hourly, daily, and weekly patterns
+            period_multiples = [1, 4, 96, 672]
+            num_harmonics = [3, 6, 4, 3]
+        else:
+            # Other minute frequencies: try to parse
+            try:
+                minutes_str = freq_str.replace('min', '').replace('T', '')
+                minutes = int(minutes_str) if minutes_str else 1
+                # Recommend periods that are multiples of the base frequency
+                # Use common multiples: 1x, 3x, then multiples for daily/weekly patterns
+                periods_per_day = (24 * 60) / minutes
+                periods_per_week = (7 * 24 * 60) / minutes
+                period_multiples = [1, 3, int(periods_per_day / 24), int(periods_per_day), int(periods_per_week)]
+                num_harmonics = [3, 3, 6, 4, 3]
+            except ValueError:
+                # Fallback: calculate multiples from base step
+                periods_per_day = 24.0 / base_step_hours
+                periods_per_week = 168.0 / base_step_hours
+                period_multiples = [int(periods_per_day), int(periods_per_week)]
+                num_harmonics = [6, 4, 3]
+        # Convert multiples to hours
+        periods = [mult * base_step_hours for mult in period_multiples]
+    elif freq_str == 'h' or freq_str == 'hourly':
+        # Hourly data: recommend multiples [24, 168, 8765.82] (daily, weekly, yearly)
+        period_multiples = [24, 168, PERIOD_HOURLY_YEARLY]
+        num_harmonics = [6, 4, 3]
+        periods = [mult * base_step_hours for mult in period_multiples]
+    elif freq_str == 'd' or freq_str == 'daily':
+        # Daily data: recommend multiples [7, 365.2425] (weekly, yearly)
+        period_multiples = [7, PERIOD_DAILY_YEARLY]
+        num_harmonics = [4, 3]
+        periods = [mult * base_step_hours for mult in period_multiples]
+    elif freq_str == 'w' or freq_str == 'weekly':
+        # Weekly data: recommend yearly pattern
+        period_multiples = [PERIOD_WEEKLY_YEARLY]
+        num_harmonics = [3]
+        periods = [mult * base_step_hours for mult in period_multiples]
+    elif freq_str == 'm' or freq_str == 'monthly':
+        # Monthly data: recommend yearly pattern
+        period_multiples = [PERIOD_MONTHLY_YEARLY]
+        num_harmonics = [3]
+        periods = [mult * base_step_hours for mult in period_multiples]
+    elif freq_str == 'q' or freq_str == 'quarterly':
+        # Quarterly data: recommend yearly pattern
+        period_multiples = [PERIOD_QUARTERLY_YEARLY]
+        num_harmonics = [2]
+        periods = [mult * base_step_hours for mult in period_multiples]
+    else:
+        # Unknown frequency - provide generic recommendations
+        # Try to estimate from median time difference
+        diffs = timestamps[1:] - timestamps[:-1]
+        median_diff_hours = diffs.median().total_seconds() / 3600.0
+
+        if median_diff_hours < 1/60:  # Sub-minute frequency
+            # Use multiples appropriate for minute-level data
+            period_multiples = [1, 5, 15, 60, 1440, 10080]
+            num_harmonics = [4, 3, 3, 6, 4, 3]
+            periods = [mult * base_step_hours for mult in period_multiples]
+        elif median_diff_hours < 1:  # Sub-hourly frequency
+            # Calculate multiples for daily and weekly patterns
+            periods_per_day = 24.0 / base_step_hours
+            periods_per_week = 168.0 / base_step_hours
+            period_multiples = [int(periods_per_day), int(periods_per_week)]
+            num_harmonics = [6, 4, 3]
+            periods = [mult * base_step_hours for mult in period_multiples]
+        elif median_diff_hours < 24:  # Sub-daily frequency
+            # Calculate multiples for daily, weekly, and yearly patterns
+            periods_per_day = 24.0 / base_step_hours
+            periods_per_week = 168.0 / base_step_hours
+            periods_per_year = 365.2425 * 24.0 / base_step_hours
+            period_multiples = [int(periods_per_day), int(periods_per_week), int(periods_per_year)]
+            num_harmonics = [6, 4, 3]
+            periods = [mult * base_step_hours for mult in period_multiples]
+        else:  # Daily or longer frequency
+            # Calculate multiples for weekly and yearly patterns
+            periods_per_week = 7.0 / (base_step_hours / 24.0)
+            periods_per_year = 365.2425 / (base_step_hours / 24.0)
+            period_multiples = [int(periods_per_week), int(periods_per_year)]
+            num_harmonics = [4, 3]
+            periods = [mult * base_step_hours for mult in period_multiples]
+
+    if include_harmonics:
+        return periods, num_harmonics
+    else:
+        return periods
+
+
 class TsgamEstimator(BaseEstimator, RegressorMixin):
     """
     Time Series Generalized Additive Model (TSGAM) Estimator.
@@ -257,6 +549,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
     - Multi-harmonic Fourier basis functions for seasonal patterns
     - Cubic spline or linear basis functions for exogenous variables with lead/lag
+    - Optional trend term (constant per period, linear or nonlinear)
     - Optional autoregressive (AR) modeling of residuals
 
     The model uses regularized optimization via CVXPY to fit coefficients.
@@ -284,9 +577,15 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         - 'constant': intercept term
         - 'fourier_coef': Fourier coefficients (if multi_harmonic_config provided)
         - 'exog_coef_{i}': Exogenous variable coefficients for variable i
+        - 'trend': Trend coefficients (if trend_config provided)
+        - 'trend_slope': Trend slope (if trend_type='linear')
     exog_knots_ : list
         List of knot locations for spline exogenous variables (auto-computed
         during fit, reused during predict).
+    trend_T_matrix_ : ndarray or None
+        Matrix mapping samples to periods for trend term (if trend_config provided).
+    trend_period_hours_ : float or None
+        Period length in hours used for trend (if trend_config provided).
     combined_valid_mask_ : ndarray
         Boolean mask indicating valid samples (no NaN from lead/lag operations).
     ar_coef_ : ndarray or None
@@ -389,6 +688,65 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             Numeric indices in hours since reference.
         """
         return (timestamps - reference).total_seconds() / 3600.0
+
+    def _get_trend_period_hours(self, timestamps, period_hours=None):
+        """
+        Determine trend period in hours from data frequency.
+
+        Parameters
+        ----------
+        timestamps : DatetimeIndex
+            Timestamps from the data.
+        period_hours : float or None, default=None
+            Explicit period in hours. If None, defaults to daily (24 hours for
+            sub-daily data, 1 day for daily data, etc.).
+
+        Returns
+        -------
+        period_hours : float
+            Period length in hours.
+        samples_per_period : float
+            Number of samples per period (for creating T matrix).
+        """
+        if period_hours is not None:
+            # Use explicit period
+            # Calculate samples per period from data frequency
+            if len(timestamps) < 2:
+                raise ValueError("Need at least 2 timestamps to infer frequency.")
+            diffs = timestamps[1:] - timestamps[:-1]
+            median_diff_hours = diffs.median().total_seconds() / 3600.0
+            samples_per_period = period_hours / median_diff_hours
+            return period_hours, samples_per_period
+
+        # Default to daily period
+        # Infer frequency and calculate base time step
+        inferred_freq = pd.infer_freq(timestamps)
+        if inferred_freq is None:
+            # Try to infer from differences
+            diffs = timestamps[1:] - timestamps[:-1]
+            median_diff = diffs.median()
+            base_step_hours = median_diff.total_seconds() / 3600.0
+        else:
+            # Calculate base step from frequency string
+            freq_str = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
+            if freq_str.endswith('min') or freq_str == 'T':
+                minutes_str = freq_str.replace('min', '').replace('T', '')
+                minutes = int(minutes_str) if minutes_str else 1
+                base_step_hours = minutes / 60.0
+            elif freq_str == 'h' or freq_str == 'hourly':
+                base_step_hours = 1.0
+            elif freq_str == 'd' or freq_str == 'daily':
+                base_step_hours = 24.0
+            else:
+                # Fallback: calculate from actual differences
+                diffs = timestamps[1:] - timestamps[:-1]
+                base_step_hours = diffs.median().total_seconds() / 3600.0
+
+        # Default period: daily (24 hours)
+        period_hours = 24.0
+        samples_per_period = period_hours / base_step_hours
+
+        return period_hours, samples_per_period
 
     def _validate_frequency(self, timestamps, expected_freq):
         """
@@ -895,9 +1253,55 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             regularization_term += self.config.multi_harmonic_config.reg_weight * cvxpy.sum_squares(Wf @ self.variables_['fourier_coef'])
             model_term += F[self.combined_valid_mask_] @ self.variables_['fourier_coef']
 
+        # Add trend term if configured
+        trend_term = None
+        constraints = []
+        if self.config.trend_config is not None and self.config.trend_config.type != TrendType.NONE:
+            trend_config = self.config.trend_config
+            # Determine period and samples per period
+            period_hours, samples_per_period = self._get_trend_period_hours(
+                timestamps, trend_config.grouping
+            )
+
+            # Calculate number of periods
+            # Use time_indices to determine which period each sample belongs to
+            period_indices = (time_indices / period_hours).astype(int)
+            n_periods = period_indices.max() + 1
+
+            # Create T matrix: maps each sample to its period
+            # T[i, j] = 1 if sample i belongs to period j, else 0
+            T = np.zeros((len(y), n_periods))
+            # Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i
+            T[np.arange(len(period_indices)), period_indices] = 1.0
+
+            # Create trend variable (one value per period)
+            trend = cvxpy.Variable(n_periods)
+            self.variables_['trend'] = trend
+            self.trend_T_matrix_ = T  # Store for prediction
+            self.trend_period_hours_ = period_hours  # Store period for prediction
+
+            # Add trend term to model
+            trend_term = T @ trend
+            model_term += trend_term[self.combined_valid_mask_]
+
+            # Add regularization for trend differences
+            regularization_term += trend_config.reg_weight * cvxpy.sum_squares(cvxpy.diff(trend))
+
+            # Add constraints based on trend type
+            constraints.append(trend[0] == 0)  # Baseline constraint
+
+            if trend_config.type == TrendType.LINEAR:
+                # Linear trend: constant slope
+                slope = cvxpy.Variable()
+                self.variables_['trend_slope'] = slope
+                constraints.append(cvxpy.diff(trend) == slope)
+            elif trend_config.type == TrendType.NONLINEAR:
+                # Nonlinear monotonic decreasing trend
+                constraints.append(cvxpy.diff(trend) <= 0)
+            # For 'none', trend_term is None so it won't be added
 
         error = cvxpy.sum_squares(y[self.combined_valid_mask_] - model_term) / np.sum(self.combined_valid_mask_)
-        self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term))
+        self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term), constraints)
         self.problem_.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
 
         # Fit AR model if configured
@@ -945,6 +1349,13 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             fourier_coef = self.variables_['fourier_coef'].value
             if fourier_coef is not None:
                 baseline_pred += F @ fourier_coef
+
+        # Add trend term if present
+        if self.config.trend_config is not None and self.config.trend_config.type != TrendType.NONE and 'trend' in self.variables_:
+            trend = self.variables_['trend'].value
+            if trend is not None and hasattr(self, 'trend_T_matrix_'):
+                T = self.trend_T_matrix_
+                baseline_pred += T @ trend
 
         # Compute residuals on valid samples
         residuals = y[self.combined_valid_mask_] - baseline_pred[self.combined_valid_mask_]
@@ -1005,6 +1416,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         - Constant term
         - Fourier basis (seasonal patterns)
         - Exogenous variable basis (splines/linear)
+        - Trend term (if configured)
         - AR model is NOT included in predictions (use sample() for AR noise)
 
         Parameters
@@ -1103,6 +1515,51 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             if fourier_coef is None:
                 raise ValueError("Fourier coefficients are None. Model may not have converged.")
             predictions += F @ fourier_coef
+
+        # Add trend term if present
+        if self.config.trend_config is not None and self.config.trend_config.type != TrendType.NONE and 'trend' in self.variables_:
+            trend = self.variables_['trend'].value
+            if trend is None:
+                raise ValueError("Trend coefficients are None. Model may not have converged.")
+
+            # Use stored period_hours from fit (or recalculate if not stored)
+            if hasattr(self, 'trend_period_hours_'):
+                period_hours = self.trend_period_hours_
+            else:
+                # Fallback: recalculate (shouldn't happen if fit was called first)
+                period_hours, _ = self._get_trend_period_hours(
+                    timestamps, self.config.trend_config.grouping
+                )
+
+            # Calculate period indices for prediction timestamps
+            period_indices = (time_indices / period_hours).astype(int)
+            n_periods_fit = len(trend)
+            n_periods_pred = period_indices.max() + 1
+
+            # Create T matrix for predictions
+            T_pred = np.zeros((len(predictions), n_periods_pred))
+            # Use numpy advanced indexing for efficiency
+            # Filter out negative indices (can occur if predicting before training data)
+            valid_mask = period_indices >= 0
+            T_pred[np.arange(len(period_indices))[valid_mask], period_indices[valid_mask]] = 1.0
+
+            # Extend trend if prediction extends beyond training data
+            if n_periods_pred > n_periods_fit:
+                # Extend trend using the last value or extrapolate based on trend type
+                trend_extended = np.zeros(n_periods_pred)
+                trend_extended[:n_periods_fit] = trend
+
+                if self.config.trend_config.type == TrendType.LINEAR and self.variables_['trend_slope'].value is not None:
+                    for i in range(n_periods_fit, n_periods_pred):
+                        trend_extended[i] = trend[-1] + self.variables_['trend_slope'].value * (i - n_periods_fit + 1)
+                else:
+                    # fallback: use last value
+                    trend_extended[n_periods_fit:] = trend[-1]
+
+                trend = trend_extended
+
+            # Add trend term to predictions
+            predictions += T_pred @ trend
 
         return predictions
 
