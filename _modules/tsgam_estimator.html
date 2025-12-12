@@ -73,6 +73,7 @@
 <span class="c1"># SPDX-License-Identifier: BSD-3-Clause</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrEnum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">itertools</span><span class="w"> </span><span class="kn">import</span> <span class="n">combinations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndarray</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -242,6 +243,59 @@
 
 
 
+<div class="viewcode-block" id="TrendType">
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TrendType">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TrendType</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
+    <span class="n">NONE</span> <span class="o">=</span> <span class="s1">&#39;none&#39;</span>
+    <span class="n">LINEAR</span> <span class="o">=</span> <span class="s1">&#39;linear&#39;</span>
+    <span class="n">NONLINEAR</span> <span class="o">=</span> <span class="s1">&#39;nonlinear&#39;</span></div>
+
+
+<div class="viewcode-block" id="TsgamTrendConfig">
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamTrendConfig">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TsgamTrendConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Configuration for trend term in the model.</span>
+
+<span class="sd">    The trend is constant per period (e.g., per day for hourly data). This allows</span>
+<span class="sd">    modeling long-term changes that are constant within each period but can vary</span>
+<span class="sd">    across periods.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    trend_type : str, default=&#39;none&#39;</span>
+<span class="sd">        Type of trend to fit:</span>
+<span class="sd">        - &#39;none&#39;: No trend (trend = 0)</span>
+<span class="sd">        - &#39;linear&#39;: Linear trend with constant slope</span>
+<span class="sd">        - &#39;nonlinear&#39;: Non-linear monotonic decreasing trend</span>
+<span class="sd">    period_hours : float or None, default=None</span>
+<span class="sd">        Period length in hours. If None, will be inferred from data frequency</span>
+<span class="sd">        (defaults to daily: 24 hours for hourly data, 1 day for daily data, etc.).</span>
+<span class="sd">        For example:</span>
+<span class="sd">        - Hourly data: 24.0 for daily trend, 168.0 for weekly trend</span>
+<span class="sd">        - 15-minute data: 24.0 for daily trend (96 samples per day)</span>
+<span class="sd">        - Daily data: 7.0 for weekly trend, 365.2425 for yearly trend</span>
+<span class="sd">    reg_weight : float, default=10.0</span>
+<span class="sd">        Regularization weight for trend differences. Higher values encourage</span>
+<span class="sd">        smoother trends. Typical range: 1.0 to 100.0.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; # Daily trend for hourly data (default)</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamTrendConfig(trend_type=&#39;linear&#39;)</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # Weekly trend for hourly data</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamTrendConfig(trend_type=&#39;nonlinear&#39;, period_hours=168.0)</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # No trend</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamTrendConfig(trend_type=&#39;none&#39;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">type</span><span class="p">:</span> <span class="n">TrendType</span> <span class="o">=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span>
+    <span class="n">grouping</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># todo: rename this to something better</span>
+    <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span></div>
+
+
 <div class="viewcode-block" id="TsgamSolverConfig">
 <a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamSolverConfig">[docs]</a>
 <span class="nd">@dataclass</span>
@@ -290,6 +344,10 @@
 <span class="sd">        If None, no exogenous variables are used.</span>
 <span class="sd">    ar_config : TsgamArConfig or None, default=None</span>
 <span class="sd">        Configuration for AR residual modeling. If None, no AR model is fitted.</span>
+<span class="sd">    trend_config : TsgamTrendConfig or None, default=None</span>
+<span class="sd">        Configuration for trend term. If None, no trend is fitted (equivalent to</span>
+<span class="sd">        trend_type=&#39;none&#39;). The trend is constant per period and can be linear,</span>
+<span class="sd">        nonlinear (monotonic decreasing), or none.</span>
 <span class="sd">    solver_config : TsgamSolverConfig, default=TsgamSolverConfig()</span>
 <span class="sd">        Solver configuration for CVXPY optimization.</span>
 <span class="sd">    random_state : RandomState or None, default=None</span>
@@ -316,6 +374,7 @@
     <span class="n">multi_harmonic_config</span><span class="p">:</span> <span class="n">TsgamMultiHarmonicConfig</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">exog_config</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">ar_config</span><span class="p">:</span> <span class="n">TsgamArConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">trend_config</span><span class="p">:</span> <span class="n">TsgamTrendConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">solver_config</span><span class="p">:</span> <span class="n">TsgamSolverConfig</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">TsgamSolverConfig</span><span class="p">)</span>
     <span class="n">random_state</span><span class="p">:</span> <span class="n">RandomState</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
@@ -338,6 +397,248 @@
 <span class="c1"># infer frequency of data and then compute values for periods automatically</span>
 
 
+<div class="viewcode-block" id="get_recommended_periods">
+<a class="viewcode-back" href="../api.html#tsgam_estimator.get_recommended_periods">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_recommended_periods</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">include_harmonics</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get recommended periods for Fourier basis based on data frequency.</span>
+
+<span class="sd">    This function infers the frequency of the input time series data and returns</span>
+<span class="sd">    recommended periods (in hours) that are appropriate for capturing seasonal</span>
+<span class="sd">    patterns at that time scale. Periods are calculated as multiples of the</span>
+<span class="sd">    data&#39;s base frequency, then converted to hours.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    X : pd.DataFrame</span>
+<span class="sd">        Input data with DatetimeIndex or first column containing datetime values.</span>
+<span class="sd">    include_harmonics : bool, default=False</span>
+<span class="sd">        If True, also returns recommended number of harmonics for each period.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    periods : list[float]</span>
+<span class="sd">        Recommended periods in hours. Periods are calculated as multiples of the</span>
+<span class="sd">        data&#39;s base frequency, then converted to hours. For example:</span>
+<span class="sd">        - For 5-minute data: multiples [1, 3, 12, 288, 2016] of 5-minute intervals</span>
+<span class="sd">        - For hourly data: multiples [24, 168, 8765.82] of 1-hour intervals</span>
+<span class="sd">        - For daily data: multiples [7, 365.2425] of 1-day intervals</span>
+
+<span class="sd">        The periods capture:</span>
+<span class="sd">        - Short-term patterns (small multiples: 1x, 3x, 5x, etc.)</span>
+<span class="sd">        - Daily patterns (multiples corresponding to ~24 hours)</span>
+<span class="sd">        - Weekly patterns (multiples corresponding to ~168 hours)</span>
+<span class="sd">        - Yearly patterns (multiples corresponding to ~8766 hours) when appropriate</span>
+<span class="sd">    num_harmonics : list[int], optional</span>
+<span class="sd">        Recommended number of harmonics for each period. Only returned if</span>
+<span class="sd">        include_harmonics=True. Higher harmonics capture more complex patterns.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import pandas as pd</span>
+<span class="sd">    &gt;&gt;&gt; import numpy as np</span>
+<span class="sd">    &gt;&gt;&gt; from tsgam_estimator import get_recommended_periods</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # For 1-minute data: periods are multiples of 1-minute intervals</span>
+<span class="sd">    &gt;&gt;&gt; dates = pd.date_range(&#39;2020-01-01&#39;, periods=1000, freq=&#39;1min&#39;)</span>
+<span class="sd">    &gt;&gt;&gt; X = pd.DataFrame({&#39;value&#39;: np.random.randn(1000)}, index=dates)</span>
+<span class="sd">    &gt;&gt;&gt; periods = get_recommended_periods(X)</span>
+<span class="sd">    &gt;&gt;&gt; # Returns periods like [1/60, 5/60, 15/60, 1, 24, 168] (hours)</span>
+<span class="sd">    &gt;&gt;&gt; # These correspond to 1, 5, 15, 60, 1440, 10080 minutes</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # For 5-minute data: periods are multiples of 5-minute intervals</span>
+<span class="sd">    &gt;&gt;&gt; dates = pd.date_range(&#39;2020-01-01&#39;, periods=1000, freq=&#39;5min&#39;)</span>
+<span class="sd">    &gt;&gt;&gt; X = pd.DataFrame({&#39;value&#39;: np.random.randn(1000)}, index=dates)</span>
+<span class="sd">    &gt;&gt;&gt; periods = get_recommended_periods(X)</span>
+<span class="sd">    &gt;&gt;&gt; # Returns periods like [5/60, 15/60, 1, 24, 168] (hours)</span>
+<span class="sd">    &gt;&gt;&gt; # These correspond to 1, 3, 12, 288, 2016 five-minute intervals</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # For hourly data: periods are multiples of 1-hour intervals</span>
+<span class="sd">    &gt;&gt;&gt; dates = pd.date_range(&#39;2020-01-01&#39;, periods=1000, freq=&#39;h&#39;)</span>
+<span class="sd">    &gt;&gt;&gt; X = pd.DataFrame({&#39;value&#39;: np.random.randn(1000)}, index=dates)</span>
+<span class="sd">    &gt;&gt;&gt; periods, harmonics = get_recommended_periods(X, include_harmonics=True)</span>
+<span class="sd">    &gt;&gt;&gt; # Returns periods like [24, 168, 8766] (hours)</span>
+<span class="sd">    &gt;&gt;&gt; # These correspond to 24, 168, 8766 hourly intervals</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract timestamps</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">):</span>
+            <span class="n">timestamps</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">index</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">pd</span><span class="o">.</span><span class="n">api</span><span class="o">.</span><span class="n">types</span><span class="o">.</span><span class="n">is_datetime64_any_dtype</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]):</span>
+            <span class="n">timestamps</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;X must have DatetimeIndex or first column must be datetime. &quot;</span>
+                <span class="s2">&quot;Got DataFrame without datetime index or datetime column.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;X must be a pandas DataFrame with DatetimeIndex or datetime column. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Need at least 2 timestamps to infer frequency.&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Infer frequency and calculate base time step</span>
+    <span class="n">inferred_freq</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">infer_freq</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">inferred_freq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Try to infer from differences</span>
+        <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">median_diff</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span>
+        <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">median_diff</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
+        <span class="c1"># Convert to approximate frequency string</span>
+        <span class="k">if</span> <span class="n">median_diff</span> <span class="o">&lt;=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">inferred_freq</span> <span class="o">=</span> <span class="s1">&#39;1min&#39;</span>
+        <span class="k">elif</span> <span class="n">median_diff</span> <span class="o">&lt;=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+            <span class="n">inferred_freq</span> <span class="o">=</span> <span class="s1">&#39;5min&#39;</span>
+        <span class="k">elif</span> <span class="n">median_diff</span> <span class="o">&lt;=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="mi">15</span><span class="p">):</span>
+            <span class="n">inferred_freq</span> <span class="o">=</span> <span class="s1">&#39;15min&#39;</span>
+        <span class="k">elif</span> <span class="n">median_diff</span> <span class="o">&lt;=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">inferred_freq</span> <span class="o">=</span> <span class="s1">&#39;h&#39;</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">elif</span> <span class="n">median_diff</span> <span class="o">&lt;=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">inferred_freq</span> <span class="o">=</span> <span class="s1">&#39;D&#39;</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">24.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not infer frequency from timestamps. &quot;</span>
+                <span class="s2">&quot;Timestamps must be regularly spaced.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Calculate base step from frequency string</span>
+        <span class="n">freq_str</span> <span class="o">=</span> <span class="n">inferred_freq</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">if</span> <span class="n">inferred_freq</span> <span class="o">==</span> <span class="s1">&#39;H&#39;</span> <span class="k">else</span> <span class="n">inferred_freq</span>
+        <span class="k">if</span> <span class="n">freq_str</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;min&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;T&#39;</span><span class="p">:</span>
+            <span class="c1"># Parse minutes</span>
+            <span class="n">minutes_str</span> <span class="o">=</span> <span class="n">freq_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;min&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+            <span class="n">minutes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">minutes_str</span><span class="p">)</span> <span class="k">if</span> <span class="n">minutes_str</span> <span class="k">else</span> <span class="mi">1</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">minutes</span> <span class="o">/</span> <span class="mf">60.0</span>
+        <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;h&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;hourly&#39;</span><span class="p">:</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;d&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;daily&#39;</span><span class="p">:</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">24.0</span>
+        <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;w&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;weekly&#39;</span><span class="p">:</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">24.0</span> <span class="o">*</span> <span class="mi">7</span>
+        <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;m&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;monthly&#39;</span><span class="p">:</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">24.0</span> <span class="o">*</span> <span class="mf">30.44</span>  <span class="c1"># Approximate</span>
+        <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;q&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;quarterly&#39;</span><span class="p">:</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">24.0</span> <span class="o">*</span> <span class="mf">91.31</span>  <span class="c1"># Approximate</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Fallback: calculate from actual differences</span>
+            <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
+
+    <span class="c1"># Normalize frequency string for period selection logic</span>
+    <span class="n">freq_str</span> <span class="o">=</span> <span class="n">inferred_freq</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">if</span> <span class="n">inferred_freq</span> <span class="o">==</span> <span class="s1">&#39;H&#39;</span> <span class="k">else</span> <span class="n">inferred_freq</span>
+
+    <span class="c1"># Determine periods as multiples of base frequency, then convert to hours</span>
+    <span class="n">periods</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># Parse frequency to determine appropriate multiples</span>
+    <span class="c1"># Handle pandas frequency strings like &#39;min&#39;, &#39;5min&#39;, &#39;15min&#39;, &#39;h&#39;, &#39;D&#39;, etc.</span>
+    <span class="k">if</span> <span class="n">freq_str</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;min&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;T&#39;</span><span class="p">:</span>
+        <span class="c1"># Minute-level data: periods are multiples of the minute interval</span>
+        <span class="k">if</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;min&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;1min&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;T&#39;</span><span class="p">:</span>
+            <span class="c1"># 1-minute data: recommend multiples [1, 5, 15, 60, 1440, 10080]</span>
+            <span class="c1"># These capture short-term, hourly, daily, and weekly patterns</span>
+            <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">1440</span><span class="p">,</span> <span class="mi">10080</span><span class="p">]</span>
+            <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;5min&#39;</span><span class="p">:</span>
+            <span class="c1"># 5-minute data: recommend multiples [1, 3, 12, 288, 2016]</span>
+            <span class="c1"># These capture short-term, hourly, daily, and weekly patterns</span>
+            <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">288</span><span class="p">,</span> <span class="mi">2016</span><span class="p">]</span>
+            <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;15min&#39;</span><span class="p">:</span>
+            <span class="c1"># 15-minute data: recommend multiples [1, 4, 96, 672]</span>
+            <span class="c1"># These capture short-term, hourly, daily, and weekly patterns</span>
+            <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">96</span><span class="p">,</span> <span class="mi">672</span><span class="p">]</span>
+            <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Other minute frequencies: try to parse</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">minutes_str</span> <span class="o">=</span> <span class="n">freq_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;min&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+                <span class="n">minutes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">minutes_str</span><span class="p">)</span> <span class="k">if</span> <span class="n">minutes_str</span> <span class="k">else</span> <span class="mi">1</span>
+                <span class="c1"># Recommend periods that are multiples of the base frequency</span>
+                <span class="c1"># Use common multiples: 1x, 3x, then multiples for daily/weekly patterns</span>
+                <span class="n">periods_per_day</span> <span class="o">=</span> <span class="p">(</span><span class="mi">24</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span> <span class="o">/</span> <span class="n">minutes</span>
+                <span class="n">periods_per_week</span> <span class="o">=</span> <span class="p">(</span><span class="mi">7</span> <span class="o">*</span> <span class="mi">24</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span> <span class="o">/</span> <span class="n">minutes</span>
+                <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">periods_per_day</span> <span class="o">/</span> <span class="mi">24</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">periods_per_day</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">periods_per_week</span><span class="p">)]</span>
+                <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                <span class="c1"># Fallback: calculate multiples from base step</span>
+                <span class="n">periods_per_day</span> <span class="o">=</span> <span class="mf">24.0</span> <span class="o">/</span> <span class="n">base_step_hours</span>
+                <span class="n">periods_per_week</span> <span class="o">=</span> <span class="mf">168.0</span> <span class="o">/</span> <span class="n">base_step_hours</span>
+                <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">periods_per_day</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">periods_per_week</span><span class="p">)]</span>
+                <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="c1"># Convert multiples to hours</span>
+        <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;h&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;hourly&#39;</span><span class="p">:</span>
+        <span class="c1"># Hourly data: recommend multiples [24, 168, 8765.82] (daily, weekly, yearly)</span>
+        <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="mi">24</span><span class="p">,</span> <span class="mi">168</span><span class="p">,</span> <span class="n">PERIOD_HOURLY_YEARLY</span><span class="p">]</span>
+        <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;d&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;daily&#39;</span><span class="p">:</span>
+        <span class="c1"># Daily data: recommend multiples [7, 365.2425] (weekly, yearly)</span>
+        <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="n">PERIOD_DAILY_YEARLY</span><span class="p">]</span>
+        <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;w&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;weekly&#39;</span><span class="p">:</span>
+        <span class="c1"># Weekly data: recommend yearly pattern</span>
+        <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="n">PERIOD_WEEKLY_YEARLY</span><span class="p">]</span>
+        <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+        <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;m&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;monthly&#39;</span><span class="p">:</span>
+        <span class="c1"># Monthly data: recommend yearly pattern</span>
+        <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="n">PERIOD_MONTHLY_YEARLY</span><span class="p">]</span>
+        <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+        <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;q&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;quarterly&#39;</span><span class="p">:</span>
+        <span class="c1"># Quarterly data: recommend yearly pattern</span>
+        <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="n">PERIOD_QUARTERLY_YEARLY</span><span class="p">]</span>
+        <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Unknown frequency - provide generic recommendations</span>
+        <span class="c1"># Try to estimate from median time difference</span>
+        <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">median_diff_hours</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
+
+        <span class="k">if</span> <span class="n">median_diff_hours</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="o">/</span><span class="mi">60</span><span class="p">:</span>  <span class="c1"># Sub-minute frequency</span>
+            <span class="c1"># Use multiples appropriate for minute-level data</span>
+            <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">1440</span><span class="p">,</span> <span class="mi">10080</span><span class="p">]</span>
+            <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+            <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">median_diff_hours</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>  <span class="c1"># Sub-hourly frequency</span>
+            <span class="c1"># Calculate multiples for daily and weekly patterns</span>
+            <span class="n">periods_per_day</span> <span class="o">=</span> <span class="mf">24.0</span> <span class="o">/</span> <span class="n">base_step_hours</span>
+            <span class="n">periods_per_week</span> <span class="o">=</span> <span class="mf">168.0</span> <span class="o">/</span> <span class="n">base_step_hours</span>
+            <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">periods_per_day</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">periods_per_week</span><span class="p">)]</span>
+            <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+            <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">median_diff_hours</span> <span class="o">&lt;</span> <span class="mi">24</span><span class="p">:</span>  <span class="c1"># Sub-daily frequency</span>
+            <span class="c1"># Calculate multiples for daily, weekly, and yearly patterns</span>
+            <span class="n">periods_per_day</span> <span class="o">=</span> <span class="mf">24.0</span> <span class="o">/</span> <span class="n">base_step_hours</span>
+            <span class="n">periods_per_week</span> <span class="o">=</span> <span class="mf">168.0</span> <span class="o">/</span> <span class="n">base_step_hours</span>
+            <span class="n">periods_per_year</span> <span class="o">=</span> <span class="mf">365.2425</span> <span class="o">*</span> <span class="mf">24.0</span> <span class="o">/</span> <span class="n">base_step_hours</span>
+            <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">periods_per_day</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">periods_per_week</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">periods_per_year</span><span class="p">)]</span>
+            <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+            <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># Daily or longer frequency</span>
+            <span class="c1"># Calculate multiples for weekly and yearly patterns</span>
+            <span class="n">periods_per_week</span> <span class="o">=</span> <span class="mf">7.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">base_step_hours</span> <span class="o">/</span> <span class="mf">24.0</span><span class="p">)</span>
+            <span class="n">periods_per_year</span> <span class="o">=</span> <span class="mf">365.2425</span> <span class="o">/</span> <span class="p">(</span><span class="n">base_step_hours</span> <span class="o">/</span> <span class="mf">24.0</span><span class="p">)</span>
+            <span class="n">period_multiples</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">periods_per_week</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">periods_per_year</span><span class="p">)]</span>
+            <span class="n">num_harmonics</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+            <span class="n">periods</span> <span class="o">=</span> <span class="p">[</span><span class="n">mult</span> <span class="o">*</span> <span class="n">base_step_hours</span> <span class="k">for</span> <span class="n">mult</span> <span class="ow">in</span> <span class="n">period_multiples</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">include_harmonics</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">periods</span><span class="p">,</span> <span class="n">num_harmonics</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">periods</span></div>
+
+
+
 <div class="viewcode-block" id="TsgamEstimator">
 <a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamEstimator">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamEstimator</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">RegressorMixin</span><span class="p">):</span>
@@ -348,6 +649,7 @@
 
 <span class="sd">    - Multi-harmonic Fourier basis functions for seasonal patterns</span>
 <span class="sd">    - Cubic spline or linear basis functions for exogenous variables with lead/lag</span>
+<span class="sd">    - Optional trend term (constant per period, linear or nonlinear)</span>
 <span class="sd">    - Optional autoregressive (AR) modeling of residuals</span>
 
 <span class="sd">    The model uses regularized optimization via CVXPY to fit coefficients.</span>
@@ -375,9 +677,15 @@
 <span class="sd">        - &#39;constant&#39;: intercept term</span>
 <span class="sd">        - &#39;fourier_coef&#39;: Fourier coefficients (if multi_harmonic_config provided)</span>
 <span class="sd">        - &#39;exog_coef_{i}&#39;: Exogenous variable coefficients for variable i</span>
+<span class="sd">        - &#39;trend&#39;: Trend coefficients (if trend_config provided)</span>
+<span class="sd">        - &#39;trend_slope&#39;: Trend slope (if trend_type=&#39;linear&#39;)</span>
 <span class="sd">    exog_knots_ : list</span>
 <span class="sd">        List of knot locations for spline exogenous variables (auto-computed</span>
 <span class="sd">        during fit, reused during predict).</span>
+<span class="sd">    trend_T_matrix_ : ndarray or None</span>
+<span class="sd">        Matrix mapping samples to periods for trend term (if trend_config provided).</span>
+<span class="sd">    trend_period_hours_ : float or None</span>
+<span class="sd">        Period length in hours used for trend (if trend_config provided).</span>
 <span class="sd">    combined_valid_mask_ : ndarray</span>
 <span class="sd">        Boolean mask indicating valid samples (no NaN from lead/lag operations).</span>
 <span class="sd">    ar_coef_ : ndarray or None</span>
@@ -480,6 +788,65 @@
 <span class="sd">            Numeric indices in hours since reference.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">timestamps</span> <span class="o">-</span> <span class="n">reference</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_trend_period_hours</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">,</span> <span class="n">period_hours</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Determine trend period in hours from data frequency.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timestamps : DatetimeIndex</span>
+<span class="sd">            Timestamps from the data.</span>
+<span class="sd">        period_hours : float or None, default=None</span>
+<span class="sd">            Explicit period in hours. If None, defaults to daily (24 hours for</span>
+<span class="sd">            sub-daily data, 1 day for daily data, etc.).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        period_hours : float</span>
+<span class="sd">            Period length in hours.</span>
+<span class="sd">        samples_per_period : float</span>
+<span class="sd">            Number of samples per period (for creating T matrix).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">period_hours</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use explicit period</span>
+            <span class="c1"># Calculate samples per period from data frequency</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Need at least 2 timestamps to infer frequency.&quot;</span><span class="p">)</span>
+            <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">median_diff_hours</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
+            <span class="n">samples_per_period</span> <span class="o">=</span> <span class="n">period_hours</span> <span class="o">/</span> <span class="n">median_diff_hours</span>
+            <span class="k">return</span> <span class="n">period_hours</span><span class="p">,</span> <span class="n">samples_per_period</span>
+
+        <span class="c1"># Default to daily period</span>
+        <span class="c1"># Infer frequency and calculate base time step</span>
+        <span class="n">inferred_freq</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">infer_freq</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">inferred_freq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Try to infer from differences</span>
+            <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">median_diff</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span>
+            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">median_diff</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Calculate base step from frequency string</span>
+            <span class="n">freq_str</span> <span class="o">=</span> <span class="n">inferred_freq</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">if</span> <span class="n">inferred_freq</span> <span class="o">==</span> <span class="s1">&#39;H&#39;</span> <span class="k">else</span> <span class="n">inferred_freq</span>
+            <span class="k">if</span> <span class="n">freq_str</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;min&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;T&#39;</span><span class="p">:</span>
+                <span class="n">minutes_str</span> <span class="o">=</span> <span class="n">freq_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;min&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+                <span class="n">minutes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">minutes_str</span><span class="p">)</span> <span class="k">if</span> <span class="n">minutes_str</span> <span class="k">else</span> <span class="mi">1</span>
+                <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">minutes</span> <span class="o">/</span> <span class="mf">60.0</span>
+            <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;h&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;hourly&#39;</span><span class="p">:</span>
+                <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">1.0</span>
+            <span class="k">elif</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;d&#39;</span> <span class="ow">or</span> <span class="n">freq_str</span> <span class="o">==</span> <span class="s1">&#39;daily&#39;</span><span class="p">:</span>
+                <span class="n">base_step_hours</span> <span class="o">=</span> <span class="mf">24.0</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback: calculate from actual differences</span>
+                <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
+
+        <span class="c1"># Default period: daily (24 hours)</span>
+        <span class="n">period_hours</span> <span class="o">=</span> <span class="mf">24.0</span>
+        <span class="n">samples_per_period</span> <span class="o">=</span> <span class="n">period_hours</span> <span class="o">/</span> <span class="n">base_step_hours</span>
+
+        <span class="k">return</span> <span class="n">period_hours</span><span class="p">,</span> <span class="n">samples_per_period</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_validate_frequency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">,</span> <span class="n">expected_freq</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -988,9 +1355,55 @@
             <span class="n">regularization_term</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_harmonic_config</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">*</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">Wf</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;fourier_coef&#39;</span><span class="p">])</span>
             <span class="n">model_term</span> <span class="o">+=</span> <span class="n">F</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;fourier_coef&#39;</span><span class="p">]</span>
 
+        <span class="c1"># Add trend term if configured</span>
+        <span class="n">trend_term</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">constraints</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
+            <span class="n">trend_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span>
+            <span class="c1"># Determine period and samples per period</span>
+            <span class="n">period_hours</span><span class="p">,</span> <span class="n">samples_per_period</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_trend_period_hours</span><span class="p">(</span>
+                <span class="n">timestamps</span><span class="p">,</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">grouping</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Calculate number of periods</span>
+            <span class="c1"># Use time_indices to determine which period each sample belongs to</span>
+            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="n">period_hours</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">n_periods</span> <span class="o">=</span> <span class="n">period_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+
+            <span class="c1"># Create T matrix: maps each sample to its period</span>
+            <span class="c1"># T[i, j] = 1 if sample i belongs to period j, else 0</span>
+            <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">),</span> <span class="n">n_periods</span><span class="p">))</span>
+            <span class="c1"># Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i</span>
+            <span class="n">T</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">period_indices</span><span class="p">)),</span> <span class="n">period_indices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+            <span class="c1"># Create trend variable (one value per period)</span>
+            <span class="n">trend</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span><span class="n">n_periods</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">trend</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trend_T_matrix_</span> <span class="o">=</span> <span class="n">T</span>  <span class="c1"># Store for prediction</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trend_period_hours_</span> <span class="o">=</span> <span class="n">period_hours</span>  <span class="c1"># Store period for prediction</span>
+
+            <span class="c1"># Add trend term to model</span>
+            <span class="n">trend_term</span> <span class="o">=</span> <span class="n">T</span> <span class="o">@</span> <span class="n">trend</span>
+            <span class="n">model_term</span> <span class="o">+=</span> <span class="n">trend_term</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
+
+            <span class="c1"># Add regularization for trend differences</span>
+            <span class="n">regularization_term</span> <span class="o">+=</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">*</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">))</span>
+
+            <span class="c1"># Add constraints based on trend type</span>
+            <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">trend</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># Baseline constraint</span>
+
+            <span class="k">if</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span><span class="p">:</span>
+                <span class="c1"># Linear trend: constant slope</span>
+                <span class="n">slope</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">slope</span>
+                <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">==</span> <span class="n">slope</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR</span><span class="p">:</span>
+                <span class="c1"># Nonlinear monotonic decreasing trend</span>
+                <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="c1"># For &#39;none&#39;, trend_term is None so it won&#39;t be added</span>
 
         <span class="n">error</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span> <span class="o">-</span> <span class="n">model_term</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="n">error</span> <span class="o">+</span> <span class="n">regularization_term</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="n">error</span> <span class="o">+</span> <span class="n">regularization_term</span><span class="p">),</span> <span class="n">constraints</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">solver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
 
         <span class="c1"># Fit AR model if configured</span>
@@ -1039,6 +1452,13 @@
             <span class="n">fourier_coef</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;fourier_coef&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
             <span class="k">if</span> <span class="n">fourier_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">baseline_pred</span> <span class="o">+=</span> <span class="n">F</span> <span class="o">@</span> <span class="n">fourier_coef</span>
+
+        <span class="c1"># Add trend term if present</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">and</span> <span class="s1">&#39;trend&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
+            <span class="n">trend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">if</span> <span class="n">trend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;trend_T_matrix_&#39;</span><span class="p">):</span>
+                <span class="n">T</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trend_T_matrix_</span>
+                <span class="n">baseline_pred</span> <span class="o">+=</span> <span class="n">T</span> <span class="o">@</span> <span class="n">trend</span>
 
         <span class="c1"># Compute residuals on valid samples</span>
         <span class="n">residuals</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span> <span class="o">-</span> <span class="n">baseline_pred</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
@@ -1101,6 +1521,7 @@
 <span class="sd">        - Constant term</span>
 <span class="sd">        - Fourier basis (seasonal patterns)</span>
 <span class="sd">        - Exogenous variable basis (splines/linear)</span>
+<span class="sd">        - Trend term (if configured)</span>
 <span class="sd">        - AR model is NOT included in predictions (use sample() for AR noise)</span>
 
 <span class="sd">        Parameters</span>
@@ -1199,6 +1620,51 @@
             <span class="k">if</span> <span class="n">fourier_coef</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Fourier coefficients are None. Model may not have converged.&quot;</span><span class="p">)</span>
             <span class="n">predictions</span> <span class="o">+=</span> <span class="n">F</span> <span class="o">@</span> <span class="n">fourier_coef</span>
+
+        <span class="c1"># Add trend term if present</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">and</span> <span class="s1">&#39;trend&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
+            <span class="n">trend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">if</span> <span class="n">trend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Trend coefficients are None. Model may not have converged.&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Use stored period_hours from fit (or recalculate if not stored)</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;trend_period_hours_&#39;</span><span class="p">):</span>
+                <span class="n">period_hours</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trend_period_hours_</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback: recalculate (shouldn&#39;t happen if fit was called first)</span>
+                <span class="n">period_hours</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_trend_period_hours</span><span class="p">(</span>
+                    <span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">grouping</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Calculate period indices for prediction timestamps</span>
+            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="n">period_hours</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">n_periods_fit</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span>
+            <span class="n">n_periods_pred</span> <span class="o">=</span> <span class="n">period_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+
+            <span class="c1"># Create T matrix for predictions</span>
+            <span class="n">T_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">),</span> <span class="n">n_periods_pred</span><span class="p">))</span>
+            <span class="c1"># Use numpy advanced indexing for efficiency</span>
+            <span class="c1"># Filter out negative indices (can occur if predicting before training data)</span>
+            <span class="n">valid_mask</span> <span class="o">=</span> <span class="n">period_indices</span> <span class="o">&gt;=</span> <span class="mi">0</span>
+            <span class="n">T_pred</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">period_indices</span><span class="p">))[</span><span class="n">valid_mask</span><span class="p">],</span> <span class="n">period_indices</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]]</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+            <span class="c1"># Extend trend if prediction extends beyond training data</span>
+            <span class="k">if</span> <span class="n">n_periods_pred</span> <span class="o">&gt;</span> <span class="n">n_periods_fit</span><span class="p">:</span>
+                <span class="c1"># Extend trend using the last value or extrapolate based on trend type</span>
+                <span class="n">trend_extended</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_periods_pred</span><span class="p">)</span>
+                <span class="n">trend_extended</span><span class="p">[:</span><span class="n">n_periods_fit</span><span class="p">]</span> <span class="o">=</span> <span class="n">trend</span>
+
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_periods_fit</span><span class="p">,</span> <span class="n">n_periods_pred</span><span class="p">):</span>
+                        <span class="n">trend_extended</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">*</span> <span class="p">(</span><span class="n">i</span> <span class="o">-</span> <span class="n">n_periods_fit</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># fallback: use last value</span>
+                    <span class="n">trend_extended</span><span class="p">[</span><span class="n">n_periods_fit</span><span class="p">:]</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+                <span class="n">trend</span> <span class="o">=</span> <span class="n">trend_extended</span>
+
+            <span class="c1"># Add trend term to predictions</span>
+            <span class="n">predictions</span> <span class="o">+=</span> <span class="n">T_pred</span> <span class="o">@</span> <span class="n">trend</span>
 
         <span class="k">return</span> <span class="n">predictions</span></div>
 
