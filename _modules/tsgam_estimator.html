@@ -296,6 +296,104 @@
     <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span></div>
 
 
+<div class="viewcode-block" id="TsgamOutlierConfig">
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamOutlierConfig">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TsgamOutlierConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Configuration for the outlier detector component.</span>
+
+<span class="sd">    The outlier detector identifies anomalous periods (e.g., days) in the time series</span>
+<span class="sd">    with sparse multiplicative corrections. This component is particularly useful for</span>
+<span class="sd">    detecting days with unusual patterns that deviate from the normal seasonal and</span>
+<span class="sd">    trend behavior, such as holidays, special events, or data quality issues.</span>
+
+<span class="sd">    **How it works:**</span>
+<span class="sd">    - The detector assigns one correction value per period (e.g., per day)</span>
+<span class="sd">    - Corrections are constant across all samples within a period</span>
+<span class="sd">    - L1 regularization encourages sparsity: most periods have no correction (≈0),</span>
+<span class="sd">      while only outlier periods have non-zero corrections</span>
+<span class="sd">    - The correction is additive in log space, which translates to a multiplicative</span>
+<span class="sd">      effect in the original scale (e.g., 0.2 in log space ≈ 0.82x multiplier,</span>
+<span class="sd">      0.5 in log space ≈ 1.65x multiplier)</span>
+
+<span class="sd">    **Mathematical formulation:**</span>
+<span class="sd">    The outlier term is added to the model as: ``T @ outlier``, where:</span>
+<span class="sd">    - ``T`` is a binary matrix mapping each sample to its period</span>
+<span class="sd">    - ``outlier`` is a sparse vector of period-level corrections</span>
+<span class="sd">    - The L1 penalty ``reg_weight * ||outlier||_1`` encourages sparsity</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    reg_weight : float</span>
+<span class="sd">        L1 regularization weight controlling sparsity of outlier detection.</span>
+<span class="sd">        Higher values encourage more sparsity (fewer outliers detected).</span>
+<span class="sd">        Lower values allow more outliers to be detected.</span>
+
+<span class="sd">        **Typical ranges:**</span>
+<span class="sd">        - Very sparse (few outliers): 0.01 to 0.1</span>
+<span class="sd">        - Moderate sparsity: 0.001 to 0.01</span>
+<span class="sd">        - More sensitive (more outliers): 0.0001 to 0.001</span>
+
+<span class="sd">        **Guidelines:**</span>
+<span class="sd">        - Start with 0.002 and adjust based on results</span>
+<span class="sd">        - If too many outliers detected (&gt;10% of periods), increase reg_weight</span>
+<span class="sd">        - If no outliers detected, decrease reg_weight</span>
+<span class="sd">        - For real-world data, values between 0.001 and 0.01 are often appropriate</span>
+
+<span class="sd">    period_hours : float or None, default=None</span>
+<span class="sd">        Period length in hours for which the outlier correction is constant.</span>
+<span class="sd">        If None, defaults to 24.0 hours (daily outliers) for hourly data.</span>
+
+<span class="sd">        **Examples:**</span>
+<span class="sd">        - Hourly data, daily outliers: ``period_hours=24.0`` (default)</span>
+<span class="sd">        - 15-minute data, daily outliers: ``period_hours=24.0`` (96 samples per day)</span>
+<span class="sd">        - Hourly data, weekly outliers: ``period_hours=168.0`` (7 days)</span>
+<span class="sd">        - Daily data, weekly outliers: ``period_hours=7.0``</span>
+<span class="sd">        - Hourly data, hourly outliers: ``period_hours=1.0`` (not recommended, use AR instead)</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    reg_weight : float</span>
+<span class="sd">        L1 regularization weight.</span>
+<span class="sd">    period_hours : float or None</span>
+<span class="sd">        Period length in hours.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    - The outlier detector works best when the target is log-transformed, as it</span>
+<span class="sd">      naturally models multiplicative effects</span>
+<span class="sd">    - Outlier corrections are applied during both fit and predict</span>
+<span class="sd">    - For prediction periods beyond the training data, outlier corrections default</span>
+<span class="sd">      to 0 (no correction)</span>
+<span class="sd">    - The detector is most effective when combined with other components (seasonality,</span>
+<span class="sd">      trend, exogenous variables) that explain normal variation, leaving outliers</span>
+<span class="sd">      as the residual anomaly</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; # Daily outlier detector for hourly data (default, moderate sparsity)</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamOutlierConfig(reg_weight=0.002)</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # Weekly outlier detector with higher sparsity (fewer outliers)</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamOutlierConfig(reg_weight=0.01, period_hours=168.0)</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # Daily outlier detector with lower sparsity (more outliers detected)</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamOutlierConfig(reg_weight=0.001)</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # Very sparse detector (only extreme outliers)</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamOutlierConfig(reg_weight=0.1)</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # Use in full estimator configuration</span>
+<span class="sd">    &gt;&gt;&gt; from tsgam_estimator import TsgamEstimatorConfig</span>
+<span class="sd">    &gt;&gt;&gt; estimator_config = TsgamEstimatorConfig(</span>
+<span class="sd">    ...     outlier_config=TsgamOutlierConfig(reg_weight=0.002)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">period_hours</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
 <div class="viewcode-block" id="TsgamSolverConfig">
 <a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamSolverConfig">[docs]</a>
 <span class="nd">@dataclass</span>
@@ -348,6 +446,18 @@
 <span class="sd">        Configuration for trend term. If None, no trend is fitted (equivalent to</span>
 <span class="sd">        trend_type=&#39;none&#39;). The trend is constant per period and can be linear,</span>
 <span class="sd">        nonlinear (monotonic decreasing), or none.</span>
+<span class="sd">    outlier_config : TsgamOutlierConfig or None, default=None</span>
+<span class="sd">        Configuration for outlier detector component. If None, no outlier detector</span>
+<span class="sd">        is fitted.</span>
+
+<span class="sd">        The outlier detector identifies anomalous periods (e.g., days) with sparse</span>
+<span class="sd">        multiplicative corrections. It uses L1 regularization to encourage sparsity,</span>
+<span class="sd">        meaning most periods will have no correction (≈0), while only outlier</span>
+<span class="sd">        periods will have non-zero corrections. The corrections are constant per</span>
+<span class="sd">        period and additive in log space (multiplicative in original scale).</span>
+
+<span class="sd">        See :class:`TsgamOutlierConfig` for detailed documentation and parameter</span>
+<span class="sd">        tuning guidelines.</span>
 <span class="sd">    solver_config : TsgamSolverConfig, default=TsgamSolverConfig()</span>
 <span class="sd">        Solver configuration for CVXPY optimization.</span>
 <span class="sd">    random_state : RandomState or None, default=None</span>
@@ -375,6 +485,7 @@
     <span class="n">exog_config</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">ar_config</span><span class="p">:</span> <span class="n">TsgamArConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">trend_config</span><span class="p">:</span> <span class="n">TsgamTrendConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">outlier_config</span><span class="p">:</span> <span class="n">TsgamOutlierConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">solver_config</span><span class="p">:</span> <span class="n">TsgamSolverConfig</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">TsgamSolverConfig</span><span class="p">)</span>
     <span class="n">random_state</span><span class="p">:</span> <span class="n">RandomState</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
@@ -650,6 +761,7 @@
 <span class="sd">    - Multi-harmonic Fourier basis functions for seasonal patterns</span>
 <span class="sd">    - Cubic spline or linear basis functions for exogenous variables with lead/lag</span>
 <span class="sd">    - Optional trend term (constant per period, linear or nonlinear)</span>
+<span class="sd">    - Optional outlier detector (sparse multiplicative corrections per period)</span>
 <span class="sd">    - Optional autoregressive (AR) modeling of residuals</span>
 
 <span class="sd">    The model uses regularized optimization via CVXPY to fit coefficients.</span>
@@ -679,6 +791,7 @@
 <span class="sd">        - &#39;exog_coef_{i}&#39;: Exogenous variable coefficients for variable i</span>
 <span class="sd">        - &#39;trend&#39;: Trend coefficients (if trend_config provided)</span>
 <span class="sd">        - &#39;trend_slope&#39;: Trend slope (if trend_type=&#39;linear&#39;)</span>
+<span class="sd">        - &#39;outlier&#39;: Outlier coefficients (if outlier_config provided)</span>
 <span class="sd">    exog_knots_ : list</span>
 <span class="sd">        List of knot locations for spline exogenous variables (auto-computed</span>
 <span class="sd">        during fit, reused during predict).</span>
@@ -686,6 +799,10 @@
 <span class="sd">        Matrix mapping samples to periods for trend term (if trend_config provided).</span>
 <span class="sd">    trend_period_hours_ : float or None</span>
 <span class="sd">        Period length in hours used for trend (if trend_config provided).</span>
+<span class="sd">    outlier_T_matrix_ : ndarray or None</span>
+<span class="sd">        Matrix mapping samples to periods for outlier detector (if outlier_config provided).</span>
+<span class="sd">    outlier_period_hours_ : float or None</span>
+<span class="sd">        Period length in hours used for outlier detector (if outlier_config provided).</span>
 <span class="sd">    combined_valid_mask_ : ndarray</span>
 <span class="sd">        Boolean mask indicating valid samples (no NaN from lead/lag operations).</span>
 <span class="sd">    ar_coef_ : ndarray or None</span>
@@ -703,18 +820,20 @@
 <span class="sd">    &gt;&gt;&gt; import numpy as np</span>
 <span class="sd">    &gt;&gt;&gt; from tsgam_estimator import (</span>
 <span class="sd">    ...     TsgamEstimator, TsgamEstimatorConfig,</span>
-<span class="sd">    ...     TsgamMultiHarmonicConfig, TsgamSplineConfig</span>
+<span class="sd">    ...     TsgamMultiHarmonicConfig, TsgamSplineConfig, TsgamOutlierConfig</span>
 <span class="sd">    ... )</span>
 <span class="sd">    &gt;&gt;&gt;</span>
-<span class="sd">    &gt;&gt;&gt; # Create configuration</span>
+<span class="sd">    &gt;&gt;&gt; # Create configuration with outlier detector</span>
 <span class="sd">    &gt;&gt;&gt; multi_harmonic = TsgamMultiHarmonicConfig(</span>
 <span class="sd">    ...     num_harmonics=[6, 4, 3],</span>
 <span class="sd">    ...     periods=[365.2425 * 24, 7 * 24, 24]  # yearly, weekly, daily</span>
 <span class="sd">    ... )</span>
 <span class="sd">    &gt;&gt;&gt; exog_config = [TsgamSplineConfig(n_knots=10, lags=[-1, 0, 1])]</span>
+<span class="sd">    &gt;&gt;&gt; outlier_config = TsgamOutlierConfig(reg_weight=0.002)  # Daily outliers</span>
 <span class="sd">    &gt;&gt;&gt; config = TsgamEstimatorConfig(</span>
 <span class="sd">    ...     multi_harmonic_config=multi_harmonic,</span>
-<span class="sd">    ...     exog_config=exog_config</span>
+<span class="sd">    ...     exog_config=exog_config,</span>
+<span class="sd">    ...     outlier_config=outlier_config</span>
 <span class="sd">    ... )</span>
 <span class="sd">    &gt;&gt;&gt;</span>
 <span class="sd">    &gt;&gt;&gt; # Create estimator</span>
@@ -723,10 +842,14 @@
 <span class="sd">    &gt;&gt;&gt; # Prepare data (X must be DataFrame with DatetimeIndex)</span>
 <span class="sd">    &gt;&gt;&gt; dates = pd.date_range(&#39;2020-01-01&#39;, periods=1000, freq=&#39;h&#39;)</span>
 <span class="sd">    &gt;&gt;&gt; X = pd.DataFrame({&#39;temp&#39;: np.random.randn(1000)}, index=dates)</span>
-<span class="sd">    &gt;&gt;&gt; y = np.log(np.random.rand(1000) * 100 + 50)  # log-transform optional</span>
+<span class="sd">    &gt;&gt;&gt; y = np.log(np.random.rand(1000) * 100 + 50)  # log-transform recommended</span>
 <span class="sd">    &gt;&gt;&gt;</span>
 <span class="sd">    &gt;&gt;&gt; # Fit model</span>
 <span class="sd">    &gt;&gt;&gt; estimator.fit(X, y)</span>
+<span class="sd">    &gt;&gt;&gt;</span>
+<span class="sd">    &gt;&gt;&gt; # Access detected outliers</span>
+<span class="sd">    &gt;&gt;&gt; outlier_values = estimator.variables_[&#39;outlier&#39;].value</span>
+<span class="sd">    &gt;&gt;&gt; print(f&quot;Detected {np.sum(np.abs(outlier_values) &gt; 0.1)} outlier days&quot;)</span>
 <span class="sd">    &gt;&gt;&gt;</span>
 <span class="sd">    &gt;&gt;&gt; # Make predictions</span>
 <span class="sd">    &gt;&gt;&gt; X_pred = pd.DataFrame({&#39;temp&#39;: np.random.randn(100)},</span>
@@ -1402,6 +1525,40 @@
                 <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
             <span class="c1"># For &#39;none&#39;, trend_term is None so it won&#39;t be added</span>
 
+        <span class="c1"># Add outlier detector term if configured</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">outlier_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span>
+            <span class="c1"># Determine period (default to 24 hours for daily)</span>
+            <span class="k">if</span> <span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">period_hours</span> <span class="o">=</span> <span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Default to daily (24 hours)</span>
+                <span class="n">period_hours</span> <span class="o">=</span> <span class="mf">24.0</span>
+
+            <span class="c1"># Calculate number of periods</span>
+            <span class="c1"># Use time_indices to determine which period each sample belongs to</span>
+            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="n">period_hours</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">n_periods</span> <span class="o">=</span> <span class="n">period_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+
+            <span class="c1"># Create T matrix: maps each sample to its period</span>
+            <span class="c1"># T[i, j] = 1 if sample i belongs to period j, else 0</span>
+            <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">),</span> <span class="n">n_periods</span><span class="p">))</span>
+            <span class="c1"># Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i</span>
+            <span class="n">T</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">period_indices</span><span class="p">)),</span> <span class="n">period_indices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+            <span class="c1"># Create outlier variable (one value per period)</span>
+            <span class="n">outlier</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span><span class="n">n_periods</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;outlier&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">outlier</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">outlier_T_matrix_</span> <span class="o">=</span> <span class="n">T</span>  <span class="c1"># Store for prediction</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">outlier_period_hours_</span> <span class="o">=</span> <span class="n">period_hours</span>  <span class="c1"># Store period for prediction</span>
+
+            <span class="c1"># Add outlier term to model (additive in log space, multiplicative in original scale)</span>
+            <span class="n">outlier_term</span> <span class="o">=</span> <span class="n">T</span> <span class="o">@</span> <span class="n">outlier</span>
+            <span class="n">model_term</span> <span class="o">+=</span> <span class="n">outlier_term</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
+
+            <span class="c1"># Add L1 regularization to encourage sparsity</span>
+            <span class="n">regularization_term</span> <span class="o">+=</span> <span class="n">outlier_config</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">*</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">norm1</span><span class="p">(</span><span class="n">outlier</span><span class="p">)</span>
+
         <span class="n">error</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span> <span class="o">-</span> <span class="n">model_term</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="n">error</span> <span class="o">+</span> <span class="n">regularization_term</span><span class="p">),</span> <span class="n">constraints</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">solver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
@@ -1665,6 +1822,42 @@
 
             <span class="c1"># Add trend term to predictions</span>
             <span class="n">predictions</span> <span class="o">+=</span> <span class="n">T_pred</span> <span class="o">@</span> <span class="n">trend</span>
+
+        <span class="c1"># Add outlier detector term if present</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;outlier&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
+            <span class="n">outlier</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;outlier&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">if</span> <span class="n">outlier</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Outlier coefficients are None. Model may not have converged.&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Use stored period_hours from fit</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;outlier_period_hours_&#39;</span><span class="p">):</span>
+                <span class="n">period_hours</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">outlier_period_hours_</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback: use config value or default to 24.0</span>
+                <span class="n">period_hours</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">24.0</span>
+
+            <span class="c1"># Calculate period indices for prediction timestamps</span>
+            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="n">period_hours</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">n_periods_fit</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">outlier</span><span class="p">)</span>
+            <span class="n">n_periods_pred</span> <span class="o">=</span> <span class="n">period_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+
+            <span class="c1"># Create T matrix for predictions</span>
+            <span class="n">T_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">),</span> <span class="n">n_periods_pred</span><span class="p">))</span>
+            <span class="c1"># Use numpy advanced indexing for efficiency</span>
+            <span class="c1"># Filter out negative indices (can occur if predicting before training data)</span>
+            <span class="n">valid_mask</span> <span class="o">=</span> <span class="n">period_indices</span> <span class="o">&gt;=</span> <span class="mi">0</span>
+            <span class="n">T_pred</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">period_indices</span><span class="p">))[</span><span class="n">valid_mask</span><span class="p">],</span> <span class="n">period_indices</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]]</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+            <span class="c1"># Extend outlier if prediction extends beyond training data</span>
+            <span class="c1"># For outliers, use 0 (no correction) for periods beyond training data</span>
+            <span class="k">if</span> <span class="n">n_periods_pred</span> <span class="o">&gt;</span> <span class="n">n_periods_fit</span><span class="p">:</span>
+                <span class="n">outlier_extended</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_periods_pred</span><span class="p">)</span>
+                <span class="n">outlier_extended</span><span class="p">[:</span><span class="n">n_periods_fit</span><span class="p">]</span> <span class="o">=</span> <span class="n">outlier</span>
+                <span class="c1"># Remaining periods get 0 (no outlier correction)</span>
+                <span class="n">outlier</span> <span class="o">=</span> <span class="n">outlier_extended</span>
+
+            <span class="c1"># Add outlier term to predictions</span>
+            <span class="n">predictions</span> <span class="o">+=</span> <span class="n">T_pred</span> <span class="o">@</span> <span class="n">outlier</span>
 
         <span class="k">return</span> <span class="n">predictions</span></div>
 

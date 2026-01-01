@@ -65,6 +65,8 @@
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.exog_knots_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.exog_knots_</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.trend_T_matrix_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.trend_T_matrix_</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.trend_period_hours_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.trend_period_hours_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.outlier_T_matrix_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.outlier_T_matrix_</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.outlier_period_hours_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.outlier_period_hours_</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.combined_valid_mask_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.combined_valid_mask_</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.ar_coef_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.ar_coef_</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimator.ar_intercept_"><code class="docutils literal notranslate"><span class="pre">TsgamEstimator.ar_intercept_</span></code></a></li>
@@ -82,6 +84,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.debug"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.debug</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.exog_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.exog_config</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.multi_harmonic_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.multi_harmonic_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.outlier_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.outlier_config</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.random_state"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.random_state</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.solver_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.solver_config</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamEstimatorConfig.trend_config"><code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.trend_config</span></code></a></li>
@@ -97,6 +100,13 @@
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig.num_harmonics"><code class="docutils literal notranslate"><span class="pre">TsgamMultiHarmonicConfig.num_harmonics</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig.periods"><code class="docutils literal notranslate"><span class="pre">TsgamMultiHarmonicConfig.periods</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamMultiHarmonicConfig.reg_weight"><code class="docutils literal notranslate"><span class="pre">TsgamMultiHarmonicConfig.reg_weight</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamOutlierConfig"><code class="docutils literal notranslate"><span class="pre">TsgamOutlierConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamOutlierConfig.reg_weight"><code class="docutils literal notranslate"><span class="pre">TsgamOutlierConfig.reg_weight</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tsgam_estimator.TsgamOutlierConfig.period_hours"><code class="docutils literal notranslate"><span class="pre">TsgamOutlierConfig.period_hours</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id0"><code class="docutils literal notranslate"><span class="pre">TsgamOutlierConfig.period_hours</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">TsgamOutlierConfig.reg_weight</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#tsgam_estimator.TsgamSolverConfig"><code class="docutils literal notranslate"><span class="pre">TsgamSolverConfig</span></code></a><ul>
@@ -243,6 +253,7 @@ allow fewer non-zero coefficients. Typical range: 0.5 to 1.0.</p></li>
 <li><p>Multi-harmonic Fourier basis functions for seasonal patterns</p></li>
 <li><p>Cubic spline or linear basis functions for exogenous variables with lead/lag</p></li>
 <li><p>Optional trend term (constant per period, linear or nonlinear)</p></li>
+<li><p>Optional outlier detector (sparse multiplicative corrections per period)</p></li>
 <li><p>Optional autoregressive (AR) modeling of residuals</p></li>
 </ul>
 <p>The model uses regularized optimization via CVXPY to fit coefficients.
@@ -306,7 +317,8 @@ convergence (should be ‘optimal’ or ‘optimal_inaccurate’).</p>
 - ‘fourier_coef’: Fourier coefficients (if multi_harmonic_config provided)
 - ‘exog_coef_{i}’: Exogenous variable coefficients for variable i
 - ‘trend’: Trend coefficients (if trend_config provided)
-- ‘trend_slope’: Trend slope (if trend_type=’linear’)</p>
+- ‘trend_slope’: Trend slope (if trend_type=’linear’)
+- ‘outlier’: Outlier coefficients (if outlier_config provided)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a></p>
@@ -341,6 +353,28 @@ during fit, reused during predict).</p>
 <dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.trend_period_hours_">
 <span class="sig-name descname"><span class="pre">trend_period_hours_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.trend_period_hours_" title="Link to this definition"></a></dt>
 <dd><p>Period length in hours used for trend (if trend_config provided).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.outlier_T_matrix_">
+<span class="sig-name descname"><span class="pre">outlier_T_matrix_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.outlier_T_matrix_" title="Link to this definition"></a></dt>
+<dd><p>Matrix mapping samples to periods for outlier detector (if outlier_config provided).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimator.outlier_period_hours_">
+<span class="sig-name descname"><span class="pre">outlier_period_hours_</span></span><a class="headerlink" href="#tsgam_estimator.TsgamEstimator.outlier_period_hours_" title="Link to this definition"></a></dt>
+<dd><p>Period length in hours used for outlier detector (if outlier_config provided).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
@@ -408,18 +442,20 @@ during fit, reused during predict).</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tsgam_estimator</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
 <span class="gp">... </span>    <span class="n">TsgamEstimator</span><span class="p">,</span> <span class="n">TsgamEstimatorConfig</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">TsgamMultiHarmonicConfig</span><span class="p">,</span> <span class="n">TsgamSplineConfig</span>
+<span class="gp">... </span>    <span class="n">TsgamMultiHarmonicConfig</span><span class="p">,</span> <span class="n">TsgamSplineConfig</span><span class="p">,</span> <span class="n">TsgamOutlierConfig</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create configuration</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create configuration with outlier detector</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">multi_harmonic</span> <span class="o">=</span> <span class="n">TsgamMultiHarmonicConfig</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">num_harmonics</span><span class="o">=</span><span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
 <span class="gp">... </span>    <span class="n">periods</span><span class="o">=</span><span class="p">[</span><span class="mf">365.2425</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">]</span>  <span class="c1"># yearly, weekly, daily</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">exog_config</span> <span class="o">=</span> <span class="p">[</span><span class="n">TsgamSplineConfig</span><span class="p">(</span><span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">outlier_config</span> <span class="o">=</span> <span class="n">TsgamOutlierConfig</span><span class="p">(</span><span class="n">reg_weight</span><span class="o">=</span><span class="mf">0.002</span><span class="p">)</span>  <span class="c1"># Daily outliers</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamEstimatorConfig</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">multi_harmonic_config</span><span class="o">=</span><span class="n">multi_harmonic</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">exog_config</span><span class="o">=</span><span class="n">exog_config</span>
+<span class="gp">... </span>    <span class="n">exog_config</span><span class="o">=</span><span class="n">exog_config</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">outlier_config</span><span class="o">=</span><span class="n">outlier_config</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create estimator</span>
@@ -428,10 +464,14 @@ during fit, reused during predict).</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Prepare data (X must be DataFrame with DatetimeIndex)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">dates</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2020-01-01&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;h&#39;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">X</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;temp&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">)},</span> <span class="n">index</span><span class="o">=</span><span class="n">dates</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="mi">50</span><span class="p">)</span>  <span class="c1"># log-transform optional</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="mi">50</span><span class="p">)</span>  <span class="c1"># log-transform recommended</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Fit model</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">estimator</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Access detected outliers</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">outlier_values</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;outlier&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Detected </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">outlier_values</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0.1</span><span class="p">)</span><span class="si">}</span><span class="s2"> outlier days&quot;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Make predictions</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">X_pred</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;temp&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">100</span><span class="p">)},</span>
@@ -641,7 +681,7 @@ parameters and not others.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamEstimatorConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multi_harmonic_config:</span> <span class="pre">~tsgam_estimator.TsgamMultiHarmonicConfig</span> <span class="pre">|</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exog_config:</span> <span class="pre">list[~tsgam_estimator.TsgamSplineConfig</span> <span class="pre">|</span> <span class="pre">~tsgam_estimator.TsgamLinearConfig]</span> <span class="pre">|</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ar_config:</span> <span class="pre">~tsgam_estimator.TsgamArConfig</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trend_config:</span> <span class="pre">~tsgam_estimator.TsgamTrendConfig</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solver_config:</span> <span class="pre">~tsgam_estimator.TsgamSolverConfig</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state:</span> <span class="pre">~numpy.random.mtrand.RandomState</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamEstimatorConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig" title="Link to this definition"></a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamEstimatorConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multi_harmonic_config:</span> <span class="pre">~tsgam_estimator.TsgamMultiHarmonicConfig</span> <span class="pre">|</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exog_config:</span> <span class="pre">list[~tsgam_estimator.TsgamSplineConfig</span> <span class="pre">|</span> <span class="pre">~tsgam_estimator.TsgamLinearConfig]</span> <span class="pre">|</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ar_config:</span> <span class="pre">~tsgam_estimator.TsgamArConfig</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trend_config:</span> <span class="pre">~tsgam_estimator.TsgamTrendConfig</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outlier_config:</span> <span class="pre">~tsgam_estimator.TsgamOutlierConfig</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solver_config:</span> <span class="pre">~tsgam_estimator.TsgamSolverConfig</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state:</span> <span class="pre">~numpy.random.mtrand.RandomState</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamEstimatorConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Main configuration for TsgamEstimator.</p>
 <p>This config combines all component configurations (Fourier, exogenous, AR)
@@ -658,6 +698,16 @@ If None, no exogenous variables are used.</p></li>
 <li><p><strong>trend_config</strong> (<a class="reference internal" href="#tsgam_estimator.TsgamTrendConfig" title="tsgam_estimator.TsgamTrendConfig"><em>TsgamTrendConfig</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Configuration for trend term. If None, no trend is fitted (equivalent to
 trend_type=’none’). The trend is constant per period and can be linear,
 nonlinear (monotonic decreasing), or none.</p></li>
+<li><p><strong>outlier_config</strong> (<a class="reference internal" href="#tsgam_estimator.TsgamOutlierConfig" title="tsgam_estimator.TsgamOutlierConfig"><em>TsgamOutlierConfig</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – <p>Configuration for outlier detector component. If None, no outlier detector
+is fitted.</p>
+<p>The outlier detector identifies anomalous periods (e.g., days) with sparse
+multiplicative corrections. It uses L1 regularization to encourage sparsity,
+meaning most periods will have no correction (≈0), while only outlier
+periods will have non-zero corrections. The corrections are constant per
+period and additive in log space (multiplicative in original scale).</p>
+<p>See <a class="reference internal" href="#tsgam_estimator.TsgamOutlierConfig" title="tsgam_estimator.TsgamOutlierConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">TsgamOutlierConfig</span></code></a> for detailed documentation and parameter
+tuning guidelines.</p>
+</p></li>
 <li><p><strong>solver_config</strong> (<a class="reference internal" href="#tsgam_estimator.TsgamSolverConfig" title="tsgam_estimator.TsgamSolverConfig"><em>TsgamSolverConfig</em></a><em>, </em><em>default=TsgamSolverConfig</em><em>(</em><em>)</em>) – Solver configuration for CVXPY optimization.</p></li>
 <li><p><strong>random_state</strong> (<em>RandomState</em><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random state for reproducible results. Used in AR sampling if ar_config
 is provided.</p></li>
@@ -701,8 +751,13 @@ _B_running_view_) for inspection.</p></li>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig.outlier_config">
+<span class="sig-name descname"><span class="pre">outlier_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#tsgam_estimator.TsgamOutlierConfig" title="tsgam_estimator.TsgamOutlierConfig"><span class="pre">TsgamOutlierConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.outlier_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="tsgam_estimator.TsgamEstimatorConfig.random_state">
-<span class="sig-name descname"><span class="pre">random_state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/random/legacy.html#numpy.random.RandomState" title="(in NumPy v2.3)"><span class="pre">RandomState</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.random_state" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">random_state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/random/legacy.html#numpy.random.RandomState" title="(in NumPy v2.4)"><span class="pre">RandomState</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#tsgam_estimator.TsgamEstimatorConfig.random_state" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -804,6 +859,125 @@ smoothness of the seasonal patterns. Typical range: 1e-5 to 1e-3.</p></li>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="tsgam_estimator.TsgamMultiHarmonicConfig.reg_weight">
 <span class="sig-name descname"><span class="pre">reg_weight</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0001</span></em><a class="headerlink" href="#tsgam_estimator.TsgamMultiHarmonicConfig.reg_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamOutlierConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tsgam_estimator.</span></span><span class="sig-name descname"><span class="pre">TsgamOutlierConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">reg_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">period_hours</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/tsgam_estimator.html#TsgamOutlierConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#tsgam_estimator.TsgamOutlierConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Configuration for the outlier detector component.</p>
+<p>The outlier detector identifies anomalous periods (e.g., days) in the time series
+with sparse multiplicative corrections. This component is particularly useful for
+detecting days with unusual patterns that deviate from the normal seasonal and
+trend behavior, such as holidays, special events, or data quality issues.</p>
+<p><strong>How it works:</strong>
+- The detector assigns one correction value per period (e.g., per day)
+- Corrections are constant across all samples within a period
+- L1 regularization encourages sparsity: most periods have no correction (≈0),</p>
+<blockquote>
+<div><p>while only outlier periods have non-zero corrections</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>The correction is additive in log space, which translates to a multiplicative
+effect in the original scale (e.g., 0.2 in log space ≈ 0.82x multiplier,
+0.5 in log space ≈ 1.65x multiplier)</p></li>
+</ul>
+<p><strong>Mathematical formulation:</strong>
+The outlier term is added to the model as: <code class="docutils literal notranslate"><span class="pre">T</span> <span class="pre">&#64;</span> <span class="pre">outlier</span></code>, where:
+- <code class="docutils literal notranslate"><span class="pre">T</span></code> is a binary matrix mapping each sample to its period
+- <code class="docutils literal notranslate"><span class="pre">outlier</span></code> is a sparse vector of period-level corrections
+- The L1 penalty <code class="docutils literal notranslate"><span class="pre">reg_weight</span> <span class="pre">*</span> <span class="pre">||outlier||_1</span></code> encourages sparsity</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>reg_weight</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – <p>L1 regularization weight controlling sparsity of outlier detection.
+Higher values encourage more sparsity (fewer outliers detected).
+Lower values allow more outliers to be detected.</p>
+<p><strong>Typical ranges:</strong>
+- Very sparse (few outliers): 0.01 to 0.1
+- Moderate sparsity: 0.001 to 0.01
+- More sensitive (more outliers): 0.0001 to 0.001</p>
+<p><strong>Guidelines:</strong>
+- Start with 0.002 and adjust based on results
+- If too many outliers detected (&gt;10% of periods), increase reg_weight
+- If no outliers detected, decrease reg_weight
+- For real-world data, values between 0.001 and 0.01 are often appropriate</p>
+</p></li>
+<li><p><strong>period_hours</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – <p>Period length in hours for which the outlier correction is constant.
+If None, defaults to 24.0 hours (daily outliers) for hourly data.</p>
+<p><strong>Examples:</strong>
+- Hourly data, daily outliers: <code class="docutils literal notranslate"><span class="pre">period_hours=24.0</span></code> (default)
+- 15-minute data, daily outliers: <code class="docutils literal notranslate"><span class="pre">period_hours=24.0</span></code> (96 samples per day)
+- Hourly data, weekly outliers: <code class="docutils literal notranslate"><span class="pre">period_hours=168.0</span></code> (7 days)
+- Daily data, weekly outliers: <code class="docutils literal notranslate"><span class="pre">period_hours=7.0</span></code>
+- Hourly data, hourly outliers: <code class="docutils literal notranslate"><span class="pre">period_hours=1.0</span></code> (not recommended, use AR instead)</p>
+</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamOutlierConfig.reg_weight">
+<span class="sig-name descname"><span class="pre">reg_weight</span></span><a class="headerlink" href="#tsgam_estimator.TsgamOutlierConfig.reg_weight" title="Link to this definition"></a></dt>
+<dd><p>L1 regularization weight.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tsgam_estimator.TsgamOutlierConfig.period_hours">
+<span class="sig-name descname"><span class="pre">period_hours</span></span><a class="headerlink" href="#tsgam_estimator.TsgamOutlierConfig.period_hours" title="Link to this definition"></a></dt>
+<dd><p>Period length in hours.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>The outlier detector works best when the target is log-transformed, as it
+naturally models multiplicative effects</p></li>
+<li><p>Outlier corrections are applied during both fit and predict</p></li>
+<li><p>For prediction periods beyond the training data, outlier corrections default
+to 0 (no correction)</p></li>
+<li><p>The detector is most effective when combined with other components (seasonality,
+trend, exogenous variables) that explain normal variation, leaving outliers
+as the residual anomaly</p></li>
+</ul>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Daily outlier detector for hourly data (default, moderate sparsity)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamOutlierConfig</span><span class="p">(</span><span class="n">reg_weight</span><span class="o">=</span><span class="mf">0.002</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Weekly outlier detector with higher sparsity (fewer outliers)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamOutlierConfig</span><span class="p">(</span><span class="n">reg_weight</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">period_hours</span><span class="o">=</span><span class="mf">168.0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Daily outlier detector with lower sparsity (more outliers detected)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamOutlierConfig</span><span class="p">(</span><span class="n">reg_weight</span><span class="o">=</span><span class="mf">0.001</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Very sparse detector (only extreme outliers)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">TsgamOutlierConfig</span><span class="p">(</span><span class="n">reg_weight</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Use in full estimator configuration</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tsgam_estimator</span><span class="w"> </span><span class="kn">import</span> <span class="n">TsgamEstimatorConfig</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">estimator_config</span> <span class="o">=</span> <span class="n">TsgamEstimatorConfig</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">outlier_config</span><span class="o">=</span><span class="n">TsgamOutlierConfig</span><span class="p">(</span><span class="n">reg_weight</span><span class="o">=</span><span class="mf">0.002</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id0">
+<span class="sig-name descname"><span class="pre">period_hours</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id0" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id1">
+<span class="sig-name descname"><span class="pre">reg_weight</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></em><a class="headerlink" href="#id1" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
