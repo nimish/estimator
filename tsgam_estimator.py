@@ -208,6 +208,101 @@ class TsgamTrendConfig:
     reg_weight: float = 10.0
 
 @dataclass
+class TsgamOutlierConfig:
+    """
+    Configuration for the outlier detector component.
+
+    The outlier detector identifies anomalous periods (e.g., days) in the time series
+    with sparse multiplicative corrections. This component is particularly useful for
+    detecting days with unusual patterns that deviate from the normal seasonal and
+    trend behavior, such as holidays, special events, or data quality issues.
+
+    **How it works:**
+    - The detector assigns one correction value per period (e.g., per day)
+    - Corrections are constant across all samples within a period
+    - L1 regularization encourages sparsity: most periods have no correction (≈0),
+      while only outlier periods have non-zero corrections
+    - The correction is additive in log space, which translates to a multiplicative
+      effect in the original scale (e.g., 0.2 in log space ≈ 0.82x multiplier,
+      0.5 in log space ≈ 1.65x multiplier)
+
+    **Mathematical formulation:**
+    The outlier term is added to the model as: ``T @ outlier``, where:
+    - ``T`` is a binary matrix mapping each sample to its period
+    - ``outlier`` is a sparse vector of period-level corrections
+    - The L1 penalty ``reg_weight * ||outlier||_1`` encourages sparsity
+
+    Parameters
+    ----------
+    reg_weight : float
+        L1 regularization weight controlling sparsity of outlier detection.
+        Higher values encourage more sparsity (fewer outliers detected).
+        Lower values allow more outliers to be detected.
+
+        **Typical ranges:**
+        - Very sparse (few outliers): 0.01 to 0.1
+        - Moderate sparsity: 0.001 to 0.01
+        - More sensitive (more outliers): 0.0001 to 0.001
+
+        **Guidelines:**
+        - Start with 0.002 and adjust based on results
+        - If too many outliers detected (>10% of periods), increase reg_weight
+        - If no outliers detected, decrease reg_weight
+        - For real-world data, values between 0.001 and 0.01 are often appropriate
+
+    period_hours : float or None, default=None
+        Period length in hours for which the outlier correction is constant.
+        If None, defaults to 24.0 hours (daily outliers) for hourly data.
+
+        **Examples:**
+        - Hourly data, daily outliers: ``period_hours=24.0`` (default)
+        - 15-minute data, daily outliers: ``period_hours=24.0`` (96 samples per day)
+        - Hourly data, weekly outliers: ``period_hours=168.0`` (7 days)
+        - Daily data, weekly outliers: ``period_hours=7.0``
+        - Hourly data, hourly outliers: ``period_hours=1.0`` (not recommended, use AR instead)
+
+    Attributes
+    ----------
+    reg_weight : float
+        L1 regularization weight.
+    period_hours : float or None
+        Period length in hours.
+
+    Notes
+    -----
+    - The outlier detector works best when the target is log-transformed, as it
+      naturally models multiplicative effects
+    - Outlier corrections are applied during both fit and predict
+    - For prediction periods beyond the training data, outlier corrections default
+      to 0 (no correction)
+    - The detector is most effective when combined with other components (seasonality,
+      trend, exogenous variables) that explain normal variation, leaving outliers
+      as the residual anomaly
+
+    Examples
+    --------
+    >>> # Daily outlier detector for hourly data (default, moderate sparsity)
+    >>> config = TsgamOutlierConfig(reg_weight=0.002)
+    >>>
+    >>> # Weekly outlier detector with higher sparsity (fewer outliers)
+    >>> config = TsgamOutlierConfig(reg_weight=0.01, period_hours=168.0)
+    >>>
+    >>> # Daily outlier detector with lower sparsity (more outliers detected)
+    >>> config = TsgamOutlierConfig(reg_weight=0.001)
+    >>>
+    >>> # Very sparse detector (only extreme outliers)
+    >>> config = TsgamOutlierConfig(reg_weight=0.1)
+    >>>
+    >>> # Use in full estimator configuration
+    >>> from tsgam_estimator import TsgamEstimatorConfig
+    >>> estimator_config = TsgamEstimatorConfig(
+    ...     outlier_config=TsgamOutlierConfig(reg_weight=0.002)
+    ... )
+    """
+    reg_weight: float
+    period_hours: float | None = None
+
+@dataclass
 class TsgamSolverConfig:
     """
     Configuration for the CVXPY solver used in optimization.
@@ -254,6 +349,18 @@ class TsgamEstimatorConfig:
         Configuration for trend term. If None, no trend is fitted (equivalent to
         trend_type='none'). The trend is constant per period and can be linear,
         nonlinear (monotonic decreasing), or none.
+    outlier_config : TsgamOutlierConfig or None, default=None
+        Configuration for outlier detector component. If None, no outlier detector
+        is fitted.
+
+        The outlier detector identifies anomalous periods (e.g., days) with sparse
+        multiplicative corrections. It uses L1 regularization to encourage sparsity,
+        meaning most periods will have no correction (≈0), while only outlier
+        periods will have non-zero corrections. The corrections are constant per
+        period and additive in log space (multiplicative in original scale).
+
+        See :class:`TsgamOutlierConfig` for detailed documentation and parameter
+        tuning guidelines.
     solver_config : TsgamSolverConfig, default=TsgamSolverConfig()
         Solver configuration for CVXPY optimization.
     random_state : RandomState or None, default=None
@@ -281,6 +388,7 @@ class TsgamEstimatorConfig:
     exog_config: list[TsgamSplineConfig | TsgamLinearConfig] | None
     ar_config: TsgamArConfig | None = None
     trend_config: TsgamTrendConfig | None = None
+    outlier_config: TsgamOutlierConfig | None = None
     solver_config: TsgamSolverConfig = field(default_factory=TsgamSolverConfig)
     random_state: RandomState | None = None
     debug: bool = False
@@ -550,6 +658,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     - Multi-harmonic Fourier basis functions for seasonal patterns
     - Cubic spline or linear basis functions for exogenous variables with lead/lag
     - Optional trend term (constant per period, linear or nonlinear)
+    - Optional outlier detector (sparse multiplicative corrections per period)
     - Optional autoregressive (AR) modeling of residuals
 
     The model uses regularized optimization via CVXPY to fit coefficients.
@@ -579,6 +688,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         - 'exog_coef_{i}': Exogenous variable coefficients for variable i
         - 'trend': Trend coefficients (if trend_config provided)
         - 'trend_slope': Trend slope (if trend_type='linear')
+        - 'outlier': Outlier coefficients (if outlier_config provided)
     exog_knots_ : list
         List of knot locations for spline exogenous variables (auto-computed
         during fit, reused during predict).
@@ -586,6 +696,10 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         Matrix mapping samples to periods for trend term (if trend_config provided).
     trend_period_hours_ : float or None
         Period length in hours used for trend (if trend_config provided).
+    outlier_T_matrix_ : ndarray or None
+        Matrix mapping samples to periods for outlier detector (if outlier_config provided).
+    outlier_period_hours_ : float or None
+        Period length in hours used for outlier detector (if outlier_config provided).
     combined_valid_mask_ : ndarray
         Boolean mask indicating valid samples (no NaN from lead/lag operations).
     ar_coef_ : ndarray or None
@@ -603,18 +717,20 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     >>> import numpy as np
     >>> from tsgam_estimator import (
     ...     TsgamEstimator, TsgamEstimatorConfig,
-    ...     TsgamMultiHarmonicConfig, TsgamSplineConfig
+    ...     TsgamMultiHarmonicConfig, TsgamSplineConfig, TsgamOutlierConfig
     ... )
     >>>
-    >>> # Create configuration
+    >>> # Create configuration with outlier detector
     >>> multi_harmonic = TsgamMultiHarmonicConfig(
     ...     num_harmonics=[6, 4, 3],
     ...     periods=[365.2425 * 24, 7 * 24, 24]  # yearly, weekly, daily
     ... )
     >>> exog_config = [TsgamSplineConfig(n_knots=10, lags=[-1, 0, 1])]
+    >>> outlier_config = TsgamOutlierConfig(reg_weight=0.002)  # Daily outliers
     >>> config = TsgamEstimatorConfig(
     ...     multi_harmonic_config=multi_harmonic,
-    ...     exog_config=exog_config
+    ...     exog_config=exog_config,
+    ...     outlier_config=outlier_config
     ... )
     >>>
     >>> # Create estimator
@@ -623,10 +739,14 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     >>> # Prepare data (X must be DataFrame with DatetimeIndex)
     >>> dates = pd.date_range('2020-01-01', periods=1000, freq='h')
     >>> X = pd.DataFrame({'temp': np.random.randn(1000)}, index=dates)
-    >>> y = np.log(np.random.rand(1000) * 100 + 50)  # log-transform optional
+    >>> y = np.log(np.random.rand(1000) * 100 + 50)  # log-transform recommended
     >>>
     >>> # Fit model
     >>> estimator.fit(X, y)
+    >>>
+    >>> # Access detected outliers
+    >>> outlier_values = estimator.variables_['outlier'].value
+    >>> print(f"Detected {np.sum(np.abs(outlier_values) > 0.1)} outlier days")
     >>>
     >>> # Make predictions
     >>> X_pred = pd.DataFrame({'temp': np.random.randn(100)},
@@ -1300,6 +1420,40 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 constraints.append(cvxpy.diff(trend) <= 0)
             # For 'none', trend_term is None so it won't be added
 
+        # Add outlier detector term if configured
+        if self.config.outlier_config is not None:
+            outlier_config = self.config.outlier_config
+            # Determine period (default to 24 hours for daily)
+            if outlier_config.period_hours is not None:
+                period_hours = outlier_config.period_hours
+            else:
+                # Default to daily (24 hours)
+                period_hours = 24.0
+
+            # Calculate number of periods
+            # Use time_indices to determine which period each sample belongs to
+            period_indices = (time_indices / period_hours).astype(int)
+            n_periods = period_indices.max() + 1
+
+            # Create T matrix: maps each sample to its period
+            # T[i, j] = 1 if sample i belongs to period j, else 0
+            T = np.zeros((len(y), n_periods))
+            # Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i
+            T[np.arange(len(period_indices)), period_indices] = 1.0
+
+            # Create outlier variable (one value per period)
+            outlier = cvxpy.Variable(n_periods)
+            self.variables_['outlier'] = outlier
+            self.outlier_T_matrix_ = T  # Store for prediction
+            self.outlier_period_hours_ = period_hours  # Store period for prediction
+
+            # Add outlier term to model (additive in log space, multiplicative in original scale)
+            outlier_term = T @ outlier
+            model_term += outlier_term[self.combined_valid_mask_]
+
+            # Add L1 regularization to encourage sparsity
+            regularization_term += outlier_config.reg_weight * cvxpy.norm1(outlier)
+
         error = cvxpy.sum_squares(y[self.combined_valid_mask_] - model_term) / np.sum(self.combined_valid_mask_)
         self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term), constraints)
         self.problem_.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
@@ -1560,6 +1714,42 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
             # Add trend term to predictions
             predictions += T_pred @ trend
+
+        # Add outlier detector term if present
+        if self.config.outlier_config is not None and 'outlier' in self.variables_:
+            outlier = self.variables_['outlier'].value
+            if outlier is None:
+                raise ValueError("Outlier coefficients are None. Model may not have converged.")
+
+            # Use stored period_hours from fit
+            if hasattr(self, 'outlier_period_hours_'):
+                period_hours = self.outlier_period_hours_
+            else:
+                # Fallback: use config value or default to 24.0
+                period_hours = self.config.outlier_config.period_hours if self.config.outlier_config.period_hours is not None else 24.0
+
+            # Calculate period indices for prediction timestamps
+            period_indices = (time_indices / period_hours).astype(int)
+            n_periods_fit = len(outlier)
+            n_periods_pred = period_indices.max() + 1
+
+            # Create T matrix for predictions
+            T_pred = np.zeros((len(predictions), n_periods_pred))
+            # Use numpy advanced indexing for efficiency
+            # Filter out negative indices (can occur if predicting before training data)
+            valid_mask = period_indices >= 0
+            T_pred[np.arange(len(period_indices))[valid_mask], period_indices[valid_mask]] = 1.0
+
+            # Extend outlier if prediction extends beyond training data
+            # For outliers, use 0 (no correction) for periods beyond training data
+            if n_periods_pred > n_periods_fit:
+                outlier_extended = np.zeros(n_periods_pred)
+                outlier_extended[:n_periods_fit] = outlier
+                # Remaining periods get 0 (no outlier correction)
+                outlier = outlier_extended
+
+            # Add outlier term to predictions
+            predictions += T_pred @ outlier
 
         return predictions
 
