@@ -291,7 +291,7 @@
 <span class="sd">    &gt;&gt;&gt; # No trend</span>
 <span class="sd">    &gt;&gt;&gt; config = TsgamTrendConfig(trend_type=&#39;none&#39;)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="nb">type</span><span class="p">:</span> <span class="n">TrendType</span> <span class="o">=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span>
+    <span class="n">trend_type</span><span class="p">:</span> <span class="n">TrendType</span> <span class="o">=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span>
     <span class="n">grouping</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># todo: rename this to something better</span>
     <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span></div>
 
@@ -971,9 +971,72 @@
 
         <span class="k">return</span> <span class="n">period_hours</span><span class="p">,</span> <span class="n">samples_per_period</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_frequency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">,</span> <span class="n">expected_freq</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_infer_frequency_from_differences</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Validate that timestamps match expected frequency.</span>
+<span class="sd">        Infer the intended frequency from time differences, even when there are gaps.</span>
+
+<span class="sd">        This method finds the most common time difference between consecutive timestamps</span>
+<span class="sd">        and maps it to a pandas frequency string.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timestamps : DatetimeIndex</span>
+<span class="sd">            Timestamps (may have gaps)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        freq : str</span>
+<span class="sd">            Inferred frequency string (e.g., &#39;h&#39;, &#39;15min&#39;, &#39;D&#39;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Need at least 2 timestamps to infer frequency&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Compute time differences</span>
+        <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">diff_seconds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">d</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">diffs</span><span class="p">])</span>
+
+        <span class="c1"># Find the most common difference (mode)</span>
+        <span class="c1"># Use histogram to find the most frequent difference</span>
+        <span class="c1"># Round to nearest second to handle floating point issues</span>
+        <span class="n">diff_seconds_rounded</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">diff_seconds</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">unique_diffs</span><span class="p">,</span> <span class="n">counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">diff_seconds_rounded</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">most_common_diff_seconds</span> <span class="o">=</span> <span class="n">unique_diffs</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">counts</span><span class="p">)]</span>
+
+        <span class="c1"># Map to pandas frequency string</span>
+        <span class="c1"># Common mappings:</span>
+        <span class="n">freq_mapping</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="mi">60</span><span class="p">:</span> <span class="s1">&#39;1min&#39;</span><span class="p">,</span>
+            <span class="mi">300</span><span class="p">:</span> <span class="s1">&#39;5min&#39;</span><span class="p">,</span>
+            <span class="mi">900</span><span class="p">:</span> <span class="s1">&#39;15min&#39;</span><span class="p">,</span>
+            <span class="mi">3600</span><span class="p">:</span> <span class="s1">&#39;h&#39;</span><span class="p">,</span>  <span class="c1"># or &#39;H&#39;</span>
+            <span class="mi">86400</span><span class="p">:</span> <span class="s1">&#39;D&#39;</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Try exact match first</span>
+        <span class="k">if</span> <span class="n">most_common_diff_seconds</span> <span class="ow">in</span> <span class="n">freq_mapping</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">freq_mapping</span><span class="p">[</span><span class="n">most_common_diff_seconds</span><span class="p">]</span>
+
+        <span class="c1"># Try approximate match (within 1% tolerance)</span>
+        <span class="k">for</span> <span class="n">diff_sec</span><span class="p">,</span> <span class="n">freq_str</span> <span class="ow">in</span> <span class="n">freq_mapping</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">most_common_diff_seconds</span> <span class="o">-</span> <span class="n">diff_sec</span><span class="p">)</span> <span class="o">/</span> <span class="n">diff_sec</span> <span class="o">&lt;</span> <span class="mf">0.01</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">freq_str</span>
+
+        <span class="c1"># If no match, try to construct frequency from seconds</span>
+        <span class="k">if</span> <span class="n">most_common_diff_seconds</span> <span class="o">&lt;</span> <span class="mi">60</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">most_common_diff_seconds</span><span class="si">}</span><span class="s1">S&#39;</span>
+        <span class="k">elif</span> <span class="n">most_common_diff_seconds</span> <span class="o">&lt;</span> <span class="mi">3600</span><span class="p">:</span>
+            <span class="n">minutes</span> <span class="o">=</span> <span class="n">most_common_diff_seconds</span> <span class="o">//</span> <span class="mi">60</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">minutes</span><span class="si">}</span><span class="s1">min&#39;</span>
+        <span class="k">elif</span> <span class="n">most_common_diff_seconds</span> <span class="o">&lt;</span> <span class="mi">86400</span><span class="p">:</span>
+            <span class="n">hours</span> <span class="o">=</span> <span class="n">most_common_diff_seconds</span> <span class="o">//</span> <span class="mi">3600</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">hours</span><span class="si">}</span><span class="s1">h&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">days</span> <span class="o">=</span> <span class="n">most_common_diff_seconds</span> <span class="o">//</span> <span class="mi">86400</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">days</span><span class="si">}</span><span class="s1">D&#39;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_frequency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">,</span> <span class="n">expected_freq</span><span class="p">,</span> <span class="n">allow_gaps</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Validate that timestamps match expected frequency, optionally allowing gaps.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -981,11 +1044,14 @@
 <span class="sd">            Timestamps to validate.</span>
 <span class="sd">        expected_freq : str</span>
 <span class="sd">            Expected pandas frequency string (e.g., &#39;h&#39; for hourly, &#39;H&#39; also accepted).</span>
+<span class="sd">        allow_gaps : bool, default=True</span>
+<span class="sd">            If True, allow gaps in timestamps and infer frequency from differences.</span>
+<span class="sd">            If False, require perfectly regular timestamps.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If frequency doesn&#39;t match or timestamps are not regular.</span>
+<span class="sd">            If frequency doesn&#39;t match or timestamps are not regular (when allow_gaps=False).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
             <span class="k">return</span>  <span class="c1"># Can&#39;t validate frequency with &lt; 2 samples</span>
@@ -993,8 +1059,12 @@
         <span class="c1"># Normalize &#39;H&#39; to &#39;h&#39; for backward compatibility</span>
         <span class="n">normalized_freq</span> <span class="o">=</span> <span class="n">expected_freq</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">if</span> <span class="n">expected_freq</span> <span class="o">==</span> <span class="s1">&#39;H&#39;</span> <span class="k">else</span> <span class="n">expected_freq</span>
 
-        <span class="c1"># Infer frequency from timestamps</span>
+        <span class="c1"># Try to infer frequency from timestamps</span>
         <span class="n">inferred_freq</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">infer_freq</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
+
+        <span class="c1"># If inference failed and gaps are allowed, infer from differences</span>
+        <span class="k">if</span> <span class="n">inferred_freq</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">allow_gaps</span><span class="p">:</span>
+            <span class="n">inferred_freq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_infer_frequency_from_differences</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">inferred_freq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1006,23 +1076,62 @@
         <span class="n">normalized_inferred</span> <span class="o">=</span> <span class="n">inferred_freq</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">if</span> <span class="n">inferred_freq</span> <span class="o">==</span> <span class="s1">&#39;H&#39;</span> <span class="k">else</span> <span class="n">inferred_freq</span>
 
         <span class="k">if</span> <span class="n">normalized_inferred</span> <span class="o">!=</span> <span class="n">normalized_freq</span><span class="p">:</span>
-            <span class="c1"># Try to create expected range and compare</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">expected_range</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span>
-                    <span class="n">start</span><span class="o">=</span><span class="n">timestamps</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                    <span class="n">periods</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">timestamps</span><span class="p">),</span>
-                    <span class="n">freq</span><span class="o">=</span><span class="n">normalized_freq</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">timestamps</span><span class="o">.</span><span class="n">equals</span><span class="p">(</span><span class="n">expected_range</span><span class="p">):</span>
+            <span class="c1"># When gaps are allowed, check that timestamps align with expected frequency</span>
+            <span class="c1"># (i.e., when a timestamp exists, it should be at a valid position)</span>
+            <span class="k">if</span> <span class="n">allow_gaps</span><span class="p">:</span>
+                <span class="c1"># Check that all timestamps are at valid positions for the expected frequency</span>
+                <span class="c1"># Get the time delta for the expected frequency</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="c1"># Try to parse the frequency string to get a timedelta</span>
+                    <span class="k">if</span> <span class="n">normalized_freq</span> <span class="o">==</span> <span class="s1">&#39;h&#39;</span> <span class="ow">or</span> <span class="n">normalized_freq</span> <span class="o">==</span> <span class="s1">&#39;H&#39;</span><span class="p">:</span>
+                        <span class="n">freq_delta</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">normalized_freq</span> <span class="o">==</span> <span class="s1">&#39;D&#39;</span><span class="p">:</span>
+                        <span class="n">freq_delta</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">normalized_freq</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;min&#39;</span><span class="p">):</span>
+                        <span class="n">minutes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">normalized_freq</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;min&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">))</span>
+                        <span class="n">freq_delta</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="n">minutes</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">normalized_freq</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;h&#39;</span><span class="p">):</span>
+                        <span class="n">hours</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">normalized_freq</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;h&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">))</span>
+                        <span class="n">freq_delta</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="n">hours</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Try to parse as pandas frequency</span>
+                        <span class="n">freq_delta</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">normalized_freq</span><span class="p">)</span>
+
+                    <span class="c1"># Check that timestamps are aligned (i.e., differences are multiples of freq_delta)</span>
+                    <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">diff</span> <span class="ow">in</span> <span class="n">diffs</span><span class="p">:</span>
+                        <span class="c1"># Check if diff is a multiple of freq_delta (within small tolerance)</span>
+                        <span class="c1"># Calculate how many periods this difference represents</span>
+                        <span class="n">periods</span> <span class="o">=</span> <span class="n">diff</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="n">freq_delta</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span>
+                        <span class="c1"># Check if it&#39;s close to an integer (within 1% tolerance)</span>
+                        <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">periods</span> <span class="o">-</span> <span class="nb">round</span><span class="p">(</span><span class="n">periods</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mf">0.01</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Timestamps are not aligned with expected frequency &#39;</span><span class="si">{</span><span class="n">expected_freq</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                                <span class="sa">f</span><span class="s2">&quot;Found difference of </span><span class="si">{</span><span class="n">diff</span><span class="si">}</span><span class="s2"> which is not a multiple of </span><span class="si">{</span><span class="n">freq_delta</span><span class="si">}</span><span class="s2">.&quot;</span>
+                            <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;Timestamps frequency &#39;</span><span class="si">{</span><span class="n">inferred_freq</span><span class="si">}</span><span class="s2">&#39; does not match &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;expected frequency &#39;</span><span class="si">{</span><span class="n">expected_freq</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;expected frequency &#39;</span><span class="si">{</span><span class="n">expected_freq</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Timestamps frequency &#39;</span><span class="si">{</span><span class="n">inferred_freq</span><span class="si">}</span><span class="s2">&#39; does not match &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;expected frequency &#39;</span><span class="si">{</span><span class="n">expected_freq</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Original strict validation</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">expected_range</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span>
+                        <span class="n">start</span><span class="o">=</span><span class="n">timestamps</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                        <span class="n">periods</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">timestamps</span><span class="p">),</span>
+                        <span class="n">freq</span><span class="o">=</span><span class="n">normalized_freq</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">timestamps</span><span class="o">.</span><span class="n">equals</span><span class="p">(</span><span class="n">expected_range</span><span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Timestamps frequency &#39;</span><span class="si">{</span><span class="n">inferred_freq</span><span class="si">}</span><span class="s2">&#39; does not match &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;expected frequency &#39;</span><span class="si">{</span><span class="n">expected_freq</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+                        <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Timestamps frequency &#39;</span><span class="si">{</span><span class="n">inferred_freq</span><span class="si">}</span><span class="s2">&#39; does not match &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;expected frequency &#39;</span><span class="si">{</span><span class="n">expected_freq</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_timestamp_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1388,9 +1497,15 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Extract timestamps before check_X_y converts DataFrame to array</span>
         <span class="n">timestamps</span><span class="p">,</span> <span class="n">X_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_timestamp_index</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+        <span class="c1"># Try to infer frequency - use gap-tolerant method if regular inference fails</span>
         <span class="n">inferred_freq</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">infer_freq</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
-        <span class="c1"># Validate frequency</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="n">inferred_freq</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">inferred_freq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Infer from time differences (handles gaps)</span>
+            <span class="n">inferred_freq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_infer_frequency_from_differences</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
+
+        <span class="c1"># Validate frequency (allow gaps)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="n">inferred_freq</span><span class="p">,</span> <span class="n">allow_gaps</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="c1"># Store frequency and reference timestamp</span>
         <span class="c1"># Normalize &#39;H&#39; to &#39;h&#39; for consistency</span>
@@ -1481,7 +1596,7 @@
         <span class="c1"># Add trend term if configured</span>
         <span class="n">trend_term</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">constraints</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
             <span class="n">trend_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span>
             <span class="c1"># Determine period and samples per period</span>
             <span class="n">period_hours</span><span class="p">,</span> <span class="n">samples_per_period</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_trend_period_hours</span><span class="p">(</span>
@@ -1515,12 +1630,12 @@
             <span class="c1"># Add constraints based on trend type</span>
             <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">trend</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># Baseline constraint</span>
 
-            <span class="k">if</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span><span class="p">:</span>
                 <span class="c1"># Linear trend: constant slope</span>
                 <span class="n">slope</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">slope</span>
                 <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">==</span> <span class="n">slope</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR</span><span class="p">:</span>
                 <span class="c1"># Nonlinear monotonic decreasing trend</span>
                 <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
             <span class="c1"># For &#39;none&#39;, trend_term is None so it won&#39;t be added</span>
@@ -1562,6 +1677,19 @@
         <span class="n">error</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span> <span class="o">-</span> <span class="n">model_term</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="n">error</span> <span class="o">+</span> <span class="n">regularization_term</span><span class="p">),</span> <span class="n">constraints</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">solver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
+
+        <span class="c1"># Check convergence</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">status</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;optimal&quot;</span><span class="p">,</span> <span class="s2">&quot;optimal_inaccurate&quot;</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Optimization problem did not converge. Status: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;This may cause NaN predictions. Check your data and model configuration.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Check that constant term is valid</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Constant term is None or NaN after optimization. Problem status: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
 
         <span class="c1"># Fit AR model if configured</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">ar_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1611,7 +1739,7 @@
                 <span class="n">baseline_pred</span> <span class="o">+=</span> <span class="n">F</span> <span class="o">@</span> <span class="n">fourier_coef</span>
 
         <span class="c1"># Add trend term if present</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">and</span> <span class="s1">&#39;trend&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">and</span> <span class="s1">&#39;trend&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
             <span class="n">trend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
             <span class="k">if</span> <span class="n">trend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;trend_T_matrix_&#39;</span><span class="p">):</span>
                 <span class="n">T</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trend_T_matrix_</span>
@@ -1717,8 +1845,8 @@
         <span class="c1"># Extract timestamps and validate</span>
         <span class="n">timestamps</span><span class="p">,</span> <span class="n">X_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_timestamp_index</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 
-        <span class="c1"># Validate frequency matches</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">)</span>
+        <span class="c1"># Validate frequency matches (allow gaps in prediction data too)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">,</span> <span class="n">allow_gaps</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="c1"># Convert timestamps to indices using stored reference</span>
         <span class="n">time_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timestamps_to_indices</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_reference_</span><span class="p">)</span>
@@ -1727,7 +1855,10 @@
         <span class="n">X_array</span> <span class="o">=</span> <span class="n">check_array</span><span class="p">(</span><span class="n">X_array</span><span class="p">,</span> <span class="n">ensure_min_features</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[]))</span>
 
         <span class="c1"># Initialize prediction with constant term</span>
-        <span class="n">predictions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">X_array</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">constant_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">if</span> <span class="n">constant_value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">constant_value</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Constant term is None or NaN: </span><span class="si">{</span><span class="n">constant_value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">predictions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">X_array</span><span class="p">),</span> <span class="n">constant_value</span><span class="p">)</span>
 
         <span class="c1"># Add exogenous terms if present</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">:</span>
@@ -1738,17 +1869,47 @@
                 <span class="n">stored_knots</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">TsgamSplineConfig</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
 
                 <span class="c1"># Use _process_exog_config with stored knots (will use config knots if stored_knots is None)</span>
-                <span class="n">_</span><span class="p">,</span> <span class="n">Hs_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_exog_config</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">exog_var</span><span class="p">,</span> <span class="n">knots</span><span class="o">=</span><span class="n">stored_knots</span><span class="p">)</span>
+                <span class="n">valid_mask_pred</span><span class="p">,</span> <span class="n">Hs_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_exog_config</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">exog_var</span><span class="p">,</span> <span class="n">knots</span><span class="o">=</span><span class="n">stored_knots</span><span class="p">)</span>
+
+                <span class="c1"># Check for NaN in input variable (this is a real problem, not just boundary effects)</span>
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">exog_var</span><span class="p">)):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Exogenous variable </span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2"> contains NaN values. &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;NaN count: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">exog_var</span><span class="p">))</span><span class="si">}</span><span class="s2"> out of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">exog_var</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
 
                 <span class="c1"># Compute exogenous prediction</span>
                 <span class="n">exog_coef</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;exog_coef_</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
                 <span class="k">if</span> <span class="n">exog_coef</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exogenous coefficients for variable </span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2"> are None. Model may not have converged.&quot;</span><span class="p">)</span>
-                <span class="n">exog_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">([</span><span class="n">H</span> <span class="o">@</span> <span class="n">exog_coef</span><span class="p">[:,</span> <span class="n">lag_ix</span><span class="p">]</span> <span class="k">for</span> <span class="n">lag_ix</span><span class="p">,</span> <span class="n">H</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">Hs_pred</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">exog_coef</span><span class="p">)):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exogenous coefficients for variable </span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2"> contain NaN.&quot;</span><span class="p">)</span>
+
+                <span class="c1"># Compute prediction - handle NaN from lead/lag operations gracefully</span>
+                <span class="c1"># NaN in basis matrices at boundaries is expected and handled by valid_mask</span>
+                <span class="n">exog_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">exog_var</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">lag_ix</span><span class="p">,</span> <span class="n">H</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">Hs_pred</span><span class="p">):</span>
+                    <span class="c1"># For each lag, compute contribution only for valid samples</span>
+                    <span class="c1"># Samples with NaN in basis matrix (from lead/lag boundaries) get 0 contribution</span>
+                    <span class="n">H_clean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">H</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>  <span class="c1"># Replace NaN with 0 for matrix multiplication</span>
+                    <span class="n">lag_contribution</span> <span class="o">=</span> <span class="n">H_clean</span> <span class="o">@</span> <span class="n">exog_coef</span><span class="p">[:,</span> <span class="n">lag_ix</span><span class="p">]</span>
+                    <span class="n">exog_pred</span> <span class="o">+=</span> <span class="n">lag_contribution</span>
+
+                <span class="c1"># Final check - should not have NaN after this</span>
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">exog_pred</span><span class="p">)):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Exogenous prediction for variable </span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2"> contains NaN after computation. &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;H shapes: </span><span class="si">{</span><span class="p">[</span><span class="n">H</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">H</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">Hs_pred</span><span class="p">]</span><span class="si">}</span><span class="s2">, exog_coef shape: </span><span class="si">{</span><span class="n">exog_coef</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;valid_mask has </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">valid_mask_pred</span><span class="p">)</span><span class="si">}</span><span class="s2"> valid samples out of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">exog_var</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
                 <span class="n">predictions</span> <span class="o">+=</span> <span class="n">exog_pred</span>
 
         <span class="c1"># Add Fourier terms if present</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_harmonic_config</span><span class="p">:</span>
+            <span class="c1"># Check for NaN in time_indices</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">time_indices</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Time indices contain NaN. Check timestamp conversion.&quot;</span><span class="p">)</span>
+
             <span class="c1"># Generate basis matrix for max index + 1, then index with time_indices</span>
             <span class="n">max_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">time_indices</span><span class="p">))</span>
             <span class="n">min_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">time_indices</span><span class="p">))</span>
@@ -1765,21 +1926,54 @@
                 <span class="n">adjusted_indices</span> <span class="o">=</span> <span class="n">time_indices</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
                 <span class="n">basis_length</span> <span class="o">=</span> <span class="n">max_idx</span> <span class="o">+</span> <span class="mi">1</span>
 
+            <span class="c1"># Validate indices are within bounds</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">adjusted_indices</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">adjusted_indices</span> <span class="o">&gt;=</span> <span class="n">basis_length</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Adjusted indices out of bounds: min=</span><span class="si">{</span><span class="n">adjusted_indices</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;max=</span><span class="si">{</span><span class="n">adjusted_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">, basis_length=</span><span class="si">{</span><span class="n">basis_length</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
             <span class="n">F_full</span> <span class="o">=</span> <span class="n">make_basis_matrix</span><span class="p">(</span>
                 <span class="n">num_harmonics</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_harmonic_config</span><span class="o">.</span><span class="n">num_harmonics</span><span class="p">,</span>
                 <span class="n">length</span><span class="o">=</span><span class="n">basis_length</span><span class="p">,</span>
                 <span class="n">periods</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_harmonic_config</span><span class="o">.</span><span class="n">periods</span>
             <span class="p">)</span>
+
+            <span class="c1"># Check for NaN in basis matrix</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">F_full</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Basis matrix contains NaN. basis_length=</span><span class="si">{</span><span class="n">basis_length</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;F_full shape: </span><span class="si">{</span><span class="n">F_full</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;time_indices range: [</span><span class="si">{</span><span class="n">min_idx</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">max_idx</span><span class="si">}</span><span class="s2">]&quot;</span>
+                <span class="p">)</span>
+
             <span class="c1"># Index with adjusted_indices to get correct rows</span>
             <span class="n">F</span> <span class="o">=</span> <span class="n">F_full</span><span class="p">[</span><span class="n">adjusted_indices</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span>  <span class="c1"># Drop constant column</span>
+
+            <span class="c1"># Check for NaN in indexed basis matrix</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">F</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Indexed basis matrix F contains NaN. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;F shape: </span><span class="si">{</span><span class="n">F</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, adjusted_indices range: [</span><span class="si">{</span><span class="n">adjusted_indices</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">adjusted_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">]&quot;</span>
+                <span class="p">)</span>
 
             <span class="n">fourier_coef</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;fourier_coef&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
             <span class="k">if</span> <span class="n">fourier_coef</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Fourier coefficients are None. Model may not have converged.&quot;</span><span class="p">)</span>
-            <span class="n">predictions</span> <span class="o">+=</span> <span class="n">F</span> <span class="o">@</span> <span class="n">fourier_coef</span>
+
+            <span class="c1"># Check for NaN in Fourier contribution</span>
+            <span class="n">fourier_contrib</span> <span class="o">=</span> <span class="n">F</span> <span class="o">@</span> <span class="n">fourier_coef</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">fourier_contrib</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Fourier contribution contains NaN. F shape: </span><span class="si">{</span><span class="n">F</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;fourier_coef shape: </span><span class="si">{</span><span class="n">fourier_coef</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;adjusted_indices range: [</span><span class="si">{</span><span class="n">adjusted_indices</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">adjusted_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">]&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">predictions</span> <span class="o">+=</span> <span class="n">fourier_contrib</span>
 
         <span class="c1"># Add trend term if present</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">and</span> <span class="s1">&#39;trend&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">and</span> <span class="s1">&#39;trend&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
             <span class="n">trend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
             <span class="k">if</span> <span class="n">trend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Trend coefficients are None. Model may not have converged.&quot;</span><span class="p">)</span>
@@ -1811,7 +2005,7 @@
                 <span class="n">trend_extended</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_periods_pred</span><span class="p">)</span>
                 <span class="n">trend_extended</span><span class="p">[:</span><span class="n">n_periods_fit</span><span class="p">]</span> <span class="o">=</span> <span class="n">trend</span>
 
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_periods_fit</span><span class="p">,</span> <span class="n">n_periods_pred</span><span class="p">):</span>
                         <span class="n">trend_extended</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">*</span> <span class="p">(</span><span class="n">i</span> <span class="o">-</span> <span class="n">n_periods_fit</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
@@ -1823,41 +2017,16 @@
             <span class="c1"># Add trend term to predictions</span>
             <span class="n">predictions</span> <span class="o">+=</span> <span class="n">T_pred</span> <span class="o">@</span> <span class="n">trend</span>
 
-        <span class="c1"># Add outlier detector term if present</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;outlier&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
-            <span class="n">outlier</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;outlier&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
-            <span class="k">if</span> <span class="n">outlier</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Outlier coefficients are None. Model may not have converged.&quot;</span><span class="p">)</span>
-
-            <span class="c1"># Use stored period_hours from fit</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;outlier_period_hours_&#39;</span><span class="p">):</span>
-                <span class="n">period_hours</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">outlier_period_hours_</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># Fallback: use config value or default to 24.0</span>
-                <span class="n">period_hours</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">24.0</span>
-
-            <span class="c1"># Calculate period indices for prediction timestamps</span>
-            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="n">period_hours</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
-            <span class="n">n_periods_fit</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">outlier</span><span class="p">)</span>
-            <span class="n">n_periods_pred</span> <span class="o">=</span> <span class="n">period_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
-
-            <span class="c1"># Create T matrix for predictions</span>
-            <span class="n">T_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">),</span> <span class="n">n_periods_pred</span><span class="p">))</span>
-            <span class="c1"># Use numpy advanced indexing for efficiency</span>
-            <span class="c1"># Filter out negative indices (can occur if predicting before training data)</span>
-            <span class="n">valid_mask</span> <span class="o">=</span> <span class="n">period_indices</span> <span class="o">&gt;=</span> <span class="mi">0</span>
-            <span class="n">T_pred</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">period_indices</span><span class="p">))[</span><span class="n">valid_mask</span><span class="p">],</span> <span class="n">period_indices</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]]</span> <span class="o">=</span> <span class="mf">1.0</span>
-
-            <span class="c1"># Extend outlier if prediction extends beyond training data</span>
-            <span class="c1"># For outliers, use 0 (no correction) for periods beyond training data</span>
-            <span class="k">if</span> <span class="n">n_periods_pred</span> <span class="o">&gt;</span> <span class="n">n_periods_fit</span><span class="p">:</span>
-                <span class="n">outlier_extended</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_periods_pred</span><span class="p">)</span>
-                <span class="n">outlier_extended</span><span class="p">[:</span><span class="n">n_periods_fit</span><span class="p">]</span> <span class="o">=</span> <span class="n">outlier</span>
-                <span class="c1"># Remaining periods get 0 (no outlier correction)</span>
-                <span class="n">outlier</span> <span class="o">=</span> <span class="n">outlier_extended</span>
-
-            <span class="c1"># Add outlier term to predictions</span>
-            <span class="n">predictions</span> <span class="o">+=</span> <span class="n">T_pred</span> <span class="o">@</span> <span class="n">outlier</span>
+        <span class="c1"># Final check for NaN in predictions</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">predictions</span><span class="p">)):</span>
+            <span class="n">nan_count</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">predictions</span><span class="p">))</span>
+            <span class="n">nan_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">predictions</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Predictions contain </span><span class="si">{</span><span class="n">nan_count</span><span class="si">}</span><span class="s2"> NaN values out of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;First few NaN indices: </span><span class="si">{</span><span class="n">nan_indices</span><span class="p">[:</span><span class="mi">10</span><span class="p">]</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">nan_indices</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">[]</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Constant value: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Time indices range: [</span><span class="si">{</span><span class="n">time_indices</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">time_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">]&quot;</span>
+            <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">predictions</span></div>
 
