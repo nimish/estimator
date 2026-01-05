@@ -203,7 +203,7 @@ class TsgamTrendConfig:
     >>> # No trend
     >>> config = TsgamTrendConfig(trend_type='none')
     """
-    type: TrendType = TrendType.NONE
+    trend_type: TrendType = TrendType.NONE
     grouping: float | None = None # todo: rename this to something better
     reg_weight: float = 10.0
 
@@ -868,9 +868,72 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return period_hours, samples_per_period
 
-    def _validate_frequency(self, timestamps, expected_freq):
+    def _infer_frequency_from_differences(self, timestamps):
         """
-        Validate that timestamps match expected frequency.
+        Infer the intended frequency from time differences, even when there are gaps.
+
+        This method finds the most common time difference between consecutive timestamps
+        and maps it to a pandas frequency string.
+
+        Parameters
+        ----------
+        timestamps : DatetimeIndex
+            Timestamps (may have gaps)
+
+        Returns
+        -------
+        freq : str
+            Inferred frequency string (e.g., 'h', '15min', 'D')
+        """
+        if len(timestamps) < 2:
+            raise ValueError("Need at least 2 timestamps to infer frequency")
+
+        # Compute time differences
+        diffs = timestamps[1:] - timestamps[:-1]
+        diff_seconds = np.array([d.total_seconds() for d in diffs])
+
+        # Find the most common difference (mode)
+        # Use histogram to find the most frequent difference
+        # Round to nearest second to handle floating point issues
+        diff_seconds_rounded = np.round(diff_seconds).astype(int)
+        unique_diffs, counts = np.unique(diff_seconds_rounded, return_counts=True)
+        most_common_diff_seconds = unique_diffs[np.argmax(counts)]
+
+        # Map to pandas frequency string
+        # Common mappings:
+        freq_mapping = {
+            60: '1min',
+            300: '5min',
+            900: '15min',
+            3600: 'h',  # or 'H'
+            86400: 'D',
+        }
+
+        # Try exact match first
+        if most_common_diff_seconds in freq_mapping:
+            return freq_mapping[most_common_diff_seconds]
+
+        # Try approximate match (within 1% tolerance)
+        for diff_sec, freq_str in freq_mapping.items():
+            if abs(most_common_diff_seconds - diff_sec) / diff_sec < 0.01:
+                return freq_str
+
+        # If no match, try to construct frequency from seconds
+        if most_common_diff_seconds < 60:
+            return f'{most_common_diff_seconds}S'
+        elif most_common_diff_seconds < 3600:
+            minutes = most_common_diff_seconds // 60
+            return f'{minutes}min'
+        elif most_common_diff_seconds < 86400:
+            hours = most_common_diff_seconds // 3600
+            return f'{hours}h'
+        else:
+            days = most_common_diff_seconds // 86400
+            return f'{days}D'
+
+    def _validate_frequency(self, timestamps, expected_freq, allow_gaps=True):
+        """
+        Validate that timestamps match expected frequency, optionally allowing gaps.
 
         Parameters
         ----------
@@ -878,11 +941,14 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             Timestamps to validate.
         expected_freq : str
             Expected pandas frequency string (e.g., 'h' for hourly, 'H' also accepted).
+        allow_gaps : bool, default=True
+            If True, allow gaps in timestamps and infer frequency from differences.
+            If False, require perfectly regular timestamps.
 
         Raises
         ------
         ValueError
-            If frequency doesn't match or timestamps are not regular.
+            If frequency doesn't match or timestamps are not regular (when allow_gaps=False).
         """
         if len(timestamps) < 2:
             return  # Can't validate frequency with < 2 samples
@@ -890,8 +956,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         # Normalize 'H' to 'h' for backward compatibility
         normalized_freq = expected_freq.lower() if expected_freq == 'H' else expected_freq
 
-        # Infer frequency from timestamps
+        # Try to infer frequency from timestamps
         inferred_freq = pd.infer_freq(timestamps)
+
+        # If inference failed and gaps are allowed, infer from differences
+        if inferred_freq is None and allow_gaps:
+            inferred_freq = self._infer_frequency_from_differences(timestamps)
 
         if inferred_freq is None:
             raise ValueError(
@@ -903,23 +973,62 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         normalized_inferred = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
 
         if normalized_inferred != normalized_freq:
-            # Try to create expected range and compare
-            try:
-                expected_range = pd.date_range(
-                    start=timestamps[0],
-                    periods=len(timestamps),
-                    freq=normalized_freq
-                )
-                if not timestamps.equals(expected_range):
+            # When gaps are allowed, check that timestamps align with expected frequency
+            # (i.e., when a timestamp exists, it should be at a valid position)
+            if allow_gaps:
+                # Check that all timestamps are at valid positions for the expected frequency
+                # Get the time delta for the expected frequency
+                try:
+                    # Try to parse the frequency string to get a timedelta
+                    if normalized_freq == 'h' or normalized_freq == 'H':
+                        freq_delta = pd.Timedelta(hours=1)
+                    elif normalized_freq == 'D':
+                        freq_delta = pd.Timedelta(days=1)
+                    elif normalized_freq.endswith('min'):
+                        minutes = int(normalized_freq.replace('min', ''))
+                        freq_delta = pd.Timedelta(minutes=minutes)
+                    elif normalized_freq.endswith('h'):
+                        hours = int(normalized_freq.replace('h', ''))
+                        freq_delta = pd.Timedelta(hours=hours)
+                    else:
+                        # Try to parse as pandas frequency
+                        freq_delta = pd.Timedelta(normalized_freq)
+
+                    # Check that timestamps are aligned (i.e., differences are multiples of freq_delta)
+                    diffs = timestamps[1:] - timestamps[:-1]
+                    for diff in diffs:
+                        # Check if diff is a multiple of freq_delta (within small tolerance)
+                        # Calculate how many periods this difference represents
+                        periods = diff.total_seconds() / freq_delta.total_seconds()
+                        # Check if it's close to an integer (within 1% tolerance)
+                        if abs(periods - round(periods)) > 0.01:
+                            raise ValueError(
+                                f"Timestamps are not aligned with expected frequency '{expected_freq}'. "
+                                f"Found difference of {diff} which is not a multiple of {freq_delta}."
+                            )
+                except Exception as e:
                     raise ValueError(
                         f"Timestamps frequency '{inferred_freq}' does not match "
-                        f"expected frequency '{expected_freq}'."
+                        f"expected frequency '{expected_freq}': {e}"
                     )
-            except Exception as e:
-                raise ValueError(
-                    f"Timestamps frequency '{inferred_freq}' does not match "
-                    f"expected frequency '{expected_freq}': {e}"
-                )
+            else:
+                # Original strict validation
+                try:
+                    expected_range = pd.date_range(
+                        start=timestamps[0],
+                        periods=len(timestamps),
+                        freq=normalized_freq
+                    )
+                    if not timestamps.equals(expected_range):
+                        raise ValueError(
+                            f"Timestamps frequency '{inferred_freq}' does not match "
+                            f"expected frequency '{expected_freq}'."
+                        )
+                except Exception as e:
+                    raise ValueError(
+                        f"Timestamps frequency '{inferred_freq}' does not match "
+                        f"expected frequency '{expected_freq}': {e}"
+                    )
 
     def _ensure_timestamp_index(self, X):
         """
@@ -1283,9 +1392,15 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         """
         # Extract timestamps before check_X_y converts DataFrame to array
         timestamps, X_array = self._ensure_timestamp_index(X)
+
+        # Try to infer frequency - use gap-tolerant method if regular inference fails
         inferred_freq = pd.infer_freq(timestamps)
-        # Validate frequency
-        self._validate_frequency(timestamps, inferred_freq)
+        if inferred_freq is None:
+            # Infer from time differences (handles gaps)
+            inferred_freq = self._infer_frequency_from_differences(timestamps)
+
+        # Validate frequency (allow gaps)
+        self._validate_frequency(timestamps, inferred_freq, allow_gaps=True)
 
         # Store frequency and reference timestamp
         # Normalize 'H' to 'h' for consistency
@@ -1376,7 +1491,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         # Add trend term if configured
         trend_term = None
         constraints = []
-        if self.config.trend_config is not None and self.config.trend_config.type != TrendType.NONE:
+        if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE:
             trend_config = self.config.trend_config
             # Determine period and samples per period
             period_hours, samples_per_period = self._get_trend_period_hours(
@@ -1410,12 +1525,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             # Add constraints based on trend type
             constraints.append(trend[0] == 0)  # Baseline constraint
 
-            if trend_config.type == TrendType.LINEAR:
+            if trend_config.trend_type == TrendType.LINEAR:
                 # Linear trend: constant slope
                 slope = cvxpy.Variable()
                 self.variables_['trend_slope'] = slope
                 constraints.append(cvxpy.diff(trend) == slope)
-            elif trend_config.type == TrendType.NONLINEAR:
+            elif trend_config.trend_type == TrendType.NONLINEAR:
                 # Nonlinear monotonic decreasing trend
                 constraints.append(cvxpy.diff(trend) <= 0)
             # For 'none', trend_term is None so it won't be added
@@ -1457,6 +1572,19 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         error = cvxpy.sum_squares(y[self.combined_valid_mask_] - model_term) / np.sum(self.combined_valid_mask_)
         self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term), constraints)
         self.problem_.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
+
+        # Check convergence
+        if self.problem_.status not in ["optimal", "optimal_inaccurate"]:
+            raise ValueError(
+                f"Optimization problem did not converge. Status: {self.problem_.status}. "
+                f"This may cause NaN predictions. Check your data and model configuration."
+            )
+
+        # Check that constant term is valid
+        if self.variables_['constant'].value is None or np.isnan(self.variables_['constant'].value):
+            raise ValueError(
+                f"Constant term is None or NaN after optimization. Problem status: {self.problem_.status}"
+            )
 
         # Fit AR model if configured
         if self.config.ar_config is not None:
@@ -1505,7 +1633,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 baseline_pred += F @ fourier_coef
 
         # Add trend term if present
-        if self.config.trend_config is not None and self.config.trend_config.type != TrendType.NONE and 'trend' in self.variables_:
+        if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_:
             trend = self.variables_['trend'].value
             if trend is not None and hasattr(self, 'trend_T_matrix_'):
                 T = self.trend_T_matrix_
@@ -1609,8 +1737,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         # Extract timestamps and validate
         timestamps, X_array = self._ensure_timestamp_index(X)
 
-        # Validate frequency matches
-        self._validate_frequency(timestamps, self.freq_)
+        # Validate frequency matches (allow gaps in prediction data too)
+        self._validate_frequency(timestamps, self.freq_, allow_gaps=True)
 
         # Convert timestamps to indices using stored reference
         time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
@@ -1619,7 +1747,10 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         X_array = check_array(X_array, ensure_min_features=len(self.config.exog_config or []))
 
         # Initialize prediction with constant term
-        predictions = np.full(len(X_array), self.variables_['constant'].value)
+        constant_value = self.variables_['constant'].value
+        if constant_value is None or np.isnan(constant_value):
+            raise ValueError(f"Constant term is None or NaN: {constant_value}")
+        predictions = np.full(len(X_array), constant_value)
 
         # Add exogenous terms if present
         if self.config.exog_config:
@@ -1630,17 +1761,47 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 stored_knots = self.exog_knots_[ix] if isinstance(exog_cfg, TsgamSplineConfig) else None
 
                 # Use _process_exog_config with stored knots (will use config knots if stored_knots is None)
-                _, Hs_pred = self._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
+                valid_mask_pred, Hs_pred = self._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
+
+                # Check for NaN in input variable (this is a real problem, not just boundary effects)
+                if np.any(np.isnan(exog_var)):
+                    raise ValueError(
+                        f"Exogenous variable {ix} contains NaN values. "
+                        f"NaN count: {np.sum(np.isnan(exog_var))} out of {len(exog_var)}"
+                    )
 
                 # Compute exogenous prediction
                 exog_coef = self.variables_[f'exog_coef_{ix}'].value
                 if exog_coef is None:
                     raise ValueError(f"Exogenous coefficients for variable {ix} are None. Model may not have converged.")
-                exog_pred = np.sum([H @ exog_coef[:, lag_ix] for lag_ix, H in enumerate(Hs_pred)], axis=0)
+                if np.any(np.isnan(exog_coef)):
+                    raise ValueError(f"Exogenous coefficients for variable {ix} contain NaN.")
+
+                # Compute prediction - handle NaN from lead/lag operations gracefully
+                # NaN in basis matrices at boundaries is expected and handled by valid_mask
+                exog_pred = np.zeros(len(exog_var))
+                for lag_ix, H in enumerate(Hs_pred):
+                    # For each lag, compute contribution only for valid samples
+                    # Samples with NaN in basis matrix (from lead/lag boundaries) get 0 contribution
+                    H_clean = np.nan_to_num(H, nan=0.0)  # Replace NaN with 0 for matrix multiplication
+                    lag_contribution = H_clean @ exog_coef[:, lag_ix]
+                    exog_pred += lag_contribution
+
+                # Final check - should not have NaN after this
+                if np.any(np.isnan(exog_pred)):
+                    raise ValueError(
+                        f"Exogenous prediction for variable {ix} contains NaN after computation. "
+                        f"H shapes: {[H.shape for H in Hs_pred]}, exog_coef shape: {exog_coef.shape}, "
+                        f"valid_mask has {np.sum(valid_mask_pred)} valid samples out of {len(exog_var)}"
+                    )
                 predictions += exog_pred
 
         # Add Fourier terms if present
         if self.config.multi_harmonic_config:
+            # Check for NaN in time_indices
+            if np.any(np.isnan(time_indices)):
+                raise ValueError("Time indices contain NaN. Check timestamp conversion.")
+
             # Generate basis matrix for max index + 1, then index with time_indices
             max_idx = int(np.max(time_indices))
             min_idx = int(np.min(time_indices))
@@ -1657,21 +1818,54 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 adjusted_indices = time_indices.astype(int)
                 basis_length = max_idx + 1
 
+            # Validate indices are within bounds
+            if np.any(adjusted_indices < 0) or np.any(adjusted_indices >= basis_length):
+                raise ValueError(
+                    f"Adjusted indices out of bounds: min={adjusted_indices.min()}, "
+                    f"max={adjusted_indices.max()}, basis_length={basis_length}"
+                )
+
             F_full = make_basis_matrix(
                 num_harmonics=self.config.multi_harmonic_config.num_harmonics,
                 length=basis_length,
                 periods=self.config.multi_harmonic_config.periods
             )
+
+            # Check for NaN in basis matrix
+            if np.any(np.isnan(F_full)):
+                raise ValueError(
+                    f"Basis matrix contains NaN. basis_length={basis_length}, "
+                    f"F_full shape: {F_full.shape}, "
+                    f"time_indices range: [{min_idx}, {max_idx}]"
+                )
+
             # Index with adjusted_indices to get correct rows
             F = F_full[adjusted_indices, 1:]  # Drop constant column
+
+            # Check for NaN in indexed basis matrix
+            if np.any(np.isnan(F)):
+                raise ValueError(
+                    f"Indexed basis matrix F contains NaN. "
+                    f"F shape: {F.shape}, adjusted_indices range: [{adjusted_indices.min()}, {adjusted_indices.max()}]"
+                )
 
             fourier_coef = self.variables_['fourier_coef'].value
             if fourier_coef is None:
                 raise ValueError("Fourier coefficients are None. Model may not have converged.")
-            predictions += F @ fourier_coef
+
+            # Check for NaN in Fourier contribution
+            fourier_contrib = F @ fourier_coef
+            if np.any(np.isnan(fourier_contrib)):
+                raise ValueError(
+                    f"Fourier contribution contains NaN. F shape: {F.shape}, "
+                    f"fourier_coef shape: {fourier_coef.shape}, "
+                    f"adjusted_indices range: [{adjusted_indices.min()}, {adjusted_indices.max()}]"
+                )
+
+            predictions += fourier_contrib
 
         # Add trend term if present
-        if self.config.trend_config is not None and self.config.trend_config.type != TrendType.NONE and 'trend' in self.variables_:
+        if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_:
             trend = self.variables_['trend'].value
             if trend is None:
                 raise ValueError("Trend coefficients are None. Model may not have converged.")
@@ -1703,7 +1897,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 trend_extended = np.zeros(n_periods_pred)
                 trend_extended[:n_periods_fit] = trend
 
-                if self.config.trend_config.type == TrendType.LINEAR and self.variables_['trend_slope'].value is not None:
+                if self.config.trend_config.trend_type == TrendType.LINEAR and self.variables_['trend_slope'].value is not None:
                     for i in range(n_periods_fit, n_periods_pred):
                         trend_extended[i] = trend[-1] + self.variables_['trend_slope'].value * (i - n_periods_fit + 1)
                 else:
@@ -1715,41 +1909,16 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             # Add trend term to predictions
             predictions += T_pred @ trend
 
-        # Add outlier detector term if present
-        if self.config.outlier_config is not None and 'outlier' in self.variables_:
-            outlier = self.variables_['outlier'].value
-            if outlier is None:
-                raise ValueError("Outlier coefficients are None. Model may not have converged.")
-
-            # Use stored period_hours from fit
-            if hasattr(self, 'outlier_period_hours_'):
-                period_hours = self.outlier_period_hours_
-            else:
-                # Fallback: use config value or default to 24.0
-                period_hours = self.config.outlier_config.period_hours if self.config.outlier_config.period_hours is not None else 24.0
-
-            # Calculate period indices for prediction timestamps
-            period_indices = (time_indices / period_hours).astype(int)
-            n_periods_fit = len(outlier)
-            n_periods_pred = period_indices.max() + 1
-
-            # Create T matrix for predictions
-            T_pred = np.zeros((len(predictions), n_periods_pred))
-            # Use numpy advanced indexing for efficiency
-            # Filter out negative indices (can occur if predicting before training data)
-            valid_mask = period_indices >= 0
-            T_pred[np.arange(len(period_indices))[valid_mask], period_indices[valid_mask]] = 1.0
-
-            # Extend outlier if prediction extends beyond training data
-            # For outliers, use 0 (no correction) for periods beyond training data
-            if n_periods_pred > n_periods_fit:
-                outlier_extended = np.zeros(n_periods_pred)
-                outlier_extended[:n_periods_fit] = outlier
-                # Remaining periods get 0 (no outlier correction)
-                outlier = outlier_extended
-
-            # Add outlier term to predictions
-            predictions += T_pred @ outlier
+        # Final check for NaN in predictions
+        if np.any(np.isnan(predictions)):
+            nan_count = np.sum(np.isnan(predictions))
+            nan_indices = np.where(np.isnan(predictions))[0]
+            raise ValueError(
+                f"Predictions contain {nan_count} NaN values out of {len(predictions)}. "
+                f"First few NaN indices: {nan_indices[:10] if len(nan_indices) > 0 else []}. "
+                f"Constant value: {self.variables_['constant'].value}, "
+                f"Time indices range: [{time_indices.min():.1f}, {time_indices.max():.1f}]"
+            )
 
         return predictions
 
