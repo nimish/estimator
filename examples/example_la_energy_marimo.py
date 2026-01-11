@@ -1584,6 +1584,7 @@ def _(
     y_test_aligned,
     y_train_aligned,
 ):
+
     # Ablation test: test different model configurations
     print("Running ablation test...")
     print("=" * 80)

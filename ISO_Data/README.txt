@@ -1,1 +1,0 @@
-data from: https://github.com/cvxgrp/smooth_multiperiodic_forecasting_experiments

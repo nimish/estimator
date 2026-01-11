@@ -58,6 +58,7 @@ def _():
         TsgamMultiHarmonicConfig,
         TsgamSplineConfig,
         TsgamArConfig,
+        TsgamOutlierConfig,
         TsgamSolverConfig,
         PERIOD_HOURLY_DAILY,
         PERIOD_HOURLY_WEEKLY,
@@ -72,6 +73,7 @@ def _():
         TsgamEstimator,
         TsgamEstimatorConfig,
         TsgamMultiHarmonicConfig,
+        TsgamOutlierConfig,
         TsgamSolverConfig,
         TsgamSplineConfig,
         mo,
@@ -418,6 +420,13 @@ def _(mo):
     test_end = mo.ui.text(value='2014-03-31', label='Test end date')
     take_log = mo.ui.switch(label='Take log of target data', value=True)
     use_ar = mo.ui.switch(label='Use AR model', value=True)
+    use_outlier = mo.ui.switch(label='Use outlier detector', value=False)
+    outlier_reg_weight = mo.ui.slider(0.0001, 2.0, step=0.0001, value=0.002, label='Outlier L1 reg weight')
+    use_temp = mo.ui.switch(label='Use temperature', value=True)
+    use_dewpoint = mo.ui.switch(label='Use dewpoint', value=True)
+    use_wind = mo.ui.switch(label='Use wind speed', value=True)
+    use_pressure = mo.ui.switch(label='Use pressure', value=True)
+    use_rain = mo.ui.switch(label='Use rain hours', value=True)
     solver_select = mo.ui.dropdown(['CLARABEL', 'MOSEK'], value='CLARABEL', label='Solver')
     verbose = mo.ui.switch(label='Verbose solver output', value=False)
     debug = mo.ui.switch(label='Debug mode', value=False)
@@ -425,11 +434,17 @@ def _(mo):
     mo.vstack([
         mo.hstack([train_start, train_end]),
         mo.hstack([test_start, test_end]),
-        mo.hstack([take_log, use_ar, solver_select]),
+        mo.hstack([take_log, use_ar, use_outlier]),
+        mo.hstack([outlier_reg_weight]),
+        mo.md("**Exogenous Variables:**"),
+        mo.hstack([use_temp, use_dewpoint, use_wind]),
+        mo.hstack([use_pressure, use_rain]),
+        mo.hstack([solver_select]),
         mo.hstack([verbose, debug])
     ])
     return (
         debug,
+        outlier_reg_weight,
         solver_select,
         take_log,
         test_end,
@@ -437,12 +452,30 @@ def _(mo):
         train_end,
         train_start,
         use_ar,
+        use_dewpoint,
+        use_outlier,
+        use_pressure,
+        use_rain,
+        use_temp,
+        use_wind,
         verbose,
     )
 
 
 @app.cell
-def _(df, pd, test_end, test_start, train_end, train_start):
+def _(
+    df,
+    pd,
+    test_end,
+    test_start,
+    train_end,
+    train_start,
+    use_dewpoint,
+    use_pressure,
+    use_rain,
+    use_temp,
+    use_wind,
+):
     # Split data
     df_train = df[train_start.value:train_end.value].copy()
     df_test = df[test_start.value:test_end.value].copy()
@@ -454,22 +487,40 @@ def _(df, pd, test_end, test_start, train_end, train_start):
     y_train = df_train['pm25'].values
     y_test = df_test['pm25'].values
 
-    # Prepare exogenous variables
-    X_train = pd.DataFrame({
-        'temperature': df_train['temperature'].values,
-        'dewpoint': df_train['dewpoint'].values,
-        'wind_speed': df_train['wind_speed'].values,
-        'pressure': df_train['pressure'].values,
-        'rain_hours': df_train['rain_hours'].values,
-    }, index=df_train.index)
+    # Prepare exogenous variables based on selection
+    exog_dict_train = {}
+    exog_dict_test = {}
 
-    X_test = pd.DataFrame({
-        'temperature': df_test['temperature'].values,
-        'dewpoint': df_test['dewpoint'].values,
-        'wind_speed': df_test['wind_speed'].values,
-        'pressure': df_test['pressure'].values,
-        'rain_hours': df_test['rain_hours'].values,
-    }, index=df_test.index)
+    if use_temp.value:
+        exog_dict_train['temperature'] = df_train['temperature'].values
+        exog_dict_test['temperature'] = df_test['temperature'].values
+
+    if use_dewpoint.value:
+        exog_dict_train['dewpoint'] = df_train['dewpoint'].values
+        exog_dict_test['dewpoint'] = df_test['dewpoint'].values
+
+    if use_wind.value:
+        exog_dict_train['wind_speed'] = df_train['wind_speed'].values
+        exog_dict_test['wind_speed'] = df_test['wind_speed'].values
+
+    if use_pressure.value:
+        exog_dict_train['pressure'] = df_train['pressure'].values
+        exog_dict_test['pressure'] = df_test['pressure'].values
+
+    if use_rain.value:
+        exog_dict_train['rain_hours'] = df_train['rain_hours'].values
+        exog_dict_test['rain_hours'] = df_test['rain_hours'].values
+
+    # Create DataFrames - handle empty case
+    if len(exog_dict_train) == 0:
+        X_train = pd.DataFrame(index=df_train.index)
+        X_test = pd.DataFrame(index=df_test.index)
+    else:
+        X_train = pd.DataFrame(exog_dict_train, index=df_train.index)
+        X_test = pd.DataFrame(exog_dict_test, index=df_test.index)
+
+    print(f"Selected exogenous variables: {list(X_train.columns)}")
+    print(f"X_train shape: {X_train.shape}")
     return X_test, X_train, df_test, df_train, y_test, y_train
 
 
@@ -489,6 +540,7 @@ def _(
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamMultiHarmonicConfig,
+    TsgamOutlierConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
     X_train,
@@ -496,9 +548,11 @@ def _(
     fit_model,
     mo,
     np,
+    outlier_reg_weight,
     solver_select,
     take_log,
     use_ar,
+    use_outlier,
     verbose,
     y_train,
 ):
@@ -534,47 +588,68 @@ def _(
     # Exogenous variables configuration
     # Note: Only non-negative lags (0, 1, 2, ...) are used for forecasting
     # Negative lags would use future data, which is not available for forecasting
-    # Order must match the order of columns in X_train/X_test:
-    # 1. temperature, 2. dewpoint, 3. wind_speed, 4. pressure, 5. rain_hours
-    exog_config = [
-        # Temperature
-        # Note: n_knots=12 with lags=[0,1,2] fails when used alone, but works with other variables
-        # Using n_knots=10 for consistency with ablation study
-        TsgamSplineConfig(
-            n_knots=10,
+    # Order must match the order of columns in X_train/X_test
+
+    # Check if X_train has any columns
+    if X_train.shape[1] == 0:
+        exog_config = None
+    else:
+        exog_config = []
+
+    # Define configurations for each variable (in order they appear in X_train/X_test)
+    var_configs = {
+        'temperature': TsgamSplineConfig(
+            n_knots=8,
             lags=[0, 1, 2],  # Current, 1-2 hours back
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
-        # Dewpoint
-        TsgamSplineConfig(
+        'dewpoint': TsgamSplineConfig(
             n_knots=10,
             lags=[0, 1],  # Current, 1 hour back
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
-        # Wind Speed
-        TsgamSplineConfig(
+        'wind_speed': TsgamSplineConfig(
             n_knots=8,
             lags=[0, 1],  # Current, 1 hour back
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
-        # Pressure
-        TsgamSplineConfig(
+        'pressure': TsgamSplineConfig(
             n_knots=8,
             lags=[0],  # Current only
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
-        # Rain Hours
-        TsgamSplineConfig(
+        'rain_hours': TsgamSplineConfig(
             n_knots=6,
             lags=[0],  # Current only
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
-    ]
+    }
+
+    # Build exog_config based on selected variables (order matches X_train columns)
+    if exog_config is not None:
+        print(f"X_train columns: {list(X_train.columns)}")
+        print(f"X_train shape: {X_train.shape}")
+
+        for var_name in X_train.columns:
+            if var_name in var_configs:
+                exog_config.append(var_configs[var_name])
+            else:
+                # Fallback configuration if variable not in predefined configs
+                exog_config.append(TsgamSplineConfig(
+                    n_knots=8,
+                    lags=[0],
+                    reg_weight=6e-5,
+                    diff_reg_weight=0.5
+                ))
+
+        print(f"exog_config length: {len(exog_config)}")
+    else:
+        print("No exogenous variables selected - exog_config is None")
 
     # AR configuration
     ar_config = None
@@ -583,6 +658,17 @@ def _(
             lags=[1, 2, 3, 4],
             l1_constraint=0.97
         )
+    else:
+        ar_config = None
+
+    # Outlier detector configuration
+    if use_outlier.value:
+        outlier_config = TsgamOutlierConfig(
+            reg_weight=outlier_reg_weight.value,
+            period_hours=24.0  # Daily outliers
+        )
+    else:
+        outlier_config = None
 
     # Solver configuration
     solver_config = TsgamSolverConfig(
@@ -595,6 +681,7 @@ def _(
         multi_harmonic_config=multi_harmonic_config,
         exog_config=exog_config,
         ar_config=ar_config,
+        outlier_config=outlier_config,
         solver_config=solver_config,
         random_state=42,
         debug=debug.value
@@ -637,7 +724,7 @@ def _(mo):
     return (run_ablation,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     PERIOD_HOURLY_DAILY,
     PERIOD_HOURLY_WEEKLY,
@@ -679,19 +766,22 @@ def _(
     )
 
     # Variable configs mapping
-    # Note: n_knots=12 with lags=[0,1,2] fails with CLARABEL when used alone
-    # Diagnostic showed: n_knots=10 with lags=[0,1,2] works reliably
-    # Using n_knots=10 for temperature to ensure it works in ablation study
+    # Note: n_knots=10+ fails with CLARABEL for temperature when used alone or with dewpoint/wind_speed
+    # Testing showed: n_knots=8 with lags=[0,1,2] works reliably for all combinations
     _var_configs = {
-        'temperature': TsgamSplineConfig(n_knots=10, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),  # Using n_knots=10 to avoid solver failure
+        'temperature': TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),  # Using n_knots=8 to avoid solver failure
         'dewpoint': TsgamSplineConfig(n_knots=10, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
         'wind_speed': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
         'pressure': TsgamSplineConfig(n_knots=8, lags=[0], reg_weight=6e-5, diff_reg_weight=0.5),
         'rain_hours': TsgamSplineConfig(n_knots=6, lags=[0], reg_weight=6e-5, diff_reg_weight=0.5),
     }
 
+    # Get available variables from X_train
+    _available_vars = list(X_train.columns)
+
     # Test configurations - different combinations of variables
-    _test_configs = [
+    # Only include variables that are actually available in X_train
+    _all_test_configs = [
         {'name': 'Baseline (Seasonal Only)', 'vars': []},
         {'name': 'Temperature', 'vars': ['temperature']},
         {'name': 'Dewpoint', 'vars': ['dewpoint']},
@@ -707,6 +797,15 @@ def _(
         {'name': 'All Variables', 'vars': ['temperature', 'dewpoint', 'wind_speed', 'pressure', 'rain_hours']},
     ]
 
+    # Filter to only include configs where all variables are available
+    _test_configs = []
+    for _config in _all_test_configs:
+        if all(_var in _available_vars for _var in _config['vars']):
+            _test_configs.append(_config)
+
+    print(f"Available variables: {_available_vars}")
+    print(f"Testing {len(_test_configs)} configurations (filtered from {len(_all_test_configs)} total)")
+
     _ablation_results = {}
     _y_test_orig = None
 
@@ -716,6 +815,7 @@ def _(
 
     # Helper function to fit model (always use CLARABEL since no MOSEK license)
     def _fit_model(_name, _vars, _X_train, _X_test):
+        # Use var_configs directly - n_knots=8 works for all combinations
         _exog_config = [_var_configs[v] for v in _vars] if _vars else None
 
         # Always use CLARABEL (no MOSEK license available)
@@ -761,12 +861,14 @@ def _(
                     _y_test_orig = _y_test_log.copy()
 
             if take_log.value:
-                _pred_orig = np.exp(_pred_log) - 1.0
+                # Clip predictions to avoid overflow in exp
+                _pred_log_clipped = np.clip(_pred_log, -10, 20)  # Reasonable range for log space
+                _pred_orig = np.exp(_pred_log_clipped) - 1.0
             else:
                 _pred_orig = _pred_log.copy()
 
             # Calculate metrics
-            _valid = np.isfinite(_pred_orig) & np.isfinite(_y_test_orig) & (_y_test_orig > 0)
+            _valid = np.isfinite(_pred_orig) & np.isfinite(_y_test_orig) & (_y_test_orig > 0) & (_pred_orig > 0)
             if np.any(_valid):
                 _mae = np.mean(np.abs(_pred_orig[_valid] - _y_test_orig[_valid]))
                 _rmse = np.sqrt(np.mean((_pred_orig[_valid] - _y_test_orig[_valid])**2))
@@ -1072,6 +1174,131 @@ def _(np, plt, predictions_original, stats, y_test_original):
 
 @app.cell
 def _(mo):
+    mo.md(r"""
+    ## Outlier Detection Results
+    """)
+    return
+
+
+@app.cell
+def _(df_train, estimator, np, outlier_reg_weight, pd, plt, use_outlier):
+    # Plot outlier detection results if outlier detector was used
+    if not hasattr(estimator, 'variables_'):
+        _fig_outlier = plt.figure(figsize=(10, 6))
+        _ax = _fig_outlier.add_subplot(111)
+        _ax.text(0.5, 0.5, 'Fit the model first to see outlier detection results.',
+                ha='center', va='center', fontsize=14, transform=_ax.transAxes)
+        _ax.axis('off')
+    elif use_outlier.value and 'outlier' in estimator.variables_:
+        detected_outlier = estimator.variables_['outlier'].value
+        if detected_outlier is not None:
+            # Get training timestamps to map days to dates
+            timestamps = df_train.index
+            n_days = len(detected_outlier)
+
+            # Calculate day indices (assuming hourly data)
+            # Each day has 24 hours, so we need to map days to dates
+            day_dates = []
+            for day_idx in range(n_days):
+                hour_idx = day_idx * 24
+                if hour_idx < len(timestamps):
+                    day_dates.append(timestamps[hour_idx])
+                else:
+                    # Extend with last date if needed
+                    day_dates.append(timestamps[-1] + pd.Timedelta(days=day_idx - n_days + 1))
+
+            day_dates = pd.DatetimeIndex(day_dates)
+
+            # Create figure with subplots
+            _fig_outlier, _axes_outlier = plt.subplots(nrows=2, figsize=(16, 10))
+
+            # Plot 1: Outlier values over time
+            _ax1 = _axes_outlier[0]
+            _ax1.plot(day_dates, detected_outlier, 'b-', linewidth=1.5, marker='o', markersize=4, label='Detected outlier values')
+            _ax1.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
+            _ax1.axhline(y=0.1, color='orange', linestyle='--', linewidth=1, alpha=0.5, label='Threshold (|outlier| > 0.1)')
+            _ax1.axhline(y=-0.1, color='orange', linestyle='--', linewidth=1, alpha=0.5)
+
+            # Highlight significant outliers
+            significant_mask = np.abs(detected_outlier) > 0.1
+            if np.any(significant_mask):
+                _ax1.scatter(day_dates[significant_mask], detected_outlier[significant_mask],
+                           color='red', s=100, zorder=5, label='Significant outliers (|outlier| > 0.1)', marker='s')
+
+            _ax1.set_xlabel('Date', fontsize=11, fontweight='bold')
+            _ax1.set_ylabel('Outlier Value (log space)', fontsize=11, fontweight='bold')
+            _ax1.set_title('Detected Outlier Values Over Time', fontsize=12, fontweight='bold')
+            _ax1.legend(loc='best', fontsize=9)
+            _ax1.grid(True, alpha=0.3, linestyle='--')
+            _ax1.tick_params(axis='x', rotation=45)
+
+            # Plot 2: Histogram of outlier values
+            _ax2 = _axes_outlier[1]
+            _ax2.hist(detected_outlier, bins=50, alpha=0.7, color='steelblue', edgecolor='black', linewidth=0.5)
+            _ax2.axvline(x=0, color='k', linestyle='-', linewidth=1, alpha=0.5)
+            _ax2.axvline(x=0.1, color='orange', linestyle='--', linewidth=1, alpha=0.5, label='Threshold (|outlier| > 0.1)')
+            _ax2.axvline(x=-0.1, color='orange', linestyle='--', linewidth=1, alpha=0.5)
+            _ax2.set_xlabel('Outlier Value (log space)', fontsize=11, fontweight='bold')
+            _ax2.set_ylabel('Frequency (number of days)', fontsize=11, fontweight='bold')
+            _ax2.set_title('Distribution of Outlier Values', fontsize=12, fontweight='bold')
+            _ax2.legend(loc='best', fontsize=9)
+            _ax2.grid(True, alpha=0.3, linestyle='--', axis='y')
+
+            # Add statistics text
+            n_significant = np.sum(significant_mask)
+            sparsity = np.sum(np.abs(detected_outlier) < 0.1) / len(detected_outlier) * 100
+            stats_text = f'Total days: {n_days}\n'
+            stats_text += f'Significant outliers (|outlier| > 0.1): {n_significant}\n'
+            stats_text += f'Sparsity: {sparsity:.1f}% (days with |outlier| < 0.1)\n'
+            stats_text += f'Min: {np.min(detected_outlier):.4f}\n'
+            stats_text += f'Max: {np.max(detected_outlier):.4f}\n'
+            stats_text += f'Mean: {np.mean(detected_outlier):.4f}\n'
+            stats_text += f'Std: {np.std(detected_outlier):.4f}'
+
+            # Print outlier days with values
+            if n_significant > 0:
+                print(f"\nDetected {n_significant} outlier days (threshold: |outlier| > 0.05):")
+                for day_idx in np.where(significant_mask)[0]:
+                    outlier_val = detected_outlier[day_idx]
+                    multiplier = np.exp(outlier_val)
+                    print(f"  Day {day_idx} ({day_dates[day_idx].strftime('%Y-%m-%d')}): {outlier_val:.4f} (multiplier: {multiplier:.3f}x)")
+            else:
+                print(f"\nNo outliers detected with threshold |outlier| > 0.05")
+                print(f"Outlier value range: [{np.min(detected_outlier):.6f}, {np.max(detected_outlier):.6f}]")
+                print(f"Outlier value std: {np.std(detected_outlier):.6f}")
+                print(f"Current regularization weight: {outlier_reg_weight.value:.6f}")
+                if outlier_reg_weight.value > 0.002:
+                    print(f"Try lowering the regularization weight (can go as low as 0.0001)")
+                elif outlier_reg_weight.value < 0.001:
+                    print(f"Try increasing the regularization weight (can go up to 2.0) to reduce false positives")
+                else:
+                    print(f"Regularization weight is in a reasonable range. The data may not have strong outliers,")
+                    print(f"or the model may be explaining the variation through other components (trend, seasonality, etc.)")
+
+            _ax2.text(0.98, 0.98, stats_text, transform=_ax2.transAxes,
+                     fontsize=9, verticalalignment='top', horizontalalignment='right',
+                     bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+            plt.tight_layout()
+        else:
+            _fig_outlier = plt.figure(figsize=(10, 6))
+            _ax = _fig_outlier.add_subplot(111)
+            _ax.text(0.5, 0.5, 'Outlier detector was enabled but no outlier values were computed.\nModel may not have converged.',
+                    ha='center', va='center', fontsize=14, transform=_ax.transAxes)
+            _ax.axis('off')
+    else:
+        _fig_outlier = plt.figure(figsize=(10, 6))
+        _ax = _fig_outlier.add_subplot(111)
+        _ax.text(0.5, 0.5, 'Enable outlier detector in model configuration to see results.',
+                ha='center', va='center', fontsize=14, transform=_ax.transAxes)
+        _ax.axis('off')
+
+    plt.gcf()
+    return
+
+
+@app.cell
+def _(mo):
     res_dist = mo.ui.switch(label='Residual distribution: Normal <> Laplace', value=False)
     res_dist
     return (res_dist,)
@@ -1118,14 +1345,17 @@ def _(mo):
 @app.cell
 def _(X_train, estimator, mo, np):
     # Diagnostic: Check response function values
+    _log_response = None
+    _correction_factor = None
     if hasattr(estimator, 'variables_') and 'exog_coef_0' in estimator.variables_:
         _exog_coef = estimator.variables_['exog_coef_0'].value
         if _exog_coef is not None and estimator.exog_knots_ and len(estimator.exog_knots_) > 0:
             _knots = estimator.exog_knots_[0]
-            _x = X_train['temperature'].values
-            _H = estimator._make_H(_x, _knots, include_offset=False)
-            _log_response = _H @ _exog_coef[:, 0]
-            _correction_factor = np.exp(_log_response)
+            if 'temperature' in X_train.columns:
+                _x = X_train['temperature'].values
+                _H = estimator._make_H(_x, _knots, include_offset=False)
+                _log_response = _H @ _exog_coef[:, 0]
+                _correction_factor = np.exp(_log_response)
 
             mo.md(f"""
             ### Response Function Diagnostics
@@ -1137,9 +1367,9 @@ def _(X_train, estimator, mo, np):
             The response function shows: `correction_factor = exp(H @ exog_coef)`
 
             For temperature (example):
-            - Log-space response range: [{np.min(_log_response):.2f}, {np.max(_log_response):.2f}]
-            - Correction factor range: [{np.min(_correction_factor):.2e}, {np.max(_correction_factor):.2e}]
-            - Mean correction factor: {np.mean(_correction_factor):.2e}
+            {f"- Log-space response range: [{np.min(_log_response):.2f}, {np.max(_log_response):.2f}]" if _log_response is not None else "- Temperature variable not selected"}
+            {f"- Correction factor range: [{np.min(_correction_factor):.2e}, {np.max(_correction_factor):.2e}]" if _correction_factor is not None else ""}
+            {f"- Mean correction factor: {np.mean(_correction_factor):.2e}" if _correction_factor is not None else ""}
 
             **Explanation:**
             - If log-space response = 140, then exp(140) ≈ 1e61
@@ -1164,76 +1394,97 @@ def _(X_train, estimator, np, plt):
     _fig_resp, _axes_resp = plt.subplots(nrows=2, ncols=3, figsize=(18, 10))
     _axes_resp = _axes_resp.flatten()
 
-    # Configuration for each response function
+    # Configuration for each response function (metadata only - indices will be computed dynamically)
     _response_configs = [
         {
             'var_name': 'temperature',
-            'var_key': 'exog_coef_0',
-            'knot_idx': 0,
             'title': 'Temperature Response',
             'xlabel': 'Temperature (°C)',
             'color': None
         },
         {
             'var_name': 'dewpoint',
-            'var_key': 'exog_coef_1',
-            'knot_idx': 1,
             'title': 'Dewpoint Response',
             'xlabel': 'Dewpoint (°C)',
             'color': 'green'
         },
         {
             'var_name': 'wind_speed',
-            'var_key': 'exog_coef_2',
-            'knot_idx': 2,
             'title': 'Wind Speed Response',
             'xlabel': 'Wind Speed (m/s)',
             'color': 'orange'
         },
         {
             'var_name': 'pressure',
-            'var_key': 'exog_coef_3',
-            'knot_idx': 3,
             'title': 'Pressure Response',
             'xlabel': 'Pressure (hPa)',
             'color': 'purple'
         },
         {
             'var_name': 'rain_hours',
-            'var_key': 'exog_coef_4',
-            'knot_idx': 4,
             'title': 'Rain Hours Response',
             'xlabel': 'Rain Hours',
             'color': 'blue'
         }
     ]
 
+    # Create mapping from variable names to their indices in X_train
+    # This maps to exog_coef_{idx} and exog_knots_[idx]
+    _var_to_idx = {var_name: idx for idx, var_name in enumerate(X_train.columns)} if X_train.shape[1] > 0 else {}
+
     # Plot each response function
     for _idx, _config in enumerate(_response_configs):
         _ax = _axes_resp[_idx]
 
-        if hasattr(estimator, 'variables_') and _config['var_key'] in estimator.variables_:
-            _exog_coef = estimator.variables_[_config['var_key']].value
-            if _exog_coef is not None:
-                _knots = estimator.exog_knots_[_config['knot_idx']] if estimator.exog_knots_ and len(estimator.exog_knots_) > _config['knot_idx'] else None
-                if _knots is not None:
-                    _x = X_train[_config['var_name']].values
-                    _H = estimator._make_H(_x, _knots, include_offset=False)
-                    _log_response = _H @ _exog_coef[:, 0]
-                    _correction_factor = np.exp(_log_response)
+        # First check if variable exists in X_train
+        if _config['var_name'] not in X_train.columns:
+            # Variable not selected - show message
+            _ax.text(0.5, 0.5, f"Variable '{_config['var_name']}' not selected",
+                    ha='center', va='center', transform=_ax.transAxes, fontsize=10)
+        elif _config['var_name'] in _var_to_idx:
+            # Get the actual index for this variable
+            _var_idx = _var_to_idx[_config['var_name']]
+            _var_key = f'exog_coef_{_var_idx}'
 
-                    # Plot in log space (more interpretable)
-                    _scatter_kwargs = {'s': 1, 'alpha': 0.5}
-                    if _config['color']:
-                        _scatter_kwargs['color'] = _config['color']
-                    _ax.scatter(_x, _log_response, **_scatter_kwargs)
-                    _ax.axhline(y=0, color='red', linestyle='--', linewidth=1, alpha=0.5, label='No effect (log=0)')
+            if hasattr(estimator, 'variables_') and _var_key in estimator.variables_:
+                _exog_coef = estimator.variables_[_var_key].value
+                if _exog_coef is not None:
+                    _knots = estimator.exog_knots_[_var_idx] if estimator.exog_knots_ and len(estimator.exog_knots_) > _var_idx else None
+                    if _knots is not None:
+                        _x = X_train[_config['var_name']].values
+                        _H = estimator._make_H(_x, _knots, include_offset=False)
+                        _log_response = _H @ _exog_coef[:, 0]
+                        _correction_factor = np.exp(_log_response)
+
+                        # Plot in log space (more interpretable)
+                        _scatter_kwargs = {'s': 1, 'alpha': 0.5}
+                        if _config['color']:
+                            _scatter_kwargs['color'] = _config['color']
+                        _ax.scatter(_x, _log_response, **_scatter_kwargs)
+                        _ax.axhline(y=0, color='red', linestyle='--', linewidth=1, alpha=0.5, label='No effect (log=0)')
+                    else:
+                        # Knots not available
+                        _ax.text(0.5, 0.5, f"No knots available for '{_config['var_name']}'",
+                                ha='center', va='center', transform=_ax.transAxes, fontsize=10)
+                else:
+                    # Coefficients not available
+                    _ax.text(0.5, 0.5, f"No coefficients available for '{_config['var_name']}'",
+                            ha='center', va='center', transform=_ax.transAxes, fontsize=10)
+            else:
+                # Variable key not in estimator (variable not fitted)
+                _ax.text(0.5, 0.5, f"Variable '{_config['var_name']}' not fitted (key: {_var_key})",
+                        ha='center', va='center', transform=_ax.transAxes, fontsize=10)
+        else:
+            # Variable not in mapping (shouldn't happen, but handle gracefully)
+            _ax.text(0.5, 0.5, f"Variable '{_config['var_name']}' mapping error",
+                    ha='center', va='center', transform=_ax.transAxes, fontsize=10)
 
         _ax.set_title(f"Inferred {_config['title']} (Log Space)", fontsize=11, fontweight='bold')
         _ax.set_xlabel(_config['xlabel'], fontsize=10)
         _ax.set_ylabel('Log-space Response', fontsize=10)
         _ax.grid(True, alpha=0.3)
-        if _idx == 0:
+        # Only add legend if there are artists with labels
+        if _idx == 0 and len(_ax.get_legend_handles_labels()[0]) > 0:
             _ax.legend(fontsize=8)
 
     # Hide the 6th subplot (empty)

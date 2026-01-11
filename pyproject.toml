@@ -1,7 +1,7 @@
 [project]
-name = "estimator"
+name = "tsgam_estimator"
 version = "0.1.0"
-description = "Add your description here"
+description = "Time series GAM (Generalized Additive Model) estimators for load forecasting"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -9,7 +9,6 @@ dependencies = [
     "click>=8.1.0",
     "cvxpy>=1.7.3",
     "holidays>=0.87",
-    "marimo>=0.17.4",
     "matplotlib>=3.10.7",
     "msgspec>=0.20.0",
     "numpy>=2.3.4",
@@ -36,6 +35,11 @@ docs = [
     "myst-parser>=3.0.0",
 ]
 
+[build-system]
+requires = ["uv_build>=0.9.23,<0.10.0"]
+build-backend = "uv_build"
+
+
 [tool.coverage.run]
 relative_files = true
-source = ["tsgam_estimator", "load_model_estimator"]
+source = ["src/tsgam_estimator"]
