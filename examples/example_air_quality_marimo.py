@@ -171,7 +171,7 @@ def _(Path, np, pd, urllib, zipfile):
 
         # Separate numeric and non-numeric columns
         numeric_cols = df.select_dtypes(include=[np.number]).columns
-        non_numeric_cols = df.select_dtypes(exclude=[np.number]).columns
+        df.select_dtypes(exclude=[np.number]).columns
 
         # Only interpolate numeric columns
         if len(numeric_cols) > 0:
@@ -250,7 +250,7 @@ def _(df, pd):
     print(f"  Expected frequency: {_expected_freq}")
     print(f"  Missing timestamps: {len(_missing_timestamps)}")
     print(f"  Duplicate timestamps: {_duplicate_timestamps}")
-    print(f"  Missing values per column:")
+    print("  Missing values per column:")
     for _col in df.columns:
         _missing = df[_col].isna().sum()
         _pct = (_missing / len(df)) * 100
@@ -694,13 +694,13 @@ def _(
     print("Fitting model (this may take a few minutes)...")
     estimator.fit(X_train, y_train_log)
 
-    print(f"\nModel fitting complete!")
+    print("\nModel fitting complete!")
     print(f"Problem status: {estimator.problem_.status}")
     if estimator.problem_.status in ["optimal", "optimal_inaccurate"]:
         print(f"Optimal value: {estimator.problem_.value:.6e}")
 
     if estimator.ar_coef_ is not None:
-        print(f"\nAR model fitted successfully:")
+        print("\nAR model fitted successfully:")
         print(f"  AR coefficients: {estimator.ar_coef_}")
         print(f"  AR intercept: {estimator.ar_intercept_:.6f}")
     return (estimator,)
@@ -888,7 +888,7 @@ def _(
                     'success': False,
                     'error': 'No valid predictions'
                 }
-                print(f"   ✗ Failed: No valid predictions")
+                print("   ✗ Failed: No valid predictions")
         else:
             _ablation_results[_name] = {
                 'rmse': np.nan,
@@ -1034,7 +1034,7 @@ def _(X_test, estimator, np, take_log, y_test):
     else:
         mae = rmse = mape = np.nan
 
-    print(f"Forecast Performance Metrics:")
+    print("Forecast Performance Metrics:")
     print(f"  MAE:  {mae:.2f} μg/m³")
     print(f"  RMSE: {rmse:.2f} μg/m³")
     print(f"  MAPE: {mape:.2f}%")
@@ -1263,17 +1263,17 @@ def _(df_train, estimator, np, outlier_reg_weight, pd, plt, use_outlier):
                     multiplier = np.exp(outlier_val)
                     print(f"  Day {day_idx} ({day_dates[day_idx].strftime('%Y-%m-%d')}): {outlier_val:.4f} (multiplier: {multiplier:.3f}x)")
             else:
-                print(f"\nNo outliers detected with threshold |outlier| > 0.05")
+                print("\nNo outliers detected with threshold |outlier| > 0.05")
                 print(f"Outlier value range: [{np.min(detected_outlier):.6f}, {np.max(detected_outlier):.6f}]")
                 print(f"Outlier value std: {np.std(detected_outlier):.6f}")
                 print(f"Current regularization weight: {outlier_reg_weight.value:.6f}")
                 if outlier_reg_weight.value > 0.002:
-                    print(f"Try lowering the regularization weight (can go as low as 0.0001)")
+                    print("Try lowering the regularization weight (can go as low as 0.0001)")
                 elif outlier_reg_weight.value < 0.001:
-                    print(f"Try increasing the regularization weight (can go up to 2.0) to reduce false positives")
+                    print("Try increasing the regularization weight (can go up to 2.0) to reduce false positives")
                 else:
-                    print(f"Regularization weight is in a reasonable range. The data may not have strong outliers,")
-                    print(f"or the model may be explaining the variation through other components (trend, seasonality, etc.)")
+                    print("Regularization weight is in a reasonable range. The data may not have strong outliers,")
+                    print("or the model may be explaining the variation through other components (trend, seasonality, etc.)")
 
             _ax2.text(0.98, 0.98, stats_text, transform=_ax2.transAxes,
                      fontsize=9, verticalalignment='top', horizontalalignment='right',

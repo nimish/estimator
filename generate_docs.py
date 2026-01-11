@@ -51,7 +51,7 @@ def main():
                 ["sphinx-build", "-b", "html", ".", "_build/html"],
                 check=True,
             )
-            print(f"\nDocumentation built successfully!")
+            print("\nDocumentation built successfully!")
             print(f"Open {docs_dir / '_build' / 'html' / 'index.html'} in your browser to view.")
 
             if args.open:

@@ -141,7 +141,7 @@ def test_predictions_match_notebook(tsgam_estimator_for_prediction, notebook_dat
         err_msg="Predictions don't match notebook"
     )
 
-    print(f"\nPredictions comparison:")
+    print("\nPredictions comparison:")
     print(f"  Total predictions: {len(predictions_ours)}")
     print(f"  Valid predictions: {len(predictions_ours_valid)}")
     print(f"  Max absolute diff: {np.max(np.abs(predictions_ours_valid - predictions_notebook_valid)):.6e}")
@@ -162,7 +162,7 @@ def test_predictions_shape_matches_notebook(tsgam_estimator_for_prediction, note
     assert predictions_ours.shape == predictions_notebook.shape, \
         f"Shape mismatch: ours={predictions_ours.shape}, notebook={predictions_notebook.shape}"
 
-    print(f"\nPrediction shapes comparison:")
+    print("\nPrediction shapes comparison:")
     print(f"  Shape: {predictions_ours.shape}")
 
 
@@ -194,7 +194,7 @@ def test_prediction_statistics_match_notebook(tsgam_estimator_for_prediction, no
     std_ours = np.std(predictions_ours_valid)
     std_notebook = np.std(predictions_notebook_valid)
 
-    print(f"\nPrediction statistics comparison:")
+    print("\nPrediction statistics comparison:")
     print(f"  Mean - Ours: {mean_ours:.2f}, Notebook: {mean_notebook:.2f}, Diff: {abs(mean_ours - mean_notebook):.2f}")
     print(f"  Median - Ours: {median_ours:.2f}, Notebook: {median_notebook:.2f}, Diff: {abs(median_ours - median_notebook):.2f}")
     print(f"  Std - Ours: {std_ours:.2f}, Notebook: {std_notebook:.2f}, Diff: {abs(std_ours - std_notebook):.2f}")

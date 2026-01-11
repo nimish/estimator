@@ -102,7 +102,7 @@ def _(
     if fix_dst_slct.value:
         dh.fix_dst()
     _lt = lin_thresh_select.value
-    with mo.capture_stdout() as buffer:
+    with mo.capture_stdout():
         if len(col_select.value) == 1:
             dh.run_pipeline(power_col=_pc, max_val=2000, linearity_threshold=_lt)
         else:

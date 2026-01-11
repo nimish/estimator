@@ -574,7 +574,7 @@ def test_running_view_lag_verification():
     result_lag3 = estimator._running_view(arr, window, lag=3)
 
     # At position 5 (i=5), verify correct values are used
-    print(f"\nPosition 5 verification:")
+    print("\nPosition 5 verification:")
     print(f"  Lag=1: {result_lag1[5]} (should use arr[4], arr[3], arr[2] = [50, 40, 30])")
     print(f"  Lag=2: {result_lag2[5]} (should use arr[3], arr[2], arr[1] = [40, 30, 20])")
     print(f"  Lag=3: {result_lag3[5]} (should use arr[2], arr[1], arr[0] = [30, 20, 10])")

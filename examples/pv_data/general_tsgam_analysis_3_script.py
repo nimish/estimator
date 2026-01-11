@@ -19,10 +19,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import scipy.stats as stats
-import statsmodels.api as sm
 import click
 from sklearn.metrics import r2_score
-from solardatatools import DataHandler, plot_2d
+from solardatatools import DataHandler
 
 from tsgam_estimator import (
     TsgamEstimator,
@@ -195,7 +194,7 @@ def main(
         irrad_candidates = [c for c in df.columns if 'irrad' in c.lower() or 'poa' in c.lower()]
         irrad_col = irrad_candidates[0] if irrad_candidates else df.columns[2] if len(df.columns) > 2 else None
 
-    print(f"Using columns:")
+    print("Using columns:")
     print(f"  Primary: {primary_col}")
     print(f"  Module temp: {module_temp_col}")
     print(f"  Irradiance: {irrad_col}")
@@ -576,7 +575,7 @@ def _visualize_model_results(
         trend = estimator.variables_['trend'].value
         if trend is not None:
             # Print trend statistics for debugging
-            print(f"\nTrend statistics:")
+            print("\nTrend statistics:")
             print(f"  Length: {len(trend)}")
             print(f"  First value: {trend[0]:.6f}")
             print(f"  Last value: {trend[-1]:.6f}")
@@ -587,11 +586,11 @@ def _visualize_model_results(
             # Get trend type from estimator config
             est_trend_type = estimator.config.trend_config.trend_type.value if estimator.config.trend_config else 'none'
             if est_trend_type == 'linear':
-                print(f"  Differences (should be constant for linear):")
+                print("  Differences (should be constant for linear):")
             elif est_trend_type == 'nonlinear':
-                print(f"  Differences (nonlinear - should be <= 0 and variable):")
+                print("  Differences (nonlinear - should be <= 0 and variable):")
             else:
-                print(f"  Differences:")
+                print("  Differences:")
             print(f"    Mean: {np.mean(trend_diff):.6f}")
             print(f"    Std: {np.std(trend_diff):.6f}")
             print(f"    Min: {np.min(trend_diff):.6f}")
@@ -718,7 +717,7 @@ def _visualize_model_results(
                 trend_term_timesteps = T @ trend
 
                 # Debug: Print information about T matrix and periods
-                print(f"\nT matrix debug info:")
+                print("\nT matrix debug info:")
                 print(f"  T shape: {T.shape}")
                 print(f"  Trend length (periods): {len(trend)}")
                 print(f"  Trend term timesteps length: {len(trend_term_timesteps)}")

@@ -104,7 +104,7 @@ def _(
     if fix_dst_slct.value:
         dh.fix_dst()
     _lt = lin_thresh_select.value
-    with mo.capture_stdout() as buffer:
+    with mo.capture_stdout():
         if len(col_select.value) == 1:
             dh.run_pipeline(power_col=_pc, max_val=2000, linearity_threshold=_lt)
         else:
@@ -366,7 +366,6 @@ def _(
     H1[~x1_avail, :] = np.nan
     H2 = make_H(x2, knots2, include_offset=False)
     H2[~x2_avail, :] = np.nan
-    Hs = [H1, H2]
     regressor_use_set = np.logical_and(x1_avail, x2_avail)
     target_use_set = ~np.isnan(y)
     use_set = np.logical_and(regressor_use_set, target_use_set)
@@ -653,16 +652,11 @@ def _():
     import pandas as pd
     import numpy as np
     import cvxpy as cvx
-    from pathlib import Path
     import matplotlib.pyplot as plt
     import seaborn as sns
     import scipy.stats as stats
     import statsmodels.api as sm
-    from sklearn.metrics import r2_score
-    from sklearn.mixture import GaussianMixture
-    import statsmodels.api as sm
     from spcqe import make_basis_matrix, make_regularization_matrix
-    from io import BytesIO
     return (
         DataHandler,
         cvx,

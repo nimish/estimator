@@ -19,10 +19,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import urllib.request
 import zipfile
-import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from functools import partial
 
 # Add parent directory to path to import tsgam_estimator
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -32,7 +30,6 @@ from tsgam_estimator import (
     TsgamEstimatorConfig,
     TsgamMultiHarmonicConfig,
     TsgamSplineConfig,
-    TsgamLinearConfig,
     TsgamArConfig,
     TsgamSolverConfig,
     PERIOD_HOURLY_DAILY,
@@ -723,14 +720,14 @@ def main():
     print("Fitting model (this may take a few minutes)...")
     estimator.fit(X_train, y_train)
 
-    print(f"\nModel fitting complete!")
+    print("\nModel fitting complete!")
     print(f"Problem status: {estimator.problem_.status}")
     if estimator.problem_.status in ["optimal", "optimal_inaccurate"]:
         print(f"Optimal value: {estimator.problem_.value:.6e}")
 
     # Check AR model
     if estimator.ar_coef_ is not None:
-        print(f"\nAR model fitted successfully:")
+        print("\nAR model fitted successfully:")
         print(f"  AR coefficients: {estimator.ar_coef_}")
         print(f"  AR intercept: {estimator.ar_intercept_:.6f}")
     else:
@@ -777,7 +774,7 @@ def main():
     else:
         mae = rmse = mape = np.nan
 
-    print(f"\nForecast Performance Metrics:")
+    print("\nForecast Performance Metrics:")
     print(f"  MAE:  {mae:.2f} μg/m³")
     print(f"  RMSE: {rmse:.2f} μg/m³")
     print(f"  MAPE: {mape:.2f}%")
@@ -872,14 +869,14 @@ def main():
     print("\n" + "="*60)
     print("Example completed successfully!")
     print("="*60)
-    print(f"\nSummary:")
+    print("\nSummary:")
     print(f"  - Trained on {len(df_train)} hourly samples from {train_start[:4]}-{train_end[:4]}")
     print(f"  - Forecasted {len(df_test)} hourly samples for Q1 2014")
-    print(f"  - Model captures daily, weekly, and yearly seasonal patterns")
-    print(f"  - Multiple meteorological variables: temperature, dewpoint, wind speed, pressure")
-    print(f"  - Temperature: 12 knots, 5 lags | Dewpoint: 10 knots, 3 lags")
-    print(f"  - Wind speed: 8 knots, 2 lags | Pressure: 8 knots, 1 lag")
-    print(f"  - AR(4) model captures residual temporal dependencies")
+    print("  - Model captures daily, weekly, and yearly seasonal patterns")
+    print("  - Multiple meteorological variables: temperature, dewpoint, wind speed, pressure")
+    print("  - Temperature: 12 knots, 5 lags | Dewpoint: 10 knots, 3 lags")
+    print("  - Wind speed: 8 knots, 2 lags | Pressure: 8 knots, 1 lag")
+    print("  - AR(4) model captures residual temporal dependencies")
     baseline_rmse = ablation_results.get('None (seasonal only)', [rmse])[0]
     improvement = ((baseline_rmse - rmse) / baseline_rmse) * 100
     print(f"  - Forecast RMSE: {rmse:.2f} μg/m³")

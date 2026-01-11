@@ -112,7 +112,7 @@ def test_optimal_value_matches_notebook(tsgam_estimator_baseline):
         err_msg=f"Optimal value mismatch: estimator={actual_optimal:.10e}, notebook={notebook_optimal_value:.6e}"
     )
 
-    print(f"\nOptimal value comparison:")
+    print("\nOptimal value comparison:")
     print(f"  Estimator:  {actual_optimal:.10e}")
     print(f"  Notebook:   {notebook_optimal_value:.6e}")
     print(f"  Difference: {abs(actual_optimal - notebook_optimal_value):.10e} (within machine precision)")
@@ -156,7 +156,7 @@ def test_fourier_coefficients_match_notebook(tsgam_estimator_baseline, notebook_
         err_msg="Fourier coefficients don't match notebook"
     )
 
-    print(f"\nFourier coefficients comparison:")
+    print("\nFourier coefficients comparison:")
     print(f"  Constant - Estimator: {our_constant:.10e}, Notebook: {notebook_constant:.10e}")
     print(f"  Coefficients shape: {our_fourier_coef.shape}")
     print(f"  Max absolute diff: {np.max(np.abs(our_fourier_coef - notebook_fourier_coef)):.6e} (near machine precision)")
@@ -183,7 +183,7 @@ def test_temperature_coefficients_match_notebook(tsgam_estimator_baseline, noteb
         err_msg="Temperature coefficients don't match notebook"
     )
 
-    print(f"\nTemperature coefficients comparison:")
+    print("\nTemperature coefficients comparison:")
     print(f"  Shape: {our_temp_coef.shape}")
     print(f"  Max absolute diff: {np.max(np.abs(our_temp_coef - notebook_temp_coef)):.6e} (near machine precision)")
     print(f"  Mean absolute diff: {np.mean(np.abs(our_temp_coef - notebook_temp_coef)):.6e}")

@@ -21,7 +21,6 @@ from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamMultiHarmonicConfig,
-    TsgamSplineConfig,
     TsgamSolverConfig,
 )
 from spcqe import make_basis_matrix
@@ -42,7 +41,7 @@ def test_matches_notebook_pattern():
     pred_timestamps = pd.date_range('2020-01-01', periods=150, freq='h')[100:]
 
     # Manually create what notebook does
-    train_indices_notebook = np.arange(100)  # 0 to 99
+    np.arange(100)  # 0 to 99
     pred_indices_notebook = np.arange(50) + 100  # 100 to 149
 
     # Notebook pattern for prediction

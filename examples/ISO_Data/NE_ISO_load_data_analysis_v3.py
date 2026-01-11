@@ -214,7 +214,7 @@ def _(temp):
 
 @app.cell
 def _(a, df, first_use_set, np, plt, temp, x, y):
-    x_sort = np.sort(x.values)
+    np.sort(x.values)
     plt.scatter(df.loc["2020":"2021"]['Dry_Bulb'].values, np.exp(y), marker='.',
                 label='data', s=10, alpha=.5, color='orange')
     # plt.plot(x_sort, np.exp((make_H(x_sort, knots) @ c).value + a[0].value), label='temperature response')
@@ -647,7 +647,6 @@ def _():
     import cvxpy as cvx
     from pathlib import Path
     import matplotlib.pyplot as plt
-    import seaborn as sns
     import scipy.stats as stats
     from sklearn.metrics import r2_score
     import statsmodels.api as sm

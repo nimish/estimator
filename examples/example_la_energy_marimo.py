@@ -170,7 +170,7 @@ def _(df_energy, df_weather, pd):
     print(f"\nColumns: {list(df.columns)}")
 
     # Check for missing values
-    print(f"\nMissing values per column:")
+    print("\nMissing values per column:")
     for col in df.columns:
         missing = df[col].isna().sum()
         pct = (missing / len(df)) * 100
@@ -413,11 +413,11 @@ def _(create_train_test_split_with_gaps, df, pd, target_var):
     _date_range_full = pd.date_range(start=df.index.min(), end=df.index.max(), freq=_expected_freq)
     _missing_in_train = _date_range_full.difference(df_train.index)
     print(f"\nMissing timestamps in training data: {len(_missing_in_train)}")
-    print(f"  (This includes the held-out test periods)")
+    print("  (This includes the held-out test periods)")
 
     # Show some example gaps
     if len(_missing_in_train) > 0:
-        print(f"\nExample missing periods (first 5):")
+        print("\nExample missing periods (first 5):")
         for i, ts in enumerate(_missing_in_train[:5]):
             print(f"  {ts}")
     return df_test, df_train
@@ -616,7 +616,7 @@ def _(
     # Apply log transform if requested
     if take_log.value:
         y_train_log = np.log(y_train_aligned + 1.0)
-        print(f"Applied log transform to target")
+        print("Applied log transform to target")
     else:
         y_train_log = y_train_aligned.copy()
 
@@ -724,13 +724,13 @@ def _(
     print("Fitting model (this may take a few minutes)...")
     estimator.fit(X_train, y_train_log)
 
-    print(f"\nModel fitting complete!")
+    print("\nModel fitting complete!")
     print(f"Problem status: {estimator.problem_.status}")
     if estimator.problem_.status in ["optimal", "optimal_inaccurate"]:
         print(f"Optimal value: {estimator.problem_.value:.6e}")
 
     if getattr(estimator, "ar_coef_", None) is not None:
-        print(f"\nAR model fitted successfully:")
+        print("\nAR model fitted successfully:")
         print(f"  AR coefficients: {estimator.ar_coef_}")
         print(f"  AR intercept: {estimator.ar_intercept_:.6f}")
     return estimator, y_train_log
@@ -893,13 +893,13 @@ def _(X_train, estimator, np, plt, weather_cols):
                             _ax_exog.legend(fontsize=8)
                             _ax_exog.grid(True, alpha=0.3)
                         else:
-                            _ax_exog.text(0.5, 0.5, f'No lags configured', ha='center', va='center', transform=_ax_exog.transAxes)
+                            _ax_exog.text(0.5, 0.5, 'No lags configured', ha='center', va='center', transform=_ax_exog.transAxes)
                     else:
-                        _ax_exog.text(0.5, 0.5, f'No knots available', ha='center', va='center', transform=_ax_exog.transAxes)
+                        _ax_exog.text(0.5, 0.5, 'No knots available', ha='center', va='center', transform=_ax_exog.transAxes)
                 else:
-                    _ax_exog.text(0.5, 0.5, f'No coefficients available', ha='center', va='center', transform=_ax_exog.transAxes)
+                    _ax_exog.text(0.5, 0.5, 'No coefficients available', ha='center', va='center', transform=_ax_exog.transAxes)
             else:
-                _ax_exog.text(0.5, 0.5, f'Variable not fitted', ha='center', va='center', transform=_ax_exog.transAxes)
+                _ax_exog.text(0.5, 0.5, 'Variable not fitted', ha='center', va='center', transform=_ax_exog.transAxes)
 
         # No unused subplots to hide (exactly 2 variables, 2 subplots)
 
@@ -1185,7 +1185,7 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
             ax1_outlier.plot(outlier_timestamps, _outlier_per_sample_vis, 'b-', linewidth=0.5, alpha=0.7, label='Outlier correction')
             ax1_outlier.axhline(y=0, color='r', linestyle='--', linewidth=1, alpha=0.5)
             ax1_outlier.set_ylabel('Outlier Correction (log space)', fontsize=10)
-            ax1_outlier.set_title(f'Outlier Detector: Corrections Over Time (per sample)', fontsize=12, fontweight='bold')
+            ax1_outlier.set_title('Outlier Detector: Corrections Over Time (per sample)', fontsize=12, fontweight='bold')
             ax1_outlier.legend(fontsize=9)
             ax1_outlier.grid(True, alpha=0.3)
 
@@ -1228,7 +1228,7 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
             plt.tight_layout()
 
             # Print statistics about outlier days
-            print(f"\nOutlier Detector Statistics:")
+            print("\nOutlier Detector Statistics:")
             print(f"  Total periods: {n_periods}")
             print(f"  Threshold for significant outliers: |outlier| > {threshold_value:.3f} (≈{100*(np.exp(threshold_value)-1):.1f}% multiplicative effect)")
             print(f"  Non-zero outlier periods (|outlier| > 1e-6): {n_non_zero} ({100*n_non_zero/n_periods:.1f}%)")
@@ -1236,7 +1236,7 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
             print(f"  Number of outlier {day_label} (non-zero): {n_outlier_days_non_zero:.1f}")
             print(f"  Number of outlier {day_label} (significant): {n_outlier_days_significant:.1f}")
             if len(non_zero_outliers) > 0:
-                print(f"\n  Non-zero outlier statistics:")
+                print("\n  Non-zero outlier statistics:")
                 print(f"    Mean: {np.mean(non_zero_outliers):.4f}")
                 print(f"    Max: {np.max(np.abs(_outlier_values_vis)):.4f}")
                 print(f"    Min: {np.min(non_zero_outliers):.4f}")
@@ -1332,14 +1332,14 @@ def _(estimator, np, outlier_threshold, pd, timestamps_train_aligned):
             print(f"\n{'='*80}")
             print(f"Outlier Day Analysis: {len(outlier_dates)} significant outlier days")
             print(f"{'='*80}")
-            print(f"\nSummary:")
+            print("\nSummary:")
             print(f"  Total significant outliers: {len(outlier_dates)}")
             print(f"  Holidays: {holiday_count} ({100*holiday_count/len(outlier_dates):.1f}%)")
             print(f"  Weekends: {weekend_count} ({100*weekend_count/len(outlier_dates):.1f}%)")
             print(f"  Weekdays (non-holiday): {len(outlier_dates) - holiday_count - weekend_count} ({100*(len(outlier_dates) - holiday_count - weekend_count)/len(outlier_dates):.1f}%)")
 
             # Print detailed table
-            print(f"\nDetailed Outlier Days:")
+            print("\nDetailed Outlier Days:")
             print(f"{'Date':<12} {'Day':<10} {'Outlier':<10} {'Multiplier':<12} {'Holiday/Notes':<30}")
             print(f"{'-'*80}")
 
@@ -1539,7 +1539,7 @@ def _(
 
         plt.tight_layout()
 
-        print(f"Residual Statistics:")
+        print("Residual Statistics:")
         print(f"  Mean: {np.mean(train_residuals):.6f}")
         print(f"  Std: {np.std(train_residuals):.6f}")
         print(f"  Normal fit: μ={mu_norm:.6f}, σ={sigma_norm:.6f}")
@@ -1592,10 +1592,10 @@ def _(
     # Apply log transform if requested (same as main model)
     if take_log.value:
         y_train_log_ablation = np.log(y_train_aligned + 1.0)
-        y_test_log_ablation = np.log(y_test_aligned + 1.0)
+        np.log(y_test_aligned + 1.0)
     else:
         y_train_log_ablation = y_train_aligned.copy()
-        y_test_log_ablation = y_test_aligned.copy()
+        y_test_aligned.copy()
 
     # Define ablation configurations
     ablation_configs = []

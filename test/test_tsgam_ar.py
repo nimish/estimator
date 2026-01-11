@@ -114,7 +114,7 @@ def test_ar_coefficients_match_notebook(tsgam_estimator_with_ar, notebook_ar_coe
         err_msg="AR coefficients don't match notebook"
     )
 
-    print(f"\nAR coefficients comparison:")
+    print("\nAR coefficients comparison:")
     print(f"  Length: {len(ar_coef)}")
     print(f"  Max absolute diff: {np.max(np.abs(ar_coef - notebook_ar_coef)):.6e}")
     print(f"  Mean absolute diff: {np.mean(np.abs(ar_coef - notebook_ar_coef)):.6e}")
@@ -138,7 +138,7 @@ def test_ar_intercept_matches_notebook(tsgam_estimator_with_ar, notebook_ar_coef
         err_msg="AR intercept doesn't match notebook"
     )
 
-    print(f"\nAR intercept comparison:")
+    print("\nAR intercept comparison:")
     print(f"  Estimator: {ar_intercept:.6e}")
     print(f"  Notebook: {notebook_ar_intercept:.6e}")
     print(f"  Diff: {abs(ar_intercept - notebook_ar_intercept):.6e}")
@@ -156,7 +156,7 @@ def test_ar_noise_distribution_fitted(tsgam_estimator_with_ar):
     # Noise scale should be positive
     assert estimator.ar_noise_scale_ > 0, "AR noise scale should be positive"
 
-    print(f"\nAR noise distribution:")
+    print("\nAR noise distribution:")
     print(f"  Location: {estimator.ar_noise_loc_:.6e}")
     print(f"  Scale: {estimator.ar_noise_scale_:.6e}")
 
@@ -178,7 +178,7 @@ def test_baseline_residuals_computed(tsgam_estimator_with_ar):
     assert 0.01 < baseline_mae < 0.1, \
         f"Baseline MAE {baseline_mae:.6f} outside expected range [0.01, 0.1]"
 
-    print(f"\nBaseline residuals:")
+    print("\nBaseline residuals:")
     print(f"  Length: {len(residuals)}")
     print(f"  MAE: {baseline_mae:.6e}")
     print(f"  Mean: {np.mean(residuals):.6e}")
@@ -207,7 +207,7 @@ def test_sample_method_shape(tsgam_estimator_with_ar, notebook_data):
     # Check that we have some finite values
     assert np.any(np.isfinite(samples)), "Should have at least some finite samples"
 
-    print(f"\nSample method:")
+    print("\nSample method:")
     print(f"  Shape: {samples.shape}")
     print(f"  Mean: {np.nanmean(samples):.6e}")
     print(f"  Std: {np.nanstd(samples):.6e}")
@@ -349,7 +349,7 @@ def test_sample_ar_noise_matches_notebook(tsgam_estimator_with_ar, notebook_data
     std_noise = np.std(ar_noise_valid)
     assert 0.01 < std_noise < 0.1, f"AR noise std should be reasonable, got {std_noise:.6f}"
 
-    print(f"\nAR noise properties:")
+    print("\nAR noise properties:")
     print(f"  Valid values: {np.sum(valid_mask)}/{len(ar_noise_ours)}")
     print(f"  Mean: {mean_noise:.6e}")
     print(f"  Std: {std_noise:.6e}")
@@ -393,7 +393,7 @@ def test_sample_predictions_match_notebook_pattern(tsgam_estimator_with_ar, note
         err_msg="Sample predictions should follow baseline * noise pattern"
     )
 
-    print(f"\nSample prediction pattern verification:")
+    print("\nSample prediction pattern verification:")
     print(f"  Mean baseline: {np.nanmean(baseline_pred_orig):.2f}")
     print(f"  Mean AR noise: {np.nanmean(ar_noise_orig):.6e}")
     print(f"  Mean samples: {np.nanmean(samples_orig):.2f}")

@@ -431,9 +431,9 @@ def main():
     detected_outlier = estimator_with_outlier.variables_['outlier'].value
     print("Outlier Detection Results:")
     print(f"  Number of days: {len(detected_outlier)}")
-    print(f"  Detected outlier values (log space):")
+    print("  Detected outlier values (log space):")
     print(f"  Min: {np.min(detected_outlier):.6f}, Max: {np.max(detected_outlier):.6f}, Mean: {np.mean(detected_outlier):.6f}")
-    print(f"  Non-zero values (|outlier| > 0.01):")
+    print("  Non-zero values (|outlier| > 0.01):")
     non_zero_count = 0
     for i, val in enumerate(detected_outlier):
         if abs(val) > 0.01:  # Show non-zero values
