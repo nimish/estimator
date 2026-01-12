@@ -47,10 +47,11 @@ def _():
     import urllib.request
     import zipfile
 
-    # Add parent directory to path to import tsgam_estimator
+    # Add src directory to path to import tsgam_estimator
     _project_root = Path(__file__).parent.parent
-    if str(_project_root) not in sys.path:
-        sys.path.insert(0, str(_project_root))
+    _src_dir = _project_root / 'src'
+    if str(_src_dir) not in sys.path:
+        sys.path.insert(0, str(_src_dir))
 
     from tsgam_estimator import (
         TsgamEstimator,

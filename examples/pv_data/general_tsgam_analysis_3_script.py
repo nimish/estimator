@@ -9,10 +9,11 @@ class instead of manual CVXPY code. Easier to debug than the marimo notebook.
 import sys
 from pathlib import Path
 
-# Add project root to path
-_project_root = Path(__file__).parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+# Add src directory to path
+_project_root = Path(__file__).parent.parent.parent
+_src_dir = _project_root / 'src'
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
 
 import pandas as pd
 import numpy as np

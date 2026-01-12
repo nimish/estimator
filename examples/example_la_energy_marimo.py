@@ -51,10 +51,11 @@ def _():
     from datetime import timedelta
     from scipy import stats
 
-    # Add parent directory to path to import tsgam_estimator
+    # Add src directory to path to import tsgam_estimator
     _project_root = Path(__file__).parent.parent
-    if str(_project_root) not in sys.path:
-        sys.path.insert(0, str(_project_root))
+    _src_dir = _project_root / 'src'
+    if str(_src_dir) not in sys.path:
+        sys.path.insert(0, str(_src_dir))
 
     from tsgam_estimator import (
         TsgamEstimator,
@@ -103,8 +104,7 @@ def _(mo):
 @app.cell
 def _(Path, mo):
     # File selectors for data files
-    _project_root = Path(__file__).parent.parent
-    _nerc_dir = _project_root / "nerc"
+    _nerc_dir = Path(__file__).parent / "nerc"
 
     # Get list of available CSV files in nerc directory
     _csv_files = sorted([f.name for f in _nerc_dir.glob("*.csv")])
@@ -132,8 +132,7 @@ def _(Path, mo):
 @app.cell
 def _(Path, energy_file, pd, weather_file):
     # Load data files
-    _project_root = Path(__file__).parent.parent
-    _nerc_dir = _project_root / "nerc"
+    _nerc_dir = Path(__file__).parent / "nerc"
 
     # Load weather data (X - features)
     _weather_file = _nerc_dir / weather_file.value

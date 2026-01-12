@@ -22,8 +22,8 @@ import zipfile
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-# Add parent directory to path to import tsgam_estimator
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src directory to path to import tsgam_estimator
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from tsgam_estimator import (
     TsgamEstimator,
