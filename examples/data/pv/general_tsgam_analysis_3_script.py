@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 # Add src directory to path
-_project_root = Path(__file__).parent.parent.parent
+_project_root = Path(__file__).parent.parent.parent.parent
 _src_dir = _project_root / 'src'
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))

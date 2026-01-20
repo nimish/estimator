@@ -9,6 +9,7 @@ dependencies = [
     "click>=8.1.0",
     "cvxpy>=1.7.3",
     "holidays>=0.87",
+    "marimo>=0.19.4",
     "matplotlib>=3.10.7",
     "msgspec>=0.20.0",
     "numpy>=2.3.4",

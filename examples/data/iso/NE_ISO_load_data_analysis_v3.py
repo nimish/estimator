@@ -33,13 +33,14 @@ def _(mo):
 
 @app.cell
 def _(Path, mo, pd):
+    _data_dir_iso = Path(__file__).parent
     @mo.cache
     def make_data(sheet='RI'):
         years = [2020, 2021, 2022]
         # years = [2020]
         df_list = []
         for _yr in years:
-            fp = Path('.') / 'ISO_Data' / f'{_yr}_smd_hourly.xlsx'
+            fp = _data_dir_iso / f'{_yr}_smd_hourly.xlsx'
             df = pd.read_excel(fp, sheet_name=sheet)
             df['year'] = _yr
             df.index = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Hr_End'].map(lambda x: f"{x-1}:00:00")) + pd.Timedelta(hours=1)

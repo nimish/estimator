@@ -594,7 +594,7 @@ def main():
     """Main example function."""
     # Setup paths
     examples_dir = Path(__file__).parent
-    data_dir = examples_dir / "data"
+    data_dir = examples_dir / "data" / "air_quality"
     plots_dir = examples_dir / "plots"
     plots_dir.mkdir(exist_ok=True)
 

@@ -104,10 +104,10 @@ def _(mo):
 @app.cell
 def _(Path, mo):
     # File selectors for data files
-    _nerc_dir = Path(__file__).parent / "nerc"
+    _energy_dir = Path(__file__).parent / "data" / "energy"
 
-    # Get list of available CSV files in nerc directory
-    _csv_files = sorted([f.name for f in _nerc_dir.glob("*.csv")])
+    # Get list of available CSV files in energy directory
+    _csv_files = sorted([f.name for f in _energy_dir.glob("*.csv")])
 
     # Default files
     _default_weather = "weather_CA_Los Angeles.csv"
@@ -132,16 +132,16 @@ def _(Path, mo):
 @app.cell
 def _(Path, energy_file, pd, weather_file):
     # Load data files
-    _nerc_dir = Path(__file__).parent / "nerc"
+    _energy_dir = Path(__file__).parent / "data" / "energy"
 
     # Load weather data (X - features)
-    _weather_file = _nerc_dir / weather_file.value
+    _weather_file = _energy_dir / weather_file.value
     df_weather = pd.read_csv(_weather_file)
     df_weather['timestamp'] = pd.to_datetime(df_weather['timestamp'])
     df_weather = df_weather.set_index('timestamp')
 
     # Load energy data (Y - target)
-    _energy_file = _nerc_dir / energy_file.value
+    _energy_file = _energy_dir / energy_file.value
     df_energy = pd.read_csv(_energy_file)
     df_energy['timestamp'] = pd.to_datetime(df_energy['timestamp'])
     df_energy = df_energy.set_index('timestamp')
@@ -230,7 +230,7 @@ def _(df):
 
 
 @app.cell
-def _(df, plt, target_var, timestamps_full, y_full):
+def _(df, mo, plt, target_var, timestamps_full, y_full):
     # Visualize full dataset before train/test split
     fig_data, axes_data = plt.subplots(nrows=3, ncols=1, figsize=(14, 10))
 
@@ -262,7 +262,7 @@ def _(df, plt, target_var, timestamps_full, y_full):
     ax3_data.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.gcf()
+    mo.mpl.interactive(plt.gcf())
     return
 
 
@@ -500,6 +500,7 @@ def _(
     X_train,
     df,
     df_test,
+    mo,
     pd,
     plt,
     target_var,
@@ -541,7 +542,7 @@ def _(
     ax3_gaps.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.gcf()
+    mo.mpl.interactive(plt.gcf())
     return
 
 
@@ -556,19 +557,23 @@ def _(mo):
 @app.cell
 def _(mo):
     take_log = mo.ui.switch(label='Take log of target data', value=True)
-    use_ar = mo.ui.switch(label='Use AR model', value=True)
+    use_ar = mo.ui.switch(label='Use AR model', value=False)
     use_outlier = mo.ui.switch(label='Use outlier detector', value=False)
     outlier_reg_weight = mo.ui.slider(0.0001, 2.0, step=0.0001, value=1e-4, label='Outlier L1 reg weight')
     outlier_threshold = mo.ui.slider(0.001, 0.5, step=0.001, value=0.05, label='Outlier threshold (log space)')
     solver_select = mo.ui.dropdown(['CLARABEL', 'MOSEK'], value='CLARABEL', label='Solver')
-    verbose = mo.ui.switch(label='Verbose solver output', value=False)
+    verbose = mo.ui.switch(label='Verbose solver output', value=True)
+    fit_model = mo.ui.run_button(label='Fit Model')
 
     mo.vstack([
         mo.hstack([take_log, use_ar, use_outlier]),
         mo.hstack([outlier_reg_weight, outlier_threshold]),
-        mo.hstack([solver_select, verbose])
+        mo.hstack([solver_select, verbose]),
+        mo.hstack([fit_model])
     ])
+
     return (
+        fit_model,
         outlier_reg_weight,
         outlier_threshold,
         solver_select,
@@ -577,13 +582,6 @@ def _(mo):
         use_outlier,
         verbose,
     )
-
-
-@app.cell
-def _(mo):
-    fit_model = mo.ui.run_button(label='Fit Model')
-    fit_model
-    return (fit_model,)
 
 
 @app.cell
@@ -1561,6 +1559,13 @@ def _(mo):
 
 
 @app.cell
+def _(mo):
+    ablation_test = mo.ui.run_button(label='Run Ablation Model')
+    ablation_test
+    return (ablation_test,)
+
+
+@app.cell
 def _(
     PERIOD_HOURLY_DAILY,
     PERIOD_HOURLY_WEEKLY,
@@ -1574,6 +1579,8 @@ def _(
     TsgamSplineConfig,
     X_test,
     X_train,
+    ablation_test,
+    mo,
     np,
     pd,
     take_log,
@@ -1583,7 +1590,7 @@ def _(
     y_test_aligned,
     y_train_aligned,
 ):
-
+    mo.stop(not ablation_test.value)
     # Ablation test: test different model configurations
     print("Running ablation test...")
     print("=" * 80)

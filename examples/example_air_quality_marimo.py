@@ -17,7 +17,7 @@ Adapted from general_tsgam_analysis_3.py plotting and analysis patterns.
 
 import marimo
 
-__generated_with = "0.18.4"
+__generated_with = "0.19.4"
 app = marimo.App(width="medium")
 
 
@@ -195,7 +195,7 @@ def _(Path, np, pd, urllib, zipfile):
 def _(Path, download_beijing_air_quality_data, load_beijing_air_quality):
     # Setup paths
     examples_dir = Path(__file__).parent
-    data_dir = examples_dir / "data"
+    data_dir = examples_dir / "data" / "air_quality"
 
     # Download and load data
     data_file = download_beijing_air_quality_data(data_dir)
