@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamOutlierConfig,
     TsgamSolverConfig,
     PERIOD_HOURLY_DAILY,
@@ -147,8 +147,8 @@ def fit_model_with_outlier_detector(X, y, reg_weight=1.0):
     estimator : TsgamEstimator
         Fitted estimator.
     """
-    # Multi-harmonic configuration for seasonal patterns
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    # Multi-periodic configuration for seasonal patterns
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[4, 3],
         periods=[PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
         reg_weight=1e-4
@@ -168,7 +168,7 @@ def fit_model_with_outlier_detector(X, y, reg_weight=1.0):
 
     # Create main config
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=None,
         ar_config=None,
         trend_config=None,
@@ -201,8 +201,8 @@ def fit_model_without_outlier_detector(X, y):
     estimator : TsgamEstimator
         Fitted estimator.
     """
-    # Multi-harmonic configuration for seasonal patterns
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    # Multi-periodic configuration for seasonal patterns
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[4, 3],
         periods=[PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
         reg_weight=1e-4
@@ -216,7 +216,7 @@ def fit_model_without_outlier_detector(X, y):
 
     # Create main config (no outlier detector)
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=None,
         ar_config=None,
         trend_config=None,

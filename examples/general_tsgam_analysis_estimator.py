@@ -316,7 +316,7 @@ def _(
     TrendType,
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
     TsgamTrendConfig,
@@ -427,7 +427,7 @@ def _(
     }, index=timestamps)
 
     # Configure model
-    # Multi-harmonic Fourier: yearly and daily patterns
+    # Multi-periodic Fourier: yearly and daily patterns
     # periods in hours: yearly = 365.2425 * 24, daily = 24 (for 15-min data, adjust)
     _nvals = dh.raw_data_matrix.shape[0]  # samples per day
     _period_daily_hours = 24.0  # daily period in hours
@@ -435,7 +435,7 @@ def _(
     # For 15-min data, daily period is _nvals samples = 24 hours
     # Yearly period is 365.2425 * _nvals samples = 365.2425 * 24 hours
 
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[6, 10],
         periods=[_period_yearly_hours, _period_daily_hours],
         reg_weight=1e-2
@@ -476,7 +476,7 @@ def _(
 
     # Create main config
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=exog_config,
         trend_config=trend_config,
         solver_config=solver_config
@@ -845,7 +845,7 @@ def _():
         TrendType,
         TsgamEstimator,
         TsgamEstimatorConfig,
-        TsgamMultiHarmonicConfig,
+        TsgamMultiPeriodicConfig,
         TsgamSplineConfig,
         TsgamSolverConfig,
         TsgamTrendConfig,
@@ -855,7 +855,7 @@ def _():
         TrendType,
         TsgamEstimator,
         TsgamEstimatorConfig,
-        TsgamMultiHarmonicConfig,
+        TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
         TsgamSplineConfig,
         TsgamTrendConfig,

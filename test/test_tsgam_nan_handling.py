@@ -16,7 +16,7 @@ import pandas as pd
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
 )
 
@@ -25,7 +25,7 @@ from tsgam_estimator import (
 def basic_config():
     """Basic configuration for testing."""
     return TsgamEstimatorConfig(
-        multi_harmonic_config=TsgamMultiHarmonicConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
             num_harmonics=[6, 4, 3],
             periods=[365.2425 * 24, 7 * 24, 24]
         ),

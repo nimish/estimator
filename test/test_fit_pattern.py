@@ -11,7 +11,7 @@ import pandas as pd
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
 )
 from spcqe import make_basis_matrix
@@ -34,7 +34,7 @@ def test_fit_uses_correct_pattern():
     timestamps = pd.date_range('2020-01-01', periods=n_samples, freq='h')
 
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=TsgamMultiHarmonicConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
             num_harmonics=[6, 4, 3],
             periods=[365.2425 * 24, 7 * 24, 24]
         ),

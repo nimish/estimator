@@ -17,9 +17,9 @@ from spcqe.functions import initialize_arrays
 import pandas as pd
 
 @dataclass
-class TsgamMultiHarmonicConfig:
+class TsgamMultiPeriodicConfig:
     """
-    Configuration for multi-harmonic Fourier basis functions.
+    Configuration for multi-periodic Fourier basis functions.
 
     This config defines the seasonal/periodic patterns in the time series using
     Fourier basis functions with multiple harmonics and periods. Each period
@@ -43,7 +43,7 @@ class TsgamMultiHarmonicConfig:
 
     Examples
     --------
-    >>> config = TsgamMultiHarmonicConfig(
+    >>> config = TsgamMultiPeriodicConfig(
     ...     num_harmonics=[6, 4, 3],
     ...     periods=[365.2425 * 24, 7 * 24, 24]  # yearly, weekly, daily
     ... )
@@ -336,8 +336,8 @@ class TsgamEstimatorConfig:
 
     Parameters
     ----------
-    multi_harmonic_config : TsgamMultiHarmonicConfig or None
-        Configuration for multi-harmonic Fourier basis functions. If None,
+    multi_periodic_config : TsgamMultiPeriodicConfig or None
+        Configuration for multi-periodic Fourier basis functions. If None,
         no time-based seasonal patterns are modeled.
     exog_config : list of TsgamSplineConfig or TsgamLinearConfig, or None
         List of configurations for exogenous variables. Each element corresponds
@@ -372,19 +372,19 @@ class TsgamEstimatorConfig:
 
     Examples
     --------
-    >>> multi_harmonic = TsgamMultiHarmonicConfig(
+    >>> multi_periodic = TsgamMultiPeriodicConfig(
     ...     num_harmonics=[6, 4, 3],
     ...     periods=[365.2425 * 24, 7 * 24, 24]
     ... )
     >>> exog = [TsgamSplineConfig(n_knots=10, lags=[-1, 0, 1])]
     >>> ar = TsgamArConfig(lags=[1])
     >>> config = TsgamEstimatorConfig(
-    ...     multi_harmonic_config=multi_harmonic,
+    ...     multi_periodic_config=multi_periodic,
     ...     exog_config=exog,
     ...     ar_config=ar
     ... )
     """
-    multi_harmonic_config: TsgamMultiHarmonicConfig | None
+    multi_periodic_config: TsgamMultiPeriodicConfig | None
     exog_config: list[TsgamSplineConfig | TsgamLinearConfig] | None
     ar_config: TsgamArConfig | None = None
     trend_config: TsgamTrendConfig | None = None
@@ -655,7 +655,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
     This estimator fits a GAM model for time series forecasting that combines:
 
-    - Multi-harmonic Fourier basis functions for seasonal patterns
+    - Multi-periodic Fourier basis functions for seasonal patterns
     - Cubic spline or linear basis functions for exogenous variables with lead/lag
     - Optional trend term (constant per period, linear or nonlinear)
     - Optional outlier detector (sparse multiplicative corrections per period)
@@ -684,7 +684,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     variables_ : dict
         Dictionary of CVXPY variables containing fitted coefficients:
         - 'constant': intercept term
-        - 'fourier_coef': Fourier coefficients (if multi_harmonic_config provided)
+        - 'fourier_coef': Fourier coefficients (if multi_periodic_config provided)
         - 'exog_coef_{i}': Exogenous variable coefficients for variable i
         - 'trend': Trend coefficients (if trend_config provided)
         - 'trend_slope': Trend slope (if trend_type='linear')
@@ -717,18 +717,18 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     >>> import numpy as np
     >>> from tsgam_estimator import (
     ...     TsgamEstimator, TsgamEstimatorConfig,
-    ...     TsgamMultiHarmonicConfig, TsgamSplineConfig, TsgamOutlierConfig
+    ...     TsgamMultiPeriodicConfig, TsgamSplineConfig, TsgamOutlierConfig
     ... )
     >>>
     >>> # Create configuration with outlier detector
-    >>> multi_harmonic = TsgamMultiHarmonicConfig(
+    >>> multi_periodic = TsgamMultiPeriodicConfig(
     ...     num_harmonics=[6, 4, 3],
     ...     periods=[365.2425 * 24, 7 * 24, 24]  # yearly, weekly, daily
     ... )
     >>> exog_config = [TsgamSplineConfig(n_knots=10, lags=[-1, 0, 1])]
     >>> outlier_config = TsgamOutlierConfig(reg_weight=0.002)  # Daily outliers
     >>> config = TsgamEstimatorConfig(
-    ...     multi_harmonic_config=multi_harmonic,
+    ...     multi_periodic_config=multi_periodic,
     ...     exog_config=exog_config,
     ...     outlier_config=outlier_config
     ... )
@@ -1466,26 +1466,26 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
 
 
-        if self.config.multi_harmonic_config:
+        if self.config.multi_periodic_config:
             # Generate basis matrix for max index + 1, then index with time_indices
             # This ensures correct phase alignment (as shown in notebook)
             max_idx = int(np.max(time_indices))
             F_full = make_basis_matrix(
-                num_harmonics=self.config.multi_harmonic_config.num_harmonics,
+                num_harmonics=self.config.multi_periodic_config.num_harmonics,
                 length=max_idx + 1,
-                periods=self.config.multi_harmonic_config.periods
+                periods=self.config.multi_periodic_config.periods
             )
             # Index with time_indices to get correct rows
             F = F_full[time_indices.astype(int), 1:]  # Drop constant column
 
             Wf = self._make_regularization_matrix(
-                num_harmonics=self.config.multi_harmonic_config.num_harmonics,
+                num_harmonics=self.config.multi_periodic_config.num_harmonics,
                 weight=1.0,
-                periods=self.config.multi_harmonic_config.periods,
+                periods=self.config.multi_periodic_config.periods,
                 drop_constant=True
             )
             self.variables_['fourier_coef'] = cvxpy.Variable(F.shape[1])
-            regularization_term += self.config.multi_harmonic_config.reg_weight * cvxpy.sum_squares(Wf @ self.variables_['fourier_coef'])
+            regularization_term += self.config.multi_periodic_config.reg_weight * cvxpy.sum_squares(Wf @ self.variables_['fourier_coef'])
             model_term += F[self.combined_valid_mask_] @ self.variables_['fourier_coef']
 
         # Add trend term if configured
@@ -1620,12 +1620,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                     baseline_pred += exog_pred
 
         # Add Fourier terms if present
-        if self.config.multi_harmonic_config:
+        if self.config.multi_periodic_config:
             max_idx = int(np.max(time_indices))
             F_full = make_basis_matrix(
-                num_harmonics=self.config.multi_harmonic_config.num_harmonics,
+                num_harmonics=self.config.multi_periodic_config.num_harmonics,
                 length=max_idx + 1,
-                periods=self.config.multi_harmonic_config.periods
+                periods=self.config.multi_periodic_config.periods
             )
             F = F_full[time_indices.astype(int), 1:]  # Drop constant column
             fourier_coef = self.variables_['fourier_coef'].value
@@ -1797,7 +1797,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 predictions += exog_pred
 
         # Add Fourier terms if present
-        if self.config.multi_harmonic_config:
+        if self.config.multi_periodic_config:
             # Check for NaN in time_indices
             if np.any(np.isnan(time_indices)):
                 raise ValueError("Time indices contain NaN. Check timestamp conversion.")
@@ -1826,9 +1826,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 )
 
             F_full = make_basis_matrix(
-                num_harmonics=self.config.multi_harmonic_config.num_harmonics,
+                num_harmonics=self.config.multi_periodic_config.num_harmonics,
                 length=basis_length,
-                periods=self.config.multi_harmonic_config.periods
+                periods=self.config.multi_periodic_config.periods
             )
 
             # Check for NaN in basis matrix
@@ -2050,7 +2050,7 @@ if __name__ == "__main__":
     Baseline configuration replicating the notebook baseline model.
 
     Configuration:
-    - Multi-harmonic: [6, 4, 3] harmonics for periods [365.2425*24, 7*24, 24]
+    - Multi-periodic: [6, 4, 3] harmonics for periods [365.2425*24, 7*24, 24]
     - Temperature spline: 10 knots, lags [-3, -2, -1, 0, 1, 2, 3]
     - Regularization: 1e-4 for Fourier and exog, 1.0 for exog diff
     - Solver: CLARABEL with verbose=True
@@ -2081,8 +2081,8 @@ if __name__ == "__main__":
     y = np.log(df_subset["RT_Demand"]).values
     X = pd.DataFrame({'temp': df_subset["Dry_Bulb"].values}, index=df_subset.index)
 
-    # Multi-harmonic configuration for time features
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    # Multi-periodic configuration for time features
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[6, 4, 3],
         periods=[365.2425 * 24, 7 * 24, 24]
     )
@@ -2109,7 +2109,7 @@ if __name__ == "__main__":
 
     # Create main config
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=exog_config,
         ar_config=ar_config,
         solver_config=solver_config,
@@ -2122,9 +2122,9 @@ if __name__ == "__main__":
     estimator = TsgamEstimator(config=config)
 
     print("\nConfiguration:")
-    if config.multi_harmonic_config:
-        print(f"  Multi-harmonic: {config.multi_harmonic_config.num_harmonics} harmonics")
-        print(f"  Periods: {config.multi_harmonic_config.periods}")
+    if config.multi_periodic_config:
+        print(f"  Multi-periodic: {config.multi_periodic_config.num_harmonics} harmonics")
+        print(f"  Periods: {config.multi_periodic_config.periods}")
     if config.exog_config:
         print(f"  Exog config: {len(config.exog_config)} exogenous variable(s)")
         for ix, exog_cfg in enumerate(config.exog_config):

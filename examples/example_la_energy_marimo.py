@@ -5,7 +5,7 @@
 Marimo Notebook: Los Angeles Energy Forecasting with TSGAM
 
 This notebook demonstrates forecasting Los Angeles energy demand using:
-- Multi-harmonic Fourier basis for seasonal patterns (daily, weekly, yearly)
+- Multi-periodic Fourier basis for seasonal patterns (daily, weekly, yearly)
 - Weather variables (temperature, humidity, solar irradiance) as exogenous variables with spline basis
 - Autoregressive (AR) modeling of residuals
 
@@ -60,7 +60,7 @@ def _():
     from tsgam_estimator import (
         TsgamEstimator,
         TsgamEstimatorConfig,
-        TsgamMultiHarmonicConfig,
+        TsgamMultiPeriodicConfig,
         TsgamSplineConfig,
         TsgamArConfig,
         TsgamOutlierConfig,
@@ -78,7 +78,7 @@ def _():
         TsgamArConfig,
         TsgamEstimator,
         TsgamEstimatorConfig,
-        TsgamMultiHarmonicConfig,
+        TsgamMultiPeriodicConfig,
         TsgamOutlierConfig,
         TsgamSolverConfig,
         TsgamSplineConfig,
@@ -592,7 +592,7 @@ def _(
     TsgamArConfig,
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamOutlierConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
@@ -617,15 +617,15 @@ def _(
     else:
         y_train_log = y_train_aligned.copy()
 
-    # Multi-harmonic Fourier configuration
+    # Multi-periodic Fourier configuration
     # For one year of data, we use yearly, weekly, and daily periods
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[4, 4, 6],  # yearly, weekly, daily
         periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
         reg_weight=6e-5
     )
 
-    print(f"Multi-harmonic config: {multi_harmonic_config.num_harmonics} harmonics for periods {multi_harmonic_config.periods}")
+    print(f"Multi-periodic config: {multi_periodic_config.num_harmonics} harmonics for periods {multi_periodic_config.periods}")
 
     # Exogenous variables configuration
     # Order must match the order of columns in X_train/X_test
@@ -705,7 +705,7 @@ def _(
 
     # Create main config
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=exog_config,
         ar_config=ar_config,
         outlier_config=outlier_config,
@@ -912,22 +912,22 @@ def _(X_train, estimator, np, plt, weather_cols):
 def _(estimator, make_basis_matrix, np, plt, timestamps_train_aligned):
     def _():
         # Visualize Fourier/harmonic basis functions
-        if estimator.config.multi_harmonic_config and 'fourier_coef' in estimator.variables_:
+        if estimator.config.multi_periodic_config and 'fourier_coef' in estimator.variables_:
             fourier_coef = estimator.variables_['fourier_coef'].value
             if fourier_coef is not None:
                 # Reconstruct Fourier contribution over time
                 max_idx = int(np.max(estimator.time_indices_))
                 F_full = make_basis_matrix(
-                    num_harmonics=estimator.config.multi_harmonic_config.num_harmonics,
+                    num_harmonics=estimator.config.multi_periodic_config.num_harmonics,
                     length=max_idx + 1,
-                    periods=estimator.config.multi_harmonic_config.periods
+                    periods=estimator.config.multi_periodic_config.periods
                 )
                 F = F_full[estimator.time_indices_.astype(int), 1:]  # Drop constant column
                 fourier_contribution = F @ fourier_coef
 
                 # Get period labels
-                periods = estimator.config.multi_harmonic_config.periods
-                num_harmonics = estimator.config.multi_harmonic_config.num_harmonics
+                periods = estimator.config.multi_periodic_config.periods
+                num_harmonics = estimator.config.multi_periodic_config.num_harmonics
                 period_labels = []
                 for period_hours in periods:
                     if period_hours >= 8000:  # Yearly
@@ -1013,11 +1013,11 @@ def _(estimator, make_basis_matrix, np, plt, timestamps_train_aligned):
 def _(estimator, make_basis_matrix, np, plt):
     def _():
         # Visualize individual harmonic basis functions
-        if estimator.config.multi_harmonic_config and 'fourier_coef' in estimator.variables_:
+        if estimator.config.multi_periodic_config and 'fourier_coef' in estimator.variables_:
             fourier_coef = estimator.variables_['fourier_coef'].value
             if fourier_coef is not None:
-                periods = estimator.config.multi_harmonic_config.periods
-                num_harmonics = estimator.config.multi_harmonic_config.num_harmonics
+                periods = estimator.config.multi_periodic_config.periods
+                num_harmonics = estimator.config.multi_periodic_config.num_harmonics
                 period_labels = []
                 for period_hours in periods:
                     if period_hours >= 8000:  # Yearly
@@ -1407,12 +1407,12 @@ def _(
         baseline_pred = np.full(len(y_train_log), estimator.variables_['constant'].value)
 
         # Add Fourier terms
-        if estimator.config.multi_harmonic_config:
+        if estimator.config.multi_periodic_config:
             max_idx = int(np.max(estimator.time_indices_))
             F_full = make_basis_matrix(
-                num_harmonics=estimator.config.multi_harmonic_config.num_harmonics,
+                num_harmonics=estimator.config.multi_periodic_config.num_harmonics,
                 length=max_idx + 1,
-                periods=estimator.config.multi_harmonic_config.periods
+                periods=estimator.config.multi_periodic_config.periods
             )
             F = F_full[estimator.time_indices_.astype(int), 1:]
             fourier_coef = estimator.variables_['fourier_coef'].value
@@ -1573,7 +1573,7 @@ def _(
     TsgamArConfig,
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamOutlierConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
@@ -1609,7 +1609,7 @@ def _(
     # 1. Baseline: No harmonics, no exogenous, no AR, no outliers
     ablation_configs.append({
         'name': 'Baseline (constant only)',
-        'multi_harmonic': None,
+        'multi_periodic': None,
         'exog': None,
         'ar': None,
         'outlier': None
@@ -1618,7 +1618,7 @@ def _(
     # 2. Harmonics only (yearly)
     ablation_configs.append({
         'name': 'Harmonics: Yearly only',
-        'multi_harmonic': TsgamMultiHarmonicConfig(
+        'multi_periodic': TsgamMultiPeriodicConfig(
             num_harmonics=[4, 0, 0],
             periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
             reg_weight=6e-5
@@ -1631,7 +1631,7 @@ def _(
     # 3. Harmonics only (weekly)
     ablation_configs.append({
         'name': 'Harmonics: Weekly only',
-        'multi_harmonic': TsgamMultiHarmonicConfig(
+        'multi_periodic': TsgamMultiPeriodicConfig(
             num_harmonics=[0, 4, 0],
             periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
             reg_weight=6e-5
@@ -1644,7 +1644,7 @@ def _(
     # 4. Harmonics only (daily)
     ablation_configs.append({
         'name': 'Harmonics: Daily only',
-        'multi_harmonic': TsgamMultiHarmonicConfig(
+        'multi_periodic': TsgamMultiPeriodicConfig(
             num_harmonics=[0, 0, 6],
             periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
             reg_weight=6e-5
@@ -1657,7 +1657,7 @@ def _(
     # 5. All harmonics (yearly + weekly + daily)
     ablation_configs.append({
         'name': 'Harmonics: All (yearly + weekly + daily)',
-        'multi_harmonic': TsgamMultiHarmonicConfig(
+        'multi_periodic': TsgamMultiPeriodicConfig(
             num_harmonics=[4, 4, 6],
             periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
             reg_weight=6e-5
@@ -1685,7 +1685,7 @@ def _(
 
         ablation_configs.append({
             'name': 'Exogenous only',
-            'multi_harmonic': None,
+            'multi_periodic': None,
             'exog': exog_config_ablation,
             'ar': None,
             'outlier': None
@@ -1709,7 +1709,7 @@ def _(
 
         ablation_configs.append({
             'name': 'Harmonics (all) + Exogenous',
-            'multi_harmonic': TsgamMultiHarmonicConfig(
+            'multi_periodic': TsgamMultiPeriodicConfig(
                 num_harmonics=[4, 4, 6],
                 periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
                 reg_weight=6e-5
@@ -1737,7 +1737,7 @@ def _(
 
         ablation_configs.append({
             'name': 'Harmonics (all) + Exogenous + AR',
-            'multi_harmonic': TsgamMultiHarmonicConfig(
+            'multi_periodic': TsgamMultiPeriodicConfig(
                 num_harmonics=[4, 4, 6],
                 periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
                 reg_weight=6e-5
@@ -1750,7 +1750,7 @@ def _(
     # 9. Harmonics (all) + Outlier detector
     ablation_configs.append({
         'name': 'Harmonics (all) + Outlier detector',
-        'multi_harmonic': TsgamMultiHarmonicConfig(
+        'multi_periodic': TsgamMultiPeriodicConfig(
             num_harmonics=[4, 4, 6],
             periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
             reg_weight=6e-5
@@ -1778,7 +1778,7 @@ def _(
 
         ablation_configs.append({
             'name': 'Harmonics (all) + Exogenous + Outlier detector',
-            'multi_harmonic': TsgamMultiHarmonicConfig(
+            'multi_periodic': TsgamMultiPeriodicConfig(
                 num_harmonics=[4, 4, 6],
                 periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
                 reg_weight=6e-5
@@ -1806,7 +1806,7 @@ def _(
 
         ablation_configs.append({
             'name': 'Harmonics (all) + Exogenous + AR + Outlier detector',
-            'multi_harmonic': TsgamMultiHarmonicConfig(
+            'multi_periodic': TsgamMultiPeriodicConfig(
                 num_harmonics=[4, 4, 6],
                 periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
                 reg_weight=6e-5
@@ -1838,7 +1838,7 @@ def _(
 
         ablation_configs.append({
             'name': 'Full model (all components)',
-            'multi_harmonic': TsgamMultiHarmonicConfig(
+            'multi_periodic': TsgamMultiPeriodicConfig(
                 num_harmonics=[4, 4, 6],
                 periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
                 reg_weight=6e-5
@@ -1863,7 +1863,7 @@ def _(
             )
 
             config_ablation = TsgamEstimatorConfig(
-                multi_harmonic_config=config_dict['multi_harmonic'],
+                multi_periodic_config=config_dict['multi_periodic'],
                 exog_config=config_dict['exog'],
                 ar_config=config_dict['ar'],
                 outlier_config=config_dict['outlier'],

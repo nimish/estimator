@@ -56,7 +56,7 @@ def _():
     from tsgam_estimator import (
         TsgamEstimator,
         TsgamEstimatorConfig,
-        TsgamMultiHarmonicConfig,
+        TsgamMultiPeriodicConfig,
         TsgamSplineConfig,
         TsgamArConfig,
         TsgamSolverConfig,
@@ -83,7 +83,7 @@ def _():
         TsgamArConfig,
         TsgamEstimator,
         TsgamEstimatorConfig,
-        TsgamMultiHarmonicConfig,
+        TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
         TsgamSplineConfig,
         TsgamTrendConfig,
@@ -129,7 +129,7 @@ def _(
     TsgamArConfig,
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
     df_air_quality,
@@ -168,11 +168,11 @@ def _(
             'rain_hours': _df_test_aq['rain_hours'].values,
         }, index=_df_test_aq.index)
 
-        # Multi-harmonic config
+        # Multi-periodic config
         # Using 30-day period for better capture of monthly patterns (matching standalone example exactly)
         _periods_list_aq = [PERIOD_HOURLY_YEARLY, float(30*24.0), float(PERIOD_HOURLY_WEEKLY), float(PERIOD_HOURLY_DAILY)]
         _num_harmonics_list_aq = [4, 4, 8, 4]
-        _multi_harmonic_config_aq = TsgamMultiHarmonicConfig(
+        _multi_periodic_config_aq = TsgamMultiPeriodicConfig(
             num_harmonics=_num_harmonics_list_aq,
             periods=_periods_list_aq,
             reg_weight=6e-5
@@ -197,7 +197,7 @@ def _(
 
         # Create config (matching standalone example exactly)
         _config_aq = TsgamEstimatorConfig(
-            multi_harmonic_config=_multi_harmonic_config_aq,
+            multi_periodic_config=_multi_periodic_config_aq,
             exog_config=_exog_config_aq,
             ar_config=_ar_config_aq,
             outlier_config=None,  # use_outlier defaults to False in standalone
@@ -247,7 +247,7 @@ def _(
     PERIOD_HOURLY_YEARLY,
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
     create_train_test_split_with_gaps,
@@ -281,8 +281,8 @@ def _(
         _y_train_la_log = _y_train_la_log[_train_valid_la]
         y_test_la_aligned = _df_test_la[_target_var_la].loc[X_test_la.index].values
 
-        # Multi-harmonic config
-        _multi_harmonic_config_la = TsgamMultiHarmonicConfig(
+        # Multi-periodic config
+        _multi_periodic_config_la = TsgamMultiPeriodicConfig(
             num_harmonics=[4, 4, 6],
             periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
             reg_weight=6e-5
@@ -299,7 +299,7 @@ def _(
 
         # Create config
         _config_la = TsgamEstimatorConfig(
-            multi_harmonic_config=_multi_harmonic_config_la,
+            multi_periodic_config=_multi_periodic_config_la,
             exog_config=_exog_config_la,
             ar_config=None,
             solver_config=_solver_config_la,
@@ -337,7 +337,7 @@ def _(
     TrendType,
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
     TsgamTrendConfig,
@@ -482,12 +482,12 @@ def _(
 
         # Fit model (only if data is ready)
         if _dh_pv is not None and _y_pv is not None and len(_y_pv) > 0 and _X_pv is not None:
-            # Multi-harmonic config
+            # Multi-periodic config
             _nvals_pv = _dh_pv.raw_data_matrix.shape[0]
             _period_daily_hours_pv = 24.0
             _period_yearly_hours_pv = 365.2425 * 24.0
 
-            _multi_harmonic_config_pv = TsgamMultiHarmonicConfig(
+            _multi_periodic_config_pv = TsgamMultiPeriodicConfig(
                 num_harmonics=[6, 10],
                 periods=[_period_yearly_hours_pv, _period_daily_hours_pv],
                 reg_weight=1e-2
@@ -511,7 +511,7 @@ def _(
 
             # Create config
             _config_pv = TsgamEstimatorConfig(
-                multi_harmonic_config=_multi_harmonic_config_pv,
+                multi_periodic_config=_multi_periodic_config_pv,
                 exog_config=_exog_config_pv,
                 trend_config=_trend_config_pv,
                 solver_config=_solver_config_pv

@@ -20,7 +20,7 @@ import pandas as pd
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
 )
 from spcqe import make_basis_matrix
@@ -54,7 +54,7 @@ def test_matches_notebook_pattern():
 
     # Our implementation
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=TsgamMultiHarmonicConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
             num_harmonics=[6, 4, 3],
             periods=[365.2425 * 24, 7 * 24, 24]
         ),
@@ -107,7 +107,7 @@ def test_continuous_indices_match_notebook():
     pred_timestamps = pd.date_range('2020-01-01', periods=150, freq='h')[100:]
 
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=TsgamMultiHarmonicConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
             num_harmonics=[2, 1],
             periods=[24, 7 * 24]
         ),
@@ -169,7 +169,7 @@ def test_phase_alignment_matches_notebook():
 
     # Our implementation
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=TsgamMultiHarmonicConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
             num_harmonics=[1],
             periods=[24]
         ),

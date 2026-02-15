@@ -27,7 +27,7 @@ from solardatatools import DataHandler
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSplineConfig,
     TsgamSolverConfig,
     TsgamTrendConfig,
@@ -394,11 +394,11 @@ def _fit_and_visualize_trend_model(
 
     print(f"\nConfiguring model with trend_type='{trend_type}'...")
 
-    # Multi-harmonic Fourier configuration
+    # Multi-periodic Fourier configuration
     _period_daily_hours = 24.0  # daily period in hours
     _period_yearly_hours = 365.2425 * 24.0  # yearly period in hours
 
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[6, 10],
         periods=[_period_yearly_hours, _period_daily_hours],
         reg_weight=1e-2
@@ -438,7 +438,7 @@ def _fit_and_visualize_trend_model(
 
     # Create main config
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=exog_config,
         trend_config=trend_config,
         solver_config=solver_config

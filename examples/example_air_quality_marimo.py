@@ -5,7 +5,7 @@
 Marimo Notebook: Air Quality Forecasting with TSGAM
 
 This notebook demonstrates forecasting PM2.5 air quality using:
-- Multi-harmonic Fourier basis for seasonal patterns (daily, weekly, yearly)
+- Multi-periodic Fourier basis for seasonal patterns (daily, weekly, yearly)
 - Temperature, dewpoint, wind speed, and pressure as exogenous variables with spline basis
 - Autoregressive (AR) modeling of residuals
 
@@ -56,7 +56,7 @@ def _():
     from tsgam_estimator import (
         TsgamEstimator,
         TsgamEstimatorConfig,
-        TsgamMultiHarmonicConfig,
+        TsgamMultiPeriodicConfig,
         TsgamSplineConfig,
         TsgamArConfig,
         TsgamOutlierConfig,
@@ -73,7 +73,7 @@ def _():
         TsgamArConfig,
         TsgamEstimator,
         TsgamEstimatorConfig,
-        TsgamMultiHarmonicConfig,
+        TsgamMultiPeriodicConfig,
         TsgamOutlierConfig,
         TsgamSolverConfig,
         TsgamSplineConfig,
@@ -540,7 +540,7 @@ def _(
     TsgamArConfig,
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamOutlierConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
@@ -565,7 +565,7 @@ def _(
     else:
         y_train_log = y_train.copy()
 
-    # Multi-harmonic Fourier configuration
+    # Multi-periodic Fourier configuration
     # Using 30-day period instead of yearly for shorter time series
     # periods must match num_harmonics in length
     _periods_list = [PERIOD_HOURLY_YEARLY, float(30*24.0), float(PERIOD_HOURLY_WEEKLY), float(PERIOD_HOURLY_DAILY)]
@@ -578,9 +578,9 @@ def _(
             f"periods ({len(_periods_list)}) must have the same length"
         )
 
-    print(f"Multi-harmonic config: {_num_harmonics_list} harmonics for periods {_periods_list}")
+    print(f"Multi-periodic config: {_num_harmonics_list} harmonics for periods {_periods_list}")
 
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=_num_harmonics_list,
         periods=_periods_list,
         reg_weight=6e-5
@@ -679,7 +679,7 @@ def _(
 
     # Create main config
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=exog_config,
         ar_config=ar_config,
         outlier_config=outlier_config,
@@ -732,7 +732,7 @@ def _(
     PERIOD_HOURLY_YEARLY,
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
     X_test,
@@ -757,10 +757,10 @@ def _(
         _y_train_log = y_train.copy()
         _y_test_log = y_test.copy()
 
-    # Multi-harmonic config
+    # Multi-periodic config
     _periods_list = [PERIOD_HOURLY_YEARLY, float(30*24.0), float(PERIOD_HOURLY_WEEKLY), float(PERIOD_HOURLY_DAILY)]
     _num_harmonics_list = [4, 4, 8, 4]
-    _multi_harmonic_config = TsgamMultiHarmonicConfig(
+    _multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=_num_harmonics_list,
         periods=_periods_list,
         reg_weight=6e-5
@@ -822,7 +822,7 @@ def _(
         # Always use CLARABEL (no MOSEK license available)
         try:
             _config = TsgamEstimatorConfig(
-                multi_harmonic_config=_multi_harmonic_config,
+                multi_periodic_config=_multi_periodic_config,
                 exog_config=_exog_config,
                 ar_config=None,
                 solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),

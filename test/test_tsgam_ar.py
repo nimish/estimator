@@ -18,7 +18,7 @@ from pathlib import Path
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSplineConfig,
     TsgamArConfig,
     TsgamSolverConfig,
@@ -67,7 +67,7 @@ def tsgam_estimator_with_ar(notebook_data):
     )
 
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=TsgamMultiHarmonicConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
             num_harmonics=[6, 4, 3],
             periods=[365.2425 * 24, 7 * 24, 24]
         ),
@@ -249,7 +249,7 @@ def test_sample_method_without_ar():
 
     # No AR config
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=TsgamMultiHarmonicConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
             num_harmonics=[6, 4, 3],
             periods=[365.2425 * 24, 7 * 24, 24]
         ),

@@ -17,7 +17,7 @@ import pandas as pd
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSplineConfig,
     TsgamSolverConfig,
 )
@@ -36,14 +36,14 @@ def hourly_data():
 @pytest.fixture
 def basic_config():
     """Create basic config for testing."""
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[2, 1],
         periods=[24, 7 * 24]  # Daily and weekly
     )
     solver_config = TsgamSolverConfig(solver='CLARABEL', verbose=False)
 
     return TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=None,
         ar_config=None,
         solver_config=solver_config,
@@ -305,13 +305,13 @@ class TestBasicFunctionality:
             )
         ]
 
-        multi_harmonic_config = TsgamMultiHarmonicConfig(
+        multi_periodic_config = TsgamMultiPeriodicConfig(
             num_harmonics=[2, 1],
             periods=[24, 7 * 24]
         )
 
         config = TsgamEstimatorConfig(
-            multi_harmonic_config=multi_harmonic_config,
+            multi_periodic_config=multi_periodic_config,
             exog_config=exog_config,
             ar_config=None,
             solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
@@ -338,7 +338,7 @@ class TestErrorCases:
 
         # Config without freq - frequency is inferred from data
         config = TsgamEstimatorConfig(
-            multi_harmonic_config=TsgamMultiHarmonicConfig(
+            multi_periodic_config=TsgamMultiPeriodicConfig(
                 num_harmonics=[2],
                 periods=[24]
             ),

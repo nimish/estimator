@@ -15,7 +15,7 @@ from pathlib import Path
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSplineConfig,
     TsgamSolverConfig,
 )
@@ -54,7 +54,7 @@ def tsgam_estimator_for_prediction(notebook_data):
     X = pd.DataFrame({'temp': df_subset["Dry_Bulb"].values}, index=df_subset.index)
 
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=TsgamMultiHarmonicConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
             num_harmonics=[6, 4, 3],
             periods=[365.2425 * 24, 7 * 24, 24]
         ),

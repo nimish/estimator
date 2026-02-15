@@ -5,7 +5,7 @@
 Example: Air Quality Forecasting with TSGAM
 
 This example demonstrates forecasting PM2.5 air quality using:
-- Multi-harmonic Fourier basis for seasonal patterns (daily, weekly, yearly)
+- Multi-periodic Fourier basis for seasonal patterns (daily, weekly, yearly)
 - Temperature as an exogenous variable with spline basis
 - Autoregressive (AR) modeling of residuals
 
@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
-    TsgamMultiHarmonicConfig,
+    TsgamMultiPeriodicConfig,
     TsgamSplineConfig,
     TsgamArConfig,
     TsgamSolverConfig,
@@ -198,7 +198,7 @@ def fit_model_with_variables(X_train, y_train, X_test, y_test, variable_names, c
         Mean absolute percentage error on test set.
     """
     # Default configuration
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[8, 6, 4],
         periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
         reg_weight=6e-5
@@ -240,7 +240,7 @@ def fit_model_with_variables(X_train, y_train, X_test, y_test, variable_names, c
     solver_config = TsgamSolverConfig(solver='CLARABEL', verbose=False)
 
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=exog_config if n_vars > 0 else None,
         ar_config=ar_config,
         solver_config=solver_config,
@@ -652,10 +652,10 @@ def main():
     print("Fitting Full Model (All Variables)")
     print("="*60)
 
-    # Multi-harmonic Fourier basis for seasonal patterns
+    # Multi-periodic Fourier basis for seasonal patterns
     # Daily (24h), weekly (168h), yearly (8766h) patterns
     # Increased harmonics for better seasonal pattern capture
-    multi_harmonic_config = TsgamMultiHarmonicConfig(
+    multi_periodic_config = TsgamMultiPeriodicConfig(
         num_harmonics=[8, 6, 4],  # Balanced: 8 for daily, 6 for weekly, 4 for yearly
         periods=[PERIOD_HOURLY_YEARLY, PERIOD_HOURLY_WEEKLY, PERIOD_HOURLY_DAILY],
         reg_weight=6e-5  # Higher regularization for stability with multiple variables
@@ -705,7 +705,7 @@ def main():
 
     # Create main config
     config = TsgamEstimatorConfig(
-        multi_harmonic_config=multi_harmonic_config,
+        multi_periodic_config=multi_periodic_config,
         exog_config=exog_config,
         ar_config=ar_config,
         solver_config=solver_config,
