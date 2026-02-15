@@ -9,7 +9,7 @@ import numpy as np
 import cvxpy
 from numpy.random import RandomState
 from scipy import stats
-from scipy.sparse import spdiags
+from scipy.sparse import spdiags, spmatrix
 from sklearn.base import RegressorMixin, BaseEstimator, check_array, check_is_fitted
 from sklearn.utils import check_X_y, check_random_state
 from spcqe import make_basis_matrix
@@ -410,7 +410,7 @@ PERIOD_YEARLY_YEARLY = 1
 # infer frequency of data and then compute values for periods automatically
 
 
-def get_recommended_periods(X, include_harmonics=False) -> tuple[list[float], list[int]]:
+def get_recommended_periods(X: pd.DataFrame, include_harmonics: bool = False) -> list[float] | tuple[list[float], list[int]]:
     """
     Get recommended periods for Fourier basis based on data frequency.
 
@@ -753,11 +753,11 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     ...                       index=pd.date_range('2021-01-01', periods=100, freq='h'))
     >>> predictions = estimator.predict(X_pred)
     """
-    def __init__(self, config: TsgamEstimatorConfig, **kwargs):
+    def __init__(self, config: TsgamEstimatorConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.config = config
 
-    def _extract_timestamps(self, X):
+    def _extract_timestamps(self, X: pd.DataFrame) -> pd.DatetimeIndex:
         """
         Extract timestamps from X.
 
@@ -791,7 +791,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 f"Got {type(X)} instead."
             )
 
-    def _timestamps_to_indices(self, timestamps, reference):
+    def _timestamps_to_indices(self, timestamps: pd.DatetimeIndex, reference: pd.Timestamp) -> ndarray:
         """
         Convert timestamps to numeric indices (hours since reference).
 
@@ -809,7 +809,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         """
         return (timestamps - reference).total_seconds() / 3600.0
 
-    def _get_trend_period_hours(self, timestamps, period_hours=None):
+    def _get_trend_period_hours(self, timestamps: pd.DatetimeIndex, period_hours: float | None = None) -> tuple[float, float]:
         """
         Determine trend period in hours from data frequency.
 
@@ -868,7 +868,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return period_hours, samples_per_period
 
-    def _infer_frequency_from_differences(self, timestamps):
+    def _infer_frequency_from_differences(self, timestamps: pd.DatetimeIndex) -> str:
         """
         Infer the intended frequency from time differences, even when there are gaps.
 
@@ -931,7 +931,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             days = most_common_diff_seconds // 86400
             return f'{days}D'
 
-    def _validate_frequency(self, timestamps, expected_freq, allow_gaps=True):
+    def _validate_frequency(self, timestamps: pd.DatetimeIndex, expected_freq: str, allow_gaps: bool = True) -> None:
         """
         Validate that timestamps match expected frequency, optionally allowing gaps.
 
@@ -1030,7 +1030,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                         f"expected frequency '{expected_freq}': {e}"
                     )
 
-    def _ensure_timestamp_index(self, X):
+    def _ensure_timestamp_index(self, X: pd.DataFrame) -> tuple[pd.DatetimeIndex, ndarray]:
         """
         Ensure X has proper timestamp index/column, extracting timestamps.
 
@@ -1059,14 +1059,14 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return timestamps, X_array
 
-    def _make_regularization_matrix(self, num_harmonics,
+    def _make_regularization_matrix(self, num_harmonics: list[int],
                                    weight: float,
                                    periods: list[float],
                                    drop_constant: bool = False,
-                                   standing_wave=False,
-                                   trend=False,
-                                   max_cross_k=None,
-                                   custom_basis=None):
+                                   standing_wave: bool | list[bool] = False,
+                                   trend: bool = False,
+                                   max_cross_k: int | None = None,
+                                   custom_basis: dict[int, ndarray] | None = None) -> spmatrix:
         """
         Create regularization matrix for Fourier coefficients.
 
@@ -1137,7 +1137,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
 
 
-    def _make_H(self, x, knots, include_offset=False):
+    def _make_H(self, x: ndarray, knots: ndarray, include_offset: bool = False) -> ndarray:
         """
         Create cubic spline basis matrix.
 
@@ -1175,7 +1175,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         else:
             return H[:, 1:]
 
-    def _make_offset_H(self, H, offset):
+    def _make_offset_H(self, H: ndarray, offset: int) -> ndarray:
         """
         Create lead/lag version of basis matrix.
 
@@ -1198,7 +1198,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             newH[:-offset] = np.nan
         return newH
 
-    def _running_view(self, arr, window, lag=1, axis=-1):
+    def _running_view(self, arr: ndarray, window: int, lag: int = 1, axis: int = -1) -> ndarray:
         """
         Create running view of array for AR terms.
 
@@ -1228,7 +1228,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             strides=mod_arr.strides + (mod_arr.strides[axis],)
         )
 
-    def _build_exog_Hs(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None):
+    def _build_exog_Hs(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None) -> list[ndarray]:
         """
         Build basis matrices for an exogenous variable with lead/lag.
 
@@ -1264,7 +1264,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return Hs
 
-    def _process_exog_config(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None):
+    def _process_exog_config(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None) -> tuple[ndarray, list[ndarray]]:
         """
         Process an exogenous variable configuration to build basis matrices.
 
@@ -1309,7 +1309,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return valid_mask, Hs
 
-    def _get_min_samples_required(self):
+    def _get_min_samples_required(self) -> int:
         """
         Calculate minimum number of samples required based on lags.
 
@@ -1347,7 +1347,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return min_samples
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X: pd.DataFrame, y: ndarray, sample_weight: ndarray | None = None) -> "TsgamEstimator":
         """
         Fit the TSGAM model to training data.
 
@@ -1592,7 +1592,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return self
 
-    def _fit_ar_model(self, X_array, y, time_indices):
+    def _fit_ar_model(self, X_array: ndarray, y: ndarray, time_indices: ndarray) -> None:
         """
         Fit AR model on baseline residuals.
 
@@ -1690,7 +1690,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             self.ar_noise_loc_ = None
             self.ar_noise_scale_ = None
 
-    def predict(self, X):
+    def predict(self, X: pd.DataFrame) -> ndarray:
         """
         Predict target values for new data.
 
@@ -1922,7 +1922,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return predictions
 
-    def sample(self, X, n_samples=1, random_state=None):
+    def sample(self, X: pd.DataFrame, n_samples: int = 1, random_state: RandomState | int | None = None) -> ndarray:
         """
         Generate sample predictions with AR noise rollout.
 
@@ -1986,7 +1986,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return samples
 
-    def _generate_ar_samples(self, baseline_pred, n_samples, random_state):
+    def _generate_ar_samples(self, baseline_pred: ndarray, n_samples: int, random_state: RandomState) -> ndarray:
         """
         Generate samples with AR noise rollout using residuals.
 
@@ -2060,7 +2060,9 @@ if __name__ == "__main__":
     from pathlib import Path
 
     # Load data from same place as notebook
-    def load_notebook_data(sheet='RI', years=[2020, 2021]):
+    def load_notebook_data(sheet: str = 'RI', years: list[int] | None = None) -> pd.DataFrame:
+        if years is None:
+            years = [2020, 2021]
         df_list = []
         for year in years:
             fp = Path('.') / 'ISO_Data' / f'{year}_smd_hourly.xlsx'
