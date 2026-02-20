@@ -807,7 +807,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         indices : ndarray
             Numeric indices in hours since reference.
         """
-        return (timestamps - reference).total_seconds() / 3600.0
+        return ((timestamps - reference) / pd.to_timedelta(self.freq_)).astype(int)
 
     def _get_trend_period_hours(self, timestamps: pd.DatetimeIndex, period_hours: float | None = None) -> tuple[float, float]:
         """
