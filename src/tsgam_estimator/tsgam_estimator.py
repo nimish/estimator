@@ -905,8 +905,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             60: '1min',
             300: '5min',
             900: '15min',
-            3600: 'h',  # or 'H'
-            86400: 'D',
+            3600: '1h',  # or 'H'
+            86400: '1D',
         }
 
         # Try exact match first
@@ -1493,6 +1493,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         constraints = []
         if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE:
             trend_config = self.config.trend_config
+            
             # Determine period and samples per period
             period_hours, samples_per_period = self._get_trend_period_hours(
                 timestamps, trend_config.grouping
