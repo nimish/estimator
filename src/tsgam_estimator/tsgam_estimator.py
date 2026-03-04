@@ -8,7 +8,7 @@ from numpy import ndarray
 import numpy as np
 import cvxpy
 from numpy.random import RandomState
-from scipy import stats
+from scipy import stats, signal
 from scipy.sparse import spdiags, spmatrix
 from sklearn.base import RegressorMixin, BaseEstimator, check_array, check_is_fitted
 from sklearn.utils import check_X_y, check_random_state
@@ -2009,38 +2009,62 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             "AR coefficients must be set before generating samples"
         assert self.ar_noise_loc_ is not None and self.ar_noise_scale_ is not None, \
             "AR noise distribution parameters must be set before generating samples"
+        
+        if random_state is not None:
+            if isinstance(random_state, np.random.RandomState):
+                rng = random_state
+            else:
+                rng = np.random.RandomState(random_state)
+        else:
+            rng = np.random.RandomState()
 
         ar_coef = self.ar_coef_
         ar_intercept = self.ar_intercept_
+        ar_noise_loc = self.ar_noise_loc_
+        ar_noise_scale = self.ar_noise_scale_
         ar_lags = len(ar_coef)
-
+        length = len(baseline_pred)
+        nvals = length + ar_lags * 2
         samples = np.zeros((n_samples, len(baseline_pred)))
+        # Prepare filter coefficients
+        a = np.concatenate([[1], -ar_coef[::-1]])
+        b = np.array([1])
         for i in range(n_samples):
-            # Initialize window with random noise (as in notebook)
-            window = stats.laplace.rvs(
-                loc=self.ar_noise_loc_,
-                scale=self.ar_noise_scale_,
-                size=ar_lags,
-                random_state=random_state
+            # Generate i.i.d. noise for the entire sequence
+            noise = stats.laplace.rvs(
+                loc=ar_noise_loc,
+                scale=ar_noise_scale,
+                size=nvals,
+                random_state=rng
             )
-            # Generate AR noise with burn-in period (matching notebook)
-            # Notebook generates length + ar_lags * 2 values, then uses last length values
-            length = len(baseline_pred)
-            nvals = length + ar_lags * 2
-            gen_data = np.empty(nvals, dtype=float)
-            for it in range(nvals):
-                # Generate AR value: ar_coef @ window + intercept + noise
-                ar_val = ar_coef @ window + ar_intercept + stats.laplace.rvs(
-                    loc=self.ar_noise_loc_,
-                    scale=self.ar_noise_scale_,
-                    random_state=random_state
-                )
-                gen_data[it] = ar_val
-                # Update window: roll and replace last element
-                window = np.roll(window, -1)
-                window[-1] = ar_val
+
+            # Input to the filter
+            x = ar_intercept + noise
+
+            # Initialize the filter state with the first ar_lags noise values
+            # This matches the original "window" initialization
+            initial_window = noise[:ar_lags]
+
+            # Convert initial window to filter initial conditions
+            # For an AR process, we need to set zi such that the first outputs match our window
+            if ar_lags > 0:
+                zi = np.zeros(ar_lags)
+                # Work backwards through the initial window to set up the state
+                for j in range(ar_lags):
+                    zi[j] = initial_window[ar_lags - 1 - j]
+            else:
+                zi = None
+
+            # Apply the AR filter starting after the initial window
+            if zi is not None:
+                ar_noise, _ = signal.lfilter(b, a, x[ar_lags:], zi=zi)
+                # Prepend the initial window
+                ar_noise = np.concatenate([initial_window, ar_noise])
+            else:
+                ar_noise, _ = signal.lfilter(b, a, x)
+
             # Use last length values (after burn-in)
-            ar_noise = gen_data[-length:]
+            ar_noise = ar_noise[-length:]
             samples[i] = baseline_pred + ar_noise
         return samples
 
