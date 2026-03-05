@@ -1403,9 +1403,11 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         self._validate_frequency(timestamps, inferred_freq, allow_gaps=True)
 
         # Store frequency and reference timestamp
+        # Add "1" in front of unit in cases where it's omitted
+        if inferred_freq[0] not in "0123456789":
+            inferred_freq = f"1{inferred_freq}"
         # Normalize 'H' to 'h' for consistency
-        normalized_freq = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
-        self.freq_ = normalized_freq
+        self.freq_ = inferred_freq.lower()
         self.time_reference_ = timestamps[0]
 
         # Convert timestamps to numeric indices (hours since reference)
