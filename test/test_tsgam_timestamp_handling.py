@@ -111,7 +111,7 @@ class TestFrequencyValidation:
 
         estimator = TsgamEstimator(config=basic_config)
         # Should not raise
-        estimator._validate_frequency(timestamps, 'H')
+        estimator._validate_frequency(timestamps, '1h')
 
     def test_wrong_frequency_error(self, hourly_data, basic_config):
         """Test that wrong frequency raises error."""
@@ -119,7 +119,7 @@ class TestFrequencyValidation:
 
         estimator = TsgamEstimator(config=basic_config)
         with pytest.raises(ValueError, match="frequency"):
-            estimator._validate_frequency(timestamps, 'D')  # Daily instead of hourly
+            estimator._validate_frequency(timestamps, '1D')  # Daily instead of hourly
 
     def test_irregular_timestamps_error(self, basic_config):
         """Test that irregular timestamps raise error."""
@@ -133,16 +133,15 @@ class TestFrequencyValidation:
 
         estimator = TsgamEstimator(config=basic_config)
         with pytest.raises(ValueError, match="frequency"):
-            estimator._validate_frequency(timestamps, 'H')
+            estimator._validate_frequency(timestamps, '1h')
 
     def test_single_sample_no_error(self, basic_config):
         """Test that single sample doesn't cause error (can't validate)."""
         timestamps = pd.DatetimeIndex(['2020-01-01 00:00:00'])
 
         estimator = TsgamEstimator(config=basic_config)
-        # Should not raise (both 'h' and 'H' should work)
-        estimator._validate_frequency(timestamps, 'h')
-        estimator._validate_frequency(timestamps, 'H')  # Test backward compatibility
+        # Should not raise — single sample cannot be validated
+        estimator._validate_frequency(timestamps, '1h')
 
 
 class TestTimestampConversion:
@@ -278,7 +277,7 @@ class TestBasicFunctionality:
         assert hasattr(estimator, 'time_reference_')
         assert hasattr(estimator, 'freq_')
         assert hasattr(estimator, 'time_indices_')
-        assert estimator.freq_ == 'h'
+        assert estimator.freq_ == '1h'
         assert estimator.time_reference_ == timestamps[0]
 
     def test_predict_with_datetime_index(self, hourly_data, basic_config):
@@ -353,7 +352,7 @@ class TestErrorCases:
         # Should work - frequency is inferred from timestamps
         estimator.fit(X, y)
         # Verify frequency was inferred correctly
-        assert estimator.freq_ == 'h'
+        assert estimator.freq_ == '1h'
 
     def test_predict_before_fit_error(self, hourly_data, basic_config):
         """Test that predict raises error if called before fit."""
@@ -368,7 +367,7 @@ class TestErrorCases:
         """Test error when predict frequency doesn't match fit frequency."""
         timestamps, temp, y = hourly_data
 
-        # Use hourly data - frequency will be inferred as 'h'
+        # Use hourly data - frequency will be inferred as '1h'
         X = pd.DataFrame({'temp': temp[:50]}, index=timestamps[:50])
 
         estimator = TsgamEstimator(config=basic_config)

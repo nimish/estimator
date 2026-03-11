@@ -517,97 +517,52 @@ def get_recommended_periods(X: pd.DataFrame, include_harmonics: bool = False) ->
                 "Timestamps must be regularly spaced."
             )
     else:
-        # Calculate base step from frequency string
-        freq_str = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
-        if freq_str.endswith('min') or freq_str == 'T':
-            # Parse minutes
-            minutes_str = freq_str.replace('min', '').replace('T', '')
-            minutes = int(minutes_str) if minutes_str else 1
-            base_step_hours = minutes / 60.0
-        elif freq_str == 'h' or freq_str == 'hourly':
-            base_step_hours = 1.0
-        elif freq_str == 'd' or freq_str == 'daily':
-            base_step_hours = 24.0
-        elif freq_str == 'w' or freq_str == 'weekly':
-            base_step_hours = 24.0 * 7
-        elif freq_str == 'm' or freq_str == 'monthly':
-            base_step_hours = 24.0 * 30.44  # Approximate
-        elif freq_str == 'q' or freq_str == 'quarterly':
-            base_step_hours = 24.0 * 91.31  # Approximate
-        else:
-            # Fallback: calculate from actual differences
+        # Calculate base step from frequency string using pd.to_timedelta
+        try:
+            freq_td_str = inferred_freq if inferred_freq[0].isdigit() else f'1{inferred_freq}'
+            base_step_hours = pd.to_timedelta(freq_td_str).total_seconds() / 3600.0
+        except (ValueError, IndexError):
             diffs = timestamps[1:] - timestamps[:-1]
             base_step_hours = diffs.median().total_seconds() / 3600.0
 
-    # Normalize frequency string for period selection logic
-    freq_str = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
-
-    # Determine periods as multiples of base frequency, then convert to hours
+    # Determine periods as multiples of base frequency, then convert to hours.
+    # Use base_step_hours ranges to select appropriate period multiples,
+    # independent of the particular frequency string format pandas returns.
     periods = []
     num_harmonics = []
 
-    # Parse frequency to determine appropriate multiples
-    # Handle pandas frequency strings like 'min', '5min', '15min', 'h', 'D', etc.
-    if freq_str.endswith('min') or freq_str == 'T':
-        # Minute-level data: periods are multiples of the minute interval
-        if freq_str == 'min' or freq_str == '1min' or freq_str == 'T':
-            # 1-minute data: recommend multiples [1, 5, 15, 60, 1440, 10080]
-            # These capture short-term, hourly, daily, and weekly patterns
+    if base_step_hours < 1 / 60:  # Sub-minute frequency
+        period_multiples = [1, 5, 15, 60, 1440, 10080]
+        num_harmonics = [4, 3, 3, 6, 4, 3]
+        periods = [mult * base_step_hours for mult in period_multiples]
+    elif base_step_hours < 1:  # Sub-hourly (minute-level) frequency
+        minutes = round(base_step_hours * 60)
+        if minutes == 1:
             period_multiples = [1, 5, 15, 60, 1440, 10080]
             num_harmonics = [4, 3, 3, 6, 4, 3]
-        elif freq_str == '5min':
-            # 5-minute data: recommend multiples [1, 3, 12, 288, 2016]
-            # These capture short-term, hourly, daily, and weekly patterns
+        elif minutes == 5:
             period_multiples = [1, 3, 12, 288, 2016]
             num_harmonics = [3, 3, 6, 4, 3]
-        elif freq_str == '15min':
-            # 15-minute data: recommend multiples [1, 4, 96, 672]
-            # These capture short-term, hourly, daily, and weekly patterns
+        elif minutes == 15:
             period_multiples = [1, 4, 96, 672]
             num_harmonics = [3, 6, 4, 3]
         else:
-            # Other minute frequencies: try to parse
-            try:
-                minutes_str = freq_str.replace('min', '').replace('T', '')
-                minutes = int(minutes_str) if minutes_str else 1
-                # Recommend periods that are multiples of the base frequency
-                # Use common multiples: 1x, 3x, then multiples for daily/weekly patterns
-                periods_per_day = (24 * 60) / minutes
-                periods_per_week = (7 * 24 * 60) / minutes
-                period_multiples = [1, 3, int(periods_per_day / 24), int(periods_per_day), int(periods_per_week)]
-                num_harmonics = [3, 3, 6, 4, 3]
-            except ValueError:
-                # Fallback: calculate multiples from base step
-                periods_per_day = 24.0 / base_step_hours
-                periods_per_week = 168.0 / base_step_hours
-                period_multiples = [int(periods_per_day), int(periods_per_week)]
-                num_harmonics = [6, 4, 3]
-        # Convert multiples to hours
+            periods_per_day = (24 * 60) / minutes
+            periods_per_week = (7 * 24 * 60) / minutes
+            period_multiples = [1, 3, int(periods_per_day / 24), int(periods_per_day), int(periods_per_week)]
+            num_harmonics = [3, 3, 6, 4, 3]
         periods = [mult * base_step_hours for mult in period_multiples]
-    elif freq_str == 'h' or freq_str == 'hourly':
-        # Hourly data: recommend multiples [24, 168, 8765.82] (daily, weekly, yearly)
+    elif abs(base_step_hours - 1.0) < 0.01:  # Hourly
         period_multiples = [24, 168, PERIOD_HOURLY_YEARLY]
         num_harmonics = [6, 4, 3]
         periods = [mult * base_step_hours for mult in period_multiples]
-    elif freq_str == 'd' or freq_str == 'daily':
-        # Daily data: recommend multiples [7, 365.2425] (weekly, yearly)
+    elif abs(base_step_hours - 24.0) < 0.01:  # Daily
         period_multiples = [7, PERIOD_DAILY_YEARLY]
         num_harmonics = [4, 3]
         periods = [mult * base_step_hours for mult in period_multiples]
-    elif freq_str == 'w' or freq_str == 'weekly':
-        # Weekly data: recommend yearly pattern
+    elif abs(base_step_hours - 168.0) < 0.5:  # Weekly
         period_multiples = [PERIOD_WEEKLY_YEARLY]
         num_harmonics = [3]
-        periods = [mult * base_step_hours for mult in period_multiples]
-    elif freq_str == 'm' or freq_str == 'monthly':
-        # Monthly data: recommend yearly pattern
-        period_multiples = [PERIOD_MONTHLY_YEARLY]
-        num_harmonics = [3]
-        periods = [mult * base_step_hours for mult in period_multiples]
-    elif freq_str == 'q' or freq_str == 'quarterly':
-        # Quarterly data: recommend yearly pattern
-        period_multiples = [PERIOD_QUARTERLY_YEARLY]
-        num_harmonics = [2]
         periods = [mult * base_step_hours for mult in period_multiples]
     else:
         # Unknown frequency - provide generic recommendations
@@ -791,6 +746,13 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 f"Got {type(X)} instead."
             )
 
+    @staticmethod
+    def _ensure_numeric_prefix(freq: str) -> str:
+        """Ensure frequency string has a numeric prefix (e.g. ``'h'`` -> ``'1h'``)."""
+        if freq and not freq[0].isdigit():
+            return f'1{freq}'
+        return freq
+
     def _timestamps_to_indices(self, timestamps: pd.DatetimeIndex, reference: pd.Timestamp) -> ndarray:
         """
         Convert timestamps to numeric indices (hours since reference).
@@ -807,7 +769,13 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         indices : ndarray
             Numeric indices in hours since reference.
         """
-        return ((timestamps - reference) / pd.to_timedelta(self.freq_)).astype(int)
+        freq = getattr(self, 'freq_', None)
+        if freq is None:
+            freq = pd.infer_freq(timestamps)
+            if freq is None:
+                freq = self._infer_frequency_from_differences(timestamps)
+            freq = self._ensure_numeric_prefix(freq)
+        return ((timestamps - reference) / pd.to_timedelta(freq)).astype(int)
 
     def _get_trend_period_hours(self, timestamps: pd.DatetimeIndex, period_hours: float | None = None) -> tuple[float, float]:
         """
@@ -847,18 +815,10 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             median_diff = diffs.median()
             base_step_hours = median_diff.total_seconds() / 3600.0
         else:
-            # Calculate base step from frequency string
-            freq_str = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
-            if freq_str.endswith('min') or freq_str == 'T':
-                minutes_str = freq_str.replace('min', '').replace('T', '')
-                minutes = int(minutes_str) if minutes_str else 1
-                base_step_hours = minutes / 60.0
-            elif freq_str == 'h' or freq_str == 'hourly':
-                base_step_hours = 1.0
-            elif freq_str == 'd' or freq_str == 'daily':
-                base_step_hours = 24.0
-            else:
-                # Fallback: calculate from actual differences
+            try:
+                freq_td_str = inferred_freq if inferred_freq[0].isdigit() else f'1{inferred_freq}'
+                base_step_hours = pd.to_timedelta(freq_td_str).total_seconds() / 3600.0
+            except (ValueError, IndexError):
                 diffs = timestamps[1:] - timestamps[:-1]
                 base_step_hours = diffs.median().total_seconds() / 3600.0
 
@@ -931,7 +891,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             days = most_common_diff_seconds // 86400
             return f'{days}D'
 
-    def _validate_frequency(self, timestamps: pd.DatetimeIndex, expected_freq: str, allow_gaps: bool = True) -> None:
+    def _validate_frequency(self, timestamps: pd.DatetimeIndex, expected_freq: str, allow_gaps: bool = False) -> None:
         """
         Validate that timestamps match expected frequency, optionally allowing gaps.
 
@@ -941,9 +901,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             Timestamps to validate.
         expected_freq : str
             Expected pandas frequency string (e.g., 'h' for hourly, 'H' also accepted).
-        allow_gaps : bool, default=True
-            If True, allow gaps in timestamps and infer frequency from differences.
-            If False, require perfectly regular timestamps.
+        allow_gaps : bool, default=False
+            If True, allow gaps in timestamps and infer base frequency from
+            time differences.  If False, require perfectly regular timestamps.
 
         Raises
         ------
@@ -953,15 +913,16 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         if len(timestamps) < 2:
             return  # Can't validate frequency with < 2 samples
 
-        # Normalize 'H' to 'h' for backward compatibility
-        normalized_freq = expected_freq.lower() if expected_freq == 'H' else expected_freq
-
-        # Try to infer frequency from timestamps
         inferred_freq = pd.infer_freq(timestamps)
 
-        # If inference failed and gaps are allowed, infer from differences
-        if inferred_freq is None and allow_gaps:
-            inferred_freq = self._infer_frequency_from_differences(timestamps)
+        if inferred_freq is None:
+            if allow_gaps:
+                inferred_freq = self._infer_frequency_from_differences(timestamps)
+            else:
+                raise ValueError(
+                    f"Could not infer frequency from timestamps. "
+                    f"Timestamps must be regularly spaced with frequency '{expected_freq}'."
+                )
 
         if inferred_freq is None:
             raise ValueError(
@@ -969,66 +930,11 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 f"Timestamps must be regularly spaced with frequency '{expected_freq}'."
             )
 
-        # Normalize inferred frequency for comparison ('H' -> 'h')
-        normalized_inferred = inferred_freq.lower() if inferred_freq == 'H' else inferred_freq
-
-        if normalized_inferred != normalized_freq:
-            # When gaps are allowed, check that timestamps align with expected frequency
-            # (i.e., when a timestamp exists, it should be at a valid position)
-            if allow_gaps:
-                # Check that all timestamps are at valid positions for the expected frequency
-                # Get the time delta for the expected frequency
-                try:
-                    # Try to parse the frequency string to get a timedelta
-                    if normalized_freq == 'h' or normalized_freq == 'H':
-                        freq_delta = pd.Timedelta(hours=1)
-                    elif normalized_freq == 'D':
-                        freq_delta = pd.Timedelta(days=1)
-                    elif normalized_freq.endswith('min'):
-                        minutes = int(normalized_freq.replace('min', ''))
-                        freq_delta = pd.Timedelta(minutes=minutes)
-                    elif normalized_freq.endswith('h'):
-                        hours = int(normalized_freq.replace('h', ''))
-                        freq_delta = pd.Timedelta(hours=hours)
-                    else:
-                        # Try to parse as pandas frequency
-                        freq_delta = pd.Timedelta(normalized_freq)
-
-                    # Check that timestamps are aligned (i.e., differences are multiples of freq_delta)
-                    diffs = timestamps[1:] - timestamps[:-1]
-                    for diff in diffs:
-                        # Check if diff is a multiple of freq_delta (within small tolerance)
-                        # Calculate how many periods this difference represents
-                        periods = diff.total_seconds() / freq_delta.total_seconds()
-                        # Check if it's close to an integer (within 1% tolerance)
-                        if abs(periods - round(periods)) > 0.01:
-                            raise ValueError(
-                                f"Timestamps are not aligned with expected frequency '{expected_freq}'. "
-                                f"Found difference of {diff} which is not a multiple of {freq_delta}."
-                            )
-                except Exception as e:
-                    raise ValueError(
-                        f"Timestamps frequency '{inferred_freq}' does not match "
-                        f"expected frequency '{expected_freq}': {e}"
-                    )
-            else:
-                # Original strict validation
-                try:
-                    expected_range = pd.date_range(
-                        start=timestamps[0],
-                        periods=len(timestamps),
-                        freq=normalized_freq
-                    )
-                    if not timestamps.equals(expected_range):
-                        raise ValueError(
-                            f"Timestamps frequency '{inferred_freq}' does not match "
-                            f"expected frequency '{expected_freq}'."
-                        )
-                except Exception as e:
-                    raise ValueError(
-                        f"Timestamps frequency '{inferred_freq}' does not match "
-                        f"expected frequency '{expected_freq}': {e}"
-                    )
+        if self._ensure_numeric_prefix(inferred_freq).lower() != self._ensure_numeric_prefix(expected_freq).lower():
+            raise ValueError(
+                f"Timestamps frequency '{inferred_freq}' does not match "
+                f"expected frequency '{expected_freq}'."
+            )
 
     def _ensure_timestamp_index(self, X: pd.DataFrame) -> tuple[pd.DatetimeIndex, ndarray]:
         """
@@ -1403,11 +1309,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         self._validate_frequency(timestamps, inferred_freq, allow_gaps=True)
 
         # Store frequency and reference timestamp
-        # Add "1" in front of unit in cases where it's omitted
-        if inferred_freq[0] not in "0123456789":
-            inferred_freq = f"1{inferred_freq}"
-        # Normalize 'H' to 'h' for consistency
-        self.freq_ = inferred_freq.lower()
+        self.freq_ = self._ensure_numeric_prefix(inferred_freq).lower()
         self.time_reference_ = timestamps[0]
 
         # Convert timestamps to numeric indices (hours since reference)
@@ -1495,7 +1397,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         constraints = []
         if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE:
             trend_config = self.config.trend_config
-            
+
             # Determine period and samples per period
             period_hours, samples_per_period = self._get_trend_period_hours(
                 timestamps, trend_config.grouping
@@ -1740,8 +1642,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         # Extract timestamps and validate
         timestamps, X_array = self._ensure_timestamp_index(X)
 
-        # Validate frequency matches (allow gaps in prediction data too)
-        self._validate_frequency(timestamps, self.freq_, allow_gaps=True)
+        # Prediction data must be regularly spaced with no gaps
+        self._validate_frequency(timestamps, self.freq_)
 
         # Convert timestamps to indices using stored reference
         time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
@@ -2011,7 +1913,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             "AR coefficients must be set before generating samples"
         assert self.ar_noise_loc_ is not None and self.ar_noise_scale_ is not None, \
             "AR noise distribution parameters must be set before generating samples"
-        
+
         if random_state is not None:
             if isinstance(random_state, np.random.RandomState):
                 rng = random_state
@@ -2092,7 +1994,7 @@ if __name__ == "__main__":
             years = [2020, 2021]
         df_list = []
         for year in years:
-            fp = Path('.') / 'ISO_Data' / f'{year}_smd_hourly.xlsx'
+            fp = Path(__file__).resolve().parent.parent.parent / 'examples' / 'data' / 'iso' / f'{year}_smd_hourly.xlsx'
             df = pd.read_excel(fp, sheet_name=sheet)
             df['year'] = year
             df.index = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Hr_End'].map(lambda x: f"{x-1}:00:00")) + pd.Timedelta(hours=1)
