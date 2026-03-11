@@ -22,12 +22,14 @@ from tsgam_estimator import (
     TsgamSolverConfig,
 )
 
+_DATA_DIR = Path(__file__).resolve().parent.parent / 'examples' / 'data' / 'iso'
+
 
 def load_notebook_data(sheet='RI', years=[2020, 2021]):
     """Load data exactly as notebook does."""
     df_list = []
     for year in years:
-        fp = Path('.') / 'ISO_Data' / f'{year}_smd_hourly.xlsx'
+        fp = _DATA_DIR / f'{year}_smd_hourly.xlsx'
         df = pd.read_excel(fp, sheet_name=sheet)
         df['year'] = year
         df.index = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Hr_End'].map(lambda x: f"{x-1}:00:00")) + pd.Timedelta(hours=1)
