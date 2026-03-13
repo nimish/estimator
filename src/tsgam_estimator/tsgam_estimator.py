@@ -97,7 +97,7 @@ class TsgamSplineConfig:
     lags: list[int] = field(default_factory=lambda:[0])
     reg_weight: float = 1.0e-4
     diff_reg_weight: float = 1.0
-    knots: list[float] = field(default_factory=list)
+    knots: ndarray | list[float] = field(default_factory=list)
 
 @dataclass
 class TsgamLinearConfig:
@@ -865,7 +865,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             60: '1min',
             300: '5min',
             900: '15min',
-            3600: '1h',  # or 'H'
+            3600: '1h',
             86400: '1D',
         }
 
@@ -1193,14 +1193,14 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         # Get knots if spline config
         if knots is None:
             if isinstance(exog_cfg, TsgamSplineConfig):
-                # Empty list means knots not specified, need to compute from n_knots
-                if not exog_cfg.knots:  # Handles both None and empty list
+                cfg_knots = np.asarray(exog_cfg.knots) if exog_cfg.knots is not None else np.array([])
+                if len(cfg_knots) == 0:
                     if exog_cfg.n_knots:
                         knots = np.linspace(np.min(exog_var), np.max(exog_var), exog_cfg.n_knots)
                     else:
                         raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
                 else:
-                    knots = np.asarray(exog_cfg.knots)
+                    knots = cfg_knots
             else:
                 knots = None
 
@@ -1336,16 +1336,14 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
                 # Store knots only if auto-computed (not provided in config)
                 if isinstance(exog_cfg, TsgamSplineConfig):
-                    # Empty list means knots not specified, need to compute from n_knots
-                    if not exog_cfg.knots:  # Handles both None and empty list
+                    cfg_knots = np.asarray(exog_cfg.knots) if exog_cfg.knots is not None else np.array([])
+                    if len(cfg_knots) == 0:
                         if exog_cfg.n_knots:
                             knots = np.linspace(np.min(X_array[:, ix]), np.max(X_array[:, ix]), exog_cfg.n_knots)
-                            # Store auto-computed knots (need to reuse for prediction)
                             self.exog_knots_.append(knots)
                         else:
                             raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
                     else:
-                        # Knots provided in config, don't need to store
                         self.exog_knots_.append(None)
                 else:
                     self.exog_knots_.append(None)
