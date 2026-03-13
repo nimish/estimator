@@ -972,15 +972,22 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         return timestamps, X_array
 
     @overload
-    def _ensure_sorted_index(self, X: pd.DataFrame, y: ndarray) -> tuple[pd.DataFrame, ndarray]: ...
+    def _ensure_sorted_index(
+        self, X: pd.DataFrame, y: ndarray, sample_weight: ndarray | None = None
+    ) -> tuple[pd.DataFrame, ndarray, ndarray | None]: ...
     @overload
-    def _ensure_sorted_index(self, X: pd.DataFrame, y: None = None) -> tuple[pd.DataFrame]: ...
+    def _ensure_sorted_index(
+        self, X: pd.DataFrame, y: None = None, sample_weight: None = None
+    ) -> tuple[pd.DataFrame]: ...
 
     def _ensure_sorted_index(
-        self, X: pd.DataFrame, y: ndarray | None = None
-    ) -> tuple[pd.DataFrame, ndarray] | tuple[pd.DataFrame]:
+        self,
+        X: pd.DataFrame,
+        y: ndarray | None = None,
+        sample_weight: ndarray | None = None,
+    ) -> tuple[pd.DataFrame, ndarray, ndarray | None] | tuple[pd.DataFrame]:
         """
-        Sort X (and y if provided) by datetime index, or require index to be sorted.
+        Sort X (and y, sample_weight if provided) by datetime index, or require sorted.
 
         If config.sort_index is True, sort by timestamps so row order matches
         time order. If False, require the index to be chronologically sorted
@@ -992,11 +999,13 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             Input data with DatetimeIndex or datetime column.
         y : array-like of shape (n_samples,) or None
             Target values (fit only). If provided, reordered in the same way as X.
+        sample_weight : array-like of shape (n_samples,) or None
+            Sample weights (fit only). If provided, reordered with X and y.
 
         Returns
         -------
         If y is None: (X_sorted,)
-        If y is not None: (X_sorted, y_sorted)
+        If y is not None: (X_sorted, y_sorted, sample_weight_sorted or None)
         """
         timestamps = self._extract_timestamps(X)
         if self.config.sort_index:
@@ -1004,7 +1013,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             X = X.iloc[sort_idx]
             if y is not None:
                 y = np.asarray(y)[sort_idx]
-                return (X, y)
+                sw = (
+                    np.asarray(sample_weight)[sort_idx]
+                    if sample_weight is not None
+                    else None
+                )
+                return (X, y, sw)
             return (X,)
         if not timestamps.is_monotonic_increasing:
             raise ValueError(
@@ -1013,7 +1027,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 "config.sort_index=True to sort automatically."
             )
         if y is not None:
-            return (X, y)
+            sw = np.asarray(sample_weight) if sample_weight is not None else None
+            return (X, y, sw)
         return (X,)
 
     def _make_regularization_matrix(self, num_harmonics: list[int],
@@ -1325,7 +1340,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             Target values. Can be in any scale, though log transformation is
             commonly used for multiplicative components. Must not contain NaN.
         sample_weight : array-like of shape (n_samples,), default=None
-            Sample weights. Currently not used but included for sklearn compatibility.
+            Optional sample weights for weighted least squares. Must be non-negative
+            and match the length of y. If None, all samples are weighted equally (ones).
 
         Returns
         -------
@@ -1347,8 +1363,15 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         >>> estimator.fit(X, y)
         TsgamEstimator(...)
         """
-        # Sort by index or require sorted (config.sort_index)
-        X, y = self._ensure_sorted_index(X, y)
+        # Validate sample_weight shape before sort (must match X/y length)
+        if sample_weight is not None:
+            w = np.asarray(sample_weight)
+            if w.ndim != 1 or w.shape[0] != len(y):
+                raise ValueError(
+                    f"sample_weight must have shape (n_samples,) = ({len(y)},), got {w.shape}"
+                )
+        # Sort by index or require sorted (config.sort_index); reorder y and sample_weight too
+        X, y, sample_weight = self._ensure_sorted_index(X, y, sample_weight)
 
         # Extract timestamps before check_X_y converts DataFrame to array
         timestamps, X_array = self._ensure_timestamp_index(X)
@@ -1374,6 +1397,21 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         X_array, y = check_X_y(X_array, y,
             ensure_min_features=len(self.config.exog_config or []),
             ensure_min_samples=self._get_min_samples_required())
+
+        # Validate and store sample weights for weighted least squares (main loss only)
+        if sample_weight is None:
+            self._sample_weight_ = np.ones(len(y), dtype=float)
+        else:
+            w = np.asarray(sample_weight, dtype=float)
+            if w.shape != (len(y),):
+                raise ValueError(
+                    f"sample_weight must have shape (n_samples,) = ({len(y)},), got {w.shape}"
+                )
+            if np.any(w < 0):
+                raise ValueError("sample_weight must be non-negative")
+            if np.sum(w) <= 0:
+                raise ValueError("sample_weight must have positive sum")
+            self._sample_weight_ = w
 
         self.variables_ = {
             'constant': cvxpy.Variable(),
@@ -1526,7 +1564,10 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             # Add L1 regularization to encourage sparsity
             regularization_term += outlier_config.reg_weight * cvxpy.norm1(outlier)
 
-        error = cvxpy.sum_squares(y[self.combined_valid_mask_] - model_term) / np.sum(self.combined_valid_mask_)
+        # Weighted least squares: sum(w_i * r_i^2) / sum(w_i) on valid samples
+        residual = y[self.combined_valid_mask_] - model_term
+        weight_valid = self._sample_weight_[self.combined_valid_mask_]
+        error = cvxpy.sum_squares(cvxpy.multiply(np.sqrt(weight_valid), residual)) / np.sum(weight_valid)
         self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term), constraints)
         self.problem_.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
 

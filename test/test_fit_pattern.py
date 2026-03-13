@@ -87,6 +87,74 @@ def test_fit_uses_correct_pattern():
     )
 
 
+def test_fit_with_sample_weights():
+    """Fit with explicit sample_weight runs and matches unweighted when weights are ones."""
+    n_samples = 80
+    timestamps = pd.date_range('2020-01-01', periods=n_samples, freq='h')
+    config = TsgamEstimatorConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
+            num_harmonics=[2, 1], periods=[24, 7 * 24]
+        ),
+        exog_config=None,
+        ar_config=None,
+        solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
+    )
+    X = pd.DataFrame({'temp': np.random.randn(n_samples)}, index=timestamps)
+    y = np.random.randn(n_samples)
+
+    est_no_w = TsgamEstimator(config=config)
+    est_no_w.fit(X, y)
+
+    est_ones = TsgamEstimator(config=config)
+    est_ones.fit(X, y, sample_weight=np.ones(n_samples))
+
+    np.testing.assert_allclose(
+        est_no_w.predict(X), est_ones.predict(X), rtol=1e-5,
+        err_msg="sample_weight=ones should match no weights"
+    )
+
+
+def test_fit_sample_weight_wrong_shape_raises():
+    """sample_weight with wrong shape raises ValueError."""
+    n_samples = 50
+    timestamps = pd.date_range('2020-01-01', periods=n_samples, freq='h')
+    config = TsgamEstimatorConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
+            num_harmonics=[2, 1], periods=[24, 7 * 24]
+        ),
+        exog_config=None,
+        ar_config=None,
+        solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
+    )
+    X = pd.DataFrame({'temp': np.random.randn(n_samples)}, index=timestamps)
+    y = np.random.randn(n_samples)
+    estimator = TsgamEstimator(config=config)
+
+    with pytest.raises(ValueError, match="sample_weight must have shape"):
+        estimator.fit(X, y, sample_weight=np.ones(n_samples + 5))
+
+
+def test_fit_sample_weight_negative_raises():
+    """sample_weight with negative values raises ValueError."""
+    n_samples = 50
+    timestamps = pd.date_range('2020-01-01', periods=n_samples, freq='h')
+    config = TsgamEstimatorConfig(
+        multi_periodic_config=TsgamMultiPeriodicConfig(
+            num_harmonics=[2, 1], periods=[24, 7 * 24]
+        ),
+        exog_config=None,
+        ar_config=None,
+        solver_config=TsgamSolverConfig(solver='CLARABEL', verbose=False),
+    )
+    X = pd.DataFrame({'temp': np.random.randn(n_samples)}, index=timestamps)
+    y = np.random.randn(n_samples)
+    w = np.ones(n_samples)
+    w[0] = -1.0
+    estimator = TsgamEstimator(config=config)
+    with pytest.raises(ValueError, match="non-negative"):
+        estimator.fit(X, y, sample_weight=w)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 
