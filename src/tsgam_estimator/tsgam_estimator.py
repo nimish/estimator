@@ -3,6 +3,7 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import overload
 from itertools import combinations
 from numpy import ndarray
 import numpy as np
@@ -363,6 +364,10 @@ class TsgamEstimatorConfig:
         tuning guidelines.
     solver_config : TsgamSolverConfig, default=TsgamSolverConfig()
         Solver configuration for CVXPY optimization.
+    sort_index : bool, default=True
+        If True, sort the data by its datetime index before fit/predict so that
+        row order matches time order. If False, require the index to already be
+        sorted (chronologically); raise ValueError if not.
     random_state : RandomState or None, default=None
         Random state for reproducible results. Used in AR sampling if ar_config
         is provided.
@@ -390,6 +395,7 @@ class TsgamEstimatorConfig:
     trend_config: TsgamTrendConfig | None = None
     outlier_config: TsgamOutlierConfig | None = None
     solver_config: TsgamSolverConfig = field(default_factory=TsgamSolverConfig)
+    sort_index: bool = True
     random_state: RandomState | None = None
     debug: bool = False
 
@@ -965,6 +971,51 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return timestamps, X_array
 
+    @overload
+    def _ensure_sorted_index(self, X: pd.DataFrame, y: ndarray) -> tuple[pd.DataFrame, ndarray]: ...
+    @overload
+    def _ensure_sorted_index(self, X: pd.DataFrame, y: None = None) -> tuple[pd.DataFrame]: ...
+
+    def _ensure_sorted_index(
+        self, X: pd.DataFrame, y: ndarray | None = None
+    ) -> tuple[pd.DataFrame, ndarray] | tuple[pd.DataFrame]:
+        """
+        Sort X (and y if provided) by datetime index, or require index to be sorted.
+
+        If config.sort_index is True, sort by timestamps so row order matches
+        time order. If False, require the index to be chronologically sorted
+        and raise ValueError if not.
+
+        Parameters
+        ----------
+        X : DataFrame
+            Input data with DatetimeIndex or datetime column.
+        y : array-like of shape (n_samples,) or None
+            Target values (fit only). If provided, reordered in the same way as X.
+
+        Returns
+        -------
+        If y is None: (X_sorted,)
+        If y is not None: (X_sorted, y_sorted)
+        """
+        timestamps = self._extract_timestamps(X)
+        if self.config.sort_index:
+            sort_idx = np.argsort(timestamps)
+            X = X.iloc[sort_idx]
+            if y is not None:
+                y = np.asarray(y)[sort_idx]
+                return (X, y)
+            return (X,)
+        if not timestamps.is_monotonic_increasing:
+            raise ValueError(
+                "Data index is not sorted chronologically. Sort the DataFrame by "
+                "its datetime index (e.g. X = X.sort_index()) or set "
+                "config.sort_index=True to sort automatically."
+            )
+        if y is not None:
+            return (X, y)
+        return (X,)
+
     def _make_regularization_matrix(self, num_harmonics: list[int],
                                    weight: float,
                                    periods: list[float],
@@ -1296,6 +1347,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         >>> estimator.fit(X, y)
         TsgamEstimator(...)
         """
+        # Sort by index or require sorted (config.sort_index)
+        X, y = self._ensure_sorted_index(X, y)
+
         # Extract timestamps before check_X_y converts DataFrame to array
         timestamps, X_array = self._ensure_timestamp_index(X)
 
@@ -1634,6 +1688,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         >>> predictions_original = np.exp(predictions)
         """
         check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
+
+        # Sort by index or require sorted (config.sort_index)
+        (X,) = self._ensure_sorted_index(X)
 
         # todo: check for nan in predict provided data
 
