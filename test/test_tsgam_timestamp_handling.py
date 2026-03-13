@@ -102,6 +102,70 @@ class TestTimestampExtraction:
             estimator._ensure_timestamp_index(X)
 
 
+class TestSortIndex:
+    """Test sort_index config: sort when True, error when False and unsorted."""
+
+    def test_sort_index_true_sorts_unsorted_data(self, hourly_data, basic_config):
+        """With sort_index=True (default), unsorted index is sorted and fit/predict succeed."""
+        timestamps, temp, y = hourly_data
+        # Shuffle so index is unsorted
+        perm = np.random.RandomState(42).permutation(len(timestamps))
+        unsorted_timestamps = timestamps[perm]
+        X = pd.DataFrame({'temp': temp[perm]}, index=unsorted_timestamps)
+        y_perm = y[perm]
+
+        estimator = TsgamEstimator(config=basic_config)  # sort_index=True by default
+        estimator.fit(X, y_perm)
+        pred = estimator.predict(X)
+        assert len(pred) == len(X)
+        # Fit and predict should use same (sorted) order
+        assert estimator.time_indices_.shape[0] == len(X)
+
+    def test_sort_index_false_errors_on_unsorted(self, hourly_data, basic_config):
+        """With sort_index=False, unsorted index raises ValueError."""
+        timestamps, temp, y = hourly_data
+        perm = np.random.RandomState(42).permutation(len(timestamps))
+        unsorted_timestamps = timestamps[perm]
+        X = pd.DataFrame({'temp': temp[perm]}, index=unsorted_timestamps)
+        y_perm = y[perm]
+
+        config_unsorted_ok = TsgamEstimatorConfig(
+            multi_periodic_config=basic_config.multi_periodic_config,
+            exog_config=basic_config.exog_config,
+            ar_config=basic_config.ar_config,
+            trend_config=basic_config.trend_config,
+            outlier_config=basic_config.outlier_config,
+            solver_config=basic_config.solver_config,
+            sort_index=False,
+            random_state=basic_config.random_state,
+            debug=basic_config.debug,
+        )
+        estimator = TsgamEstimator(config=config_unsorted_ok)
+        with pytest.raises(ValueError, match="not sorted chronologically"):
+            estimator.fit(X, y_perm)
+
+    def test_sort_index_false_accepts_sorted_data(self, hourly_data, basic_config):
+        """With sort_index=False, sorted index is accepted."""
+        timestamps, temp, y = hourly_data
+        X = pd.DataFrame({'temp': temp}, index=timestamps)
+
+        config_no_sort = TsgamEstimatorConfig(
+            multi_periodic_config=basic_config.multi_periodic_config,
+            exog_config=basic_config.exog_config,
+            ar_config=basic_config.ar_config,
+            trend_config=basic_config.trend_config,
+            outlier_config=basic_config.outlier_config,
+            solver_config=basic_config.solver_config,
+            sort_index=False,
+            random_state=basic_config.random_state,
+            debug=basic_config.debug,
+        )
+        estimator = TsgamEstimator(config=config_no_sort)
+        estimator.fit(X, y)
+        pred = estimator.predict(X)
+        assert len(pred) == len(X)
+
+
 class TestFrequencyValidation:
     """Test frequency validation."""
 
