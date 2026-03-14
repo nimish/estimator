@@ -2,3 +2,16 @@
 
 * Use uv to run python scripts and code
 * Use pytest for testing
+
+## Learned User Preferences
+
+## Learned Workspace Facts
+
+* Inferred frequency strings must use numeric prefix (e.g. '1h', '1D'); store with prefix and lowercase.
+* Fit allows gaps and masks NaNs; predict requires strictly regular timestamps (no gaps).
+* Data-dependent tests use examples/data/iso for ISO data files.
+* TsgamSplineConfig.knots accepts numpy array or list; use len-based emptiness checks, not truthiness on arrays.
+* sort_index config (default True): when True sort by index; when False, index must already be sorted or error.
+* Optional sample_weight in fit for weighted least squares; AR step is unweighted.
+* junit.xml is gitignored.
+* Example/run scripts use Click and Rich for CLI and UI; deps are in dependency-groups.examples (uv sync --group examples).
