@@ -314,4 +314,11 @@ pyrightconfig.json
 .history
 .ionide
 
+# Example script output artifacts
+examples/reports/*.csv
+examples/reports/*.md
+examples/reports/*.png
+examples/reports/*.pdf
+examples/plots/
+
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm+all,visualstudiocode,macos

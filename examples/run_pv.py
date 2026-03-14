@@ -9,6 +9,7 @@ Requires: uv sync --group examples (includes solar-data-tools, matplotlib).
 """
 
 import sys
+from collections import OrderedDict
 from pathlib import Path
 
 _examples_dir = Path(__file__).resolve().parent
@@ -28,12 +29,16 @@ from common_cli import (
     default_output_dir,
     error,
     info,
+    plot_ablation_bars,
+    plot_ablation_comparison,
+    plot_data_overview,
+    plot_model_summary,
     print_ablation_table,
+    quiet,
     run_ablation_parallel,
     section,
     success,
     write_ablation_report,
-    plot_ablation_bars,
 )
 
 from tsgam_estimator import (
@@ -116,18 +121,17 @@ def _fit_single_pv(cfg: dict) -> dict:
         est.fit(cfg['X_train'], cfg['y_train'])
         pred_log = est.predict(cfg['X_test'])
         y_max = cfg['y_max']
-        metrics = compute_standard_metrics(
-            np.exp(cfg['y_test']) * y_max,
-            np.exp(pred_log) * y_max,
-        )
+        y_true_orig = np.exp(cfg['y_test']) * y_max
+        y_pred_orig = np.exp(pred_log) * y_max
+        metrics = compute_standard_metrics(y_true_orig, y_pred_orig)
         slope = None
         if hasattr(est, 'variables_') and est.variables_ and 'trend_slope' in est.variables_:
             sl = est.variables_['trend_slope'].value
             slope = float(sl) if sl is not None else None
-        return {'name': name, **metrics, 'trend_slope': slope}
+        return {'name': name, **metrics, 'trend_slope': slope, 'y_pred': y_pred_orig, 'y_true': y_true_orig}
     except Exception:
         return {'name': name, 'rmse': np.nan, 'mae': np.nan, 'mape': np.nan,
-                'r2': np.nan, 'trend_slope': None}
+                'r2': np.nan, 'trend_slope': None, 'y_pred': None, 'y_true': None}
 
 
 def _build_pv_configs(
@@ -213,7 +217,8 @@ def main(
     info(f'Output dir: {output_dir}')
 
     section('Loading data')
-    X, y, y_max = _load_pv_data(data_file, primary_col, module_temp_col, irrad_col)
+    with quiet():
+        X, y, y_max = _load_pv_data(data_file, primary_col, module_temp_col, irrad_col)
     split = int(len(y) * TRAIN_FRACTION)
     info(f'Valid samples: {len(y)}  (train: {split}, test: {len(y) - split})')
 
@@ -236,6 +241,55 @@ def main(
     )
     success(f'Report (markdown): {md_path}')
     success(f'Report (CSV): {csv_path}')
+
+    # Publication-quality figures (PDF + PNG)
+    series = OrderedDict([
+        ('AC Power', (np.exp(y) * y_max, 'W')),
+        ('Module temp (norm.)', (X['temp'].values, '-')),
+        ('POA irradiance (norm.)', (X['irrad'].values, '-')),
+    ])
+    test_start_ts = X.index[split]
+    test_end_ts = X.index[-1]
+    with quiet():
+        paths = plot_data_overview(
+            X.index,
+            series,
+            'PV — Data overview',
+            output_dir / 'pv_data',
+            test_start=test_start_ts,
+            test_end=test_end_ts,
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
+    X_test = pv_configs[0]['X_test']
+    y_true = next((r['y_true'] for r in results_list if r.get('y_true') is not None), None)
+    predictions = {r['name']: r['y_pred'] for r in results_list if r.get('y_pred') is not None}
+    if y_true is not None and predictions:
+        with quiet():
+            paths = plot_model_summary(
+                X_test.index,
+                y_true,
+                predictions,
+                'PV — Model summary',
+                output_dir / 'pv_model',
+                'W',
+                results=results_list,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+    with quiet():
+        paths = plot_ablation_comparison(
+            results_list,
+            'PV — Ablation comparison',
+            output_dir / 'pv_ablation',
+            metrics=('rmse', 'mae', 'r2'),
+            baseline_name='Trend: none',
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
     png_path = plot_ablation_bars(
         results_list,
         output_dir,
