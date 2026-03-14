@@ -14,6 +14,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "openpyxl>=3.1.5",
     "pytest>=8.4.2",
     "pytest-cov>=7.0.0",
 ]
@@ -38,6 +39,14 @@ notebooks = [
     "solar-data-tools>=2.1.1",
     "statsmodels>=0.14.5",
     "tabulate>=0.9.0",
+]
+# Example/run scripts only (CLI + rich UI); not required by the core library.
+# PV script also needs solar-data-tools and matplotlib for DataHandler and plots.
+examples = [
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "matplotlib>=3.10.0",
+    "solar-data-tools>=2.1.1",
 ]
 
 [build-system]
