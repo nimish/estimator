@@ -15,3 +15,5 @@
 * Optional sample_weight in fit for weighted least squares; AR step is unweighted.
 * junit.xml is gitignored.
 * Example/run scripts use Click and Rich for CLI and UI; deps are in dependency-groups.examples (uv sync --group examples).
+* Example run scripts produce publication-quality figures (data overview, model summary, ablation comparison) as PDF and PNG for journal or presentation use.
+* Tests that use pd.read_excel require openpyxl; include openpyxl in the dev dependency group so CI (uv sync --group dev) passes.

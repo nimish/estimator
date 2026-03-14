@@ -9,6 +9,7 @@ Requires: uv sync --group examples
 """
 
 import sys
+from collections import OrderedDict
 from pathlib import Path
 
 _examples_dir = Path(__file__).resolve().parent
@@ -25,12 +26,17 @@ from common_cli import (
     compute_standard_metrics,
     default_output_dir,
     info,
+    plot_ablation_bars,
+    plot_ablation_comparison,
+    plot_data_overview,
+    plot_model_summary,
+    plot_outlier_detection,
     print_ablation_table,
+    quiet,
     run_ablation_parallel,
     section,
     success,
     write_ablation_report,
-    plot_ablation_bars,
 )
 
 from example_outlier_detector import (
@@ -52,7 +58,7 @@ def _fit_single_outlier(cfg: dict) -> dict:
             est = fit_model_without_outlier_detector(X, y_log)
         pred = np.exp(est.predict(X))
         metrics = compute_standard_metrics(y_original, pred)
-        result: dict = {'name': name, **metrics}
+        result: dict = {'name': name, **metrics, 'y_pred': pred, 'y_true': y_original}
         if cfg['use_outlier']:
             det = est.variables_['outlier'].value
             ver = verify_outlier_detection(
@@ -61,7 +67,7 @@ def _fit_single_outlier(cfg: dict) -> dict:
             result['mean_detection_error'] = ver['mean_error']
         return result
     except Exception:
-        return {'name': name, 'rmse': np.nan, 'mae': np.nan, 'mape': np.nan, 'r2': np.nan}
+        return {'name': name, 'rmse': np.nan, 'mae': np.nan, 'mape': np.nan, 'r2': np.nan, 'y_pred': None, 'y_true': None}
 
 
 def _build_outlier_configs(
@@ -118,6 +124,90 @@ def main(output_dir: Path | None, n_days: int, seed: int, n_jobs: int) -> None:
     )
     success(f'Report (markdown): {md_path}')
     success(f'Report (CSV): {csv_path}')
+
+    cfg = outlier_configs[0]
+    timestamps = cfg['X'].index
+    y_log = cfg['y_log']
+    y_original = cfg['y_original']
+    true_outlier_values = cfg['true_outlier_values']
+    outlier_days = cfg['outlier_days']
+    n_days = len(true_outlier_values)
+
+    # Clean signal (remove outlier effect from y_log)
+    clean_log = y_log.copy()
+    for d in outlier_days:
+        if 0 <= d < n_days:
+            start, end = d * 24, min((d + 1) * 24, len(clean_log))
+            clean_log[start:end] -= true_outlier_values[d]
+    clean_original = np.exp(clean_log)
+
+    # Publication-quality figures (PDF + PNG)
+    series = OrderedDict([
+        ('Clean signal', (clean_original, '-')),
+        ('Corrupted (observed)', (y_original, '-')),
+    ])
+    shade_ranges = []
+    for d in outlier_days:
+        if 0 <= d < n_days:
+            start_idx = d * 24
+            end_idx = min((d + 1) * 24, len(timestamps)) - 1
+            if start_idx < len(timestamps) and end_idx >= start_idx:
+                shade_ranges.append((timestamps[start_idx], timestamps[end_idx]))
+    with quiet():
+        paths = plot_data_overview(
+            timestamps,
+            series,
+            'Outlier detector — Data overview',
+            output_dir / 'outlier_data',
+            shade_ranges=shade_ranges,
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
+    y_true = next((r['y_true'] for r in results_list if r.get('y_true') is not None), None)
+    predictions = {r['name']: r['y_pred'] for r in results_list if r.get('y_pred') is not None}
+    if y_true is not None and predictions:
+        with quiet():
+            paths = plot_model_summary(
+                timestamps,
+                y_true,
+                predictions,
+                'Outlier detector — Model summary',
+                output_dir / 'outlier_model',
+                'Value',
+                results=results_list,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+    # Refit with outlier detector to get detected values for outlier detection figure
+    with quiet():
+        est_with = fit_model_with_outlier_detector(cfg['X'], cfg['y_log'], reg_weight=0.01)
+    detected_outlier_values = est_with.variables_['outlier'].value
+    day_indices = np.arange(n_days)
+    with quiet():
+        paths = plot_outlier_detection(
+            day_indices,
+            true_outlier_values,
+            detected_outlier_values,
+            'Outlier detector — True vs detected',
+            output_dir / 'outlier_detection',
+            outlier_days=outlier_days,
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
+    with quiet():
+        paths = plot_ablation_comparison(
+            results_list,
+            'Outlier detector — Ablation comparison',
+            output_dir / 'outlier_detector_ablation',
+            metrics=('rmse', 'mae', 'r2'),
+            baseline_name='Without outlier detector',
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
     png_path = plot_ablation_bars(
         results_list,
         output_dir,

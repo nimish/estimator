@@ -9,6 +9,7 @@ Requires: uv sync --group examples
 """
 
 import sys
+from collections import OrderedDict
 from pathlib import Path
 
 _examples_dir = Path(__file__).resolve().parent
@@ -27,12 +28,16 @@ from common_cli import (
     default_output_dir,
     error,
     info,
+    plot_ablation_bars,
+    plot_ablation_comparison,
+    plot_data_overview,
+    plot_model_summary,
     print_ablation_table,
+    quiet,
     run_ablation_parallel,
     section,
     success,
     write_ablation_report,
-    plot_ablation_bars,
 )
 
 from tsgam_estimator import (
@@ -89,10 +94,11 @@ def _fit_single_la(cfg: dict) -> dict:
         est.fit(cfg['X_train'], cfg['y_tr'])
         pred_log = est.predict(cfg['X_test'])
         pred = np.exp(pred_log) - 1.0 if cfg.get('take_log') else pred_log
-        metrics = compute_standard_metrics(cfg['y_te'], pred)
-        return {'name': name, **metrics}
+        y_true_orig = cfg['y_te']
+        metrics = compute_standard_metrics(y_true_orig, pred)
+        return {'name': name, **metrics, 'y_pred': pred, 'y_true': y_true_orig}
     except Exception:
-        return {'name': name, 'rmse': np.nan, 'mae': np.nan, 'mape': np.nan, 'r2': np.nan}
+        return {'name': name, 'rmse': np.nan, 'mae': np.nan, 'mape': np.nan, 'r2': np.nan, 'y_pred': None, 'y_true': None}
 
 
 def _build_ablation_configs(
@@ -233,6 +239,57 @@ def main(
     )
     success(f'Report (markdown): {md_path}')
     success(f'Report (CSV): {csv_path}')
+
+    # Publication-quality figures (PDF + PNG)
+    df_full = pd.concat([df_train, df_test]).sort_index()
+    def _unit(col: str) -> str:
+        if 'temp' in col.lower():
+            return '°F'
+        if 'humid' in col.lower():
+            return '%'
+        return ''
+    series = OrderedDict([(target, (df_full[target].values, 'MW'))])
+    for c in exog_cols[:2]:
+        series[c] = (df_full[c].values, _unit(c) or '-')
+    with quiet():
+        paths = plot_data_overview(
+            df_full.index,
+            series,
+            'LA Energy — Data overview',
+            output_dir / 'la_energy_data',
+            test_start=pd.Timestamp(test_start),
+            test_end=pd.Timestamp(test_end),
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
+    y_true = next((r['y_true'] for r in results_list if r.get('y_true') is not None), None)
+    predictions = {r['name']: r['y_pred'] for r in results_list if r.get('y_pred') is not None}
+    if y_true is not None and predictions:
+        with quiet():
+            paths = plot_model_summary(
+                X_test.index,
+                y_true,
+                predictions,
+                'LA Energy — Model summary',
+                output_dir / 'la_energy_model',
+                'MW',
+                results=results_list,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+    with quiet():
+        paths = plot_ablation_comparison(
+            results_list,
+            'LA Energy — Ablation comparison',
+            output_dir / 'la_energy_ablation',
+            metrics=('rmse', 'mae', 'r2'),
+            baseline_name='Baseline (constant only)',
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
     png_path = plot_ablation_bars(
         results_list,
         output_dir,

@@ -9,6 +9,7 @@ Requires: uv sync --group examples
 """
 
 import sys
+from collections import OrderedDict
 from pathlib import Path
 
 _examples_dir = Path(__file__).resolve().parent
@@ -28,12 +29,16 @@ from common_cli import (
     default_output_dir,
     error,
     info,
+    plot_ablation_bars,
+    plot_ablation_comparison,
+    plot_data_overview,
+    plot_model_summary,
     print_ablation_table,
+    quiet,
     run_ablation_parallel,
     section,
     success,
     write_ablation_report,
-    plot_ablation_bars,
 )
 
 from tsgam_estimator import (
@@ -89,14 +94,13 @@ def _fit_single_aq(cfg: dict) -> dict:
         ))
         est.fit(cfg['X_train'], cfg['y_train'])
         pred_log = est.predict(cfg['X_test'])
-        metrics = compute_standard_metrics(
-            np.exp(cfg['y_test']) - 1.0,
-            np.exp(pred_log) - 1.0,
-        )
-        return {'name': name, **metrics}
+        y_true_orig = np.exp(cfg['y_test']) - 1.0
+        y_pred_orig = np.exp(pred_log) - 1.0
+        metrics = compute_standard_metrics(y_true_orig, y_pred_orig)
+        return {'name': name, **metrics, 'y_pred': y_pred_orig, 'y_true': y_true_orig}
     except Exception:
         return {'name': name, 'rmse': float('nan'), 'mae': float('nan'),
-                'mape': float('nan'), 'r2': float('nan')}
+                'mape': float('nan'), 'r2': float('nan'), 'y_pred': None, 'y_true': None}
 
 
 def _build_aq_configs(X_train, y_train, X_test, y_test) -> list[dict]:
@@ -169,7 +173,8 @@ def main(
             sys.exit(1)
 
     section('Loading data')
-    df = load_beijing_air_quality(data_file)
+    with quiet():
+        df = load_beijing_air_quality(data_file)
     df_train = df[train_start:train_end].copy()
     df_test = df[test_start:test_end].copy()
     info(f'Training samples: {len(df_train)}')
@@ -209,8 +214,58 @@ def main(
     )
     success(f'Report (markdown): {md_path}')
     success(f'Report (CSV): {csv_path}')
+
+    # Publication-quality figures (PDF + PNG)
+    df_full = pd.concat([df_train, df_test]).sort_index()
+    series = OrderedDict([
+        ('PM2.5', (df_full['pm25'].values, 'μg/m³')),
+        ('Temperature', (df_full['temperature'].values, '°C')),
+        ('Dewpoint', (df_full['dewpoint'].values, '°C')),
+        ('Wind speed', (df_full['wind_speed'].values, 'm/s')),
+        ('Pressure', (df_full['pressure'].values, 'hPa')),
+    ])
+    with quiet():
+        paths = plot_data_overview(
+            df_full.index,
+            series,
+            'Air Quality — Data overview',
+            output_dir / 'air_quality_data',
+            test_start=pd.Timestamp(test_start),
+            test_end=pd.Timestamp(test_end),
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
+    y_true = next((r['y_true'] for r in results_list if r.get('y_true') is not None), None)
+    predictions = {r['name']: r['y_pred'] for r in results_list if r.get('y_pred') is not None}
+    if y_true is not None and predictions:
+        with quiet():
+            paths = plot_model_summary(
+                X_test.index,
+                y_true,
+                predictions,
+                'Air Quality — Model summary',
+                output_dir / 'air_quality_model',
+                'PM2.5 (μg/m³)',
+                results=results_list,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+    with quiet():
+        paths = plot_ablation_comparison(
+            results_list,
+            'Air Quality — Ablation comparison',
+            output_dir / 'air_quality_ablation',
+            metrics=('rmse', 'mae', 'r2'),
+            baseline_name='None (seasonal only)',
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
     ablation_dict = {r['name']: (r['rmse'], r['mae'], r['mape']) for r in results_list}
-    plot_ablation_results(ablation_dict, output_dir)
+    with quiet():
+        plot_ablation_results(ablation_dict, output_dir)
     png_path = plot_ablation_bars(
         results_list,
         output_dir,
