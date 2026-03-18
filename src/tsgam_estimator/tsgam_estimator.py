@@ -1229,7 +1229,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 H0 = self._make_H(exog_var, knots, include_offset=False)
                 H_lag = self._make_offset_H(H0, lag)
             else:  # TsgamLinearConfig
-                H0 = exog_var
+                H0 = exog_var.reshape(-1, 1)
                 H_lag = self._make_offset_H(H0, lag)
 
             Hs.append(H_lag)
