@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Tests for CVXPY parametric re-fitting: shape enforcement, invalidation, reuse.
+Tests for repeated fit(): successive fits rebuild the CVXPY problem each time.
+
+The estimator does not retain a compiled parametric problem; changing sample count
+between fits is supported without an explicit invalidation step.
 """
 
-import pytest
 import numpy as np
 import pandas as pd
 from tsgam_estimator import (
@@ -30,7 +32,7 @@ def _make_config():
 
 
 def test_parametric_fit_correctness_equivalence():
-    """Parametric fit() produces identical coefficients to single fit (same data)."""
+    """Two consecutive fit() calls on the same data recover the same coefficients."""
     np.random.seed(42)
     n = 80
     dates = pd.date_range("2020-01-01", periods=n, freq="h")
@@ -42,7 +44,6 @@ def test_parametric_fit_correctness_equivalence():
     est.fit(X, y)
     coef_first = {k: np.copy(v.value) for k, v in est.variables_.items() if v.value is not None}
 
-    # Second fit with same shape (reuse compiled problem)
     est.fit(X, y)
     for k, v in est.variables_.items():
         if v.value is None:
@@ -52,12 +53,12 @@ def test_parametric_fit_correctness_equivalence():
             v.value,
             rtol=1e-9,
             atol=1e-9,
-            err_msg=f"Parametric refit changed coefficient {k}",
+            err_msg=f"Repeated fit changed coefficient {k}",
         )
 
 
-def test_shape_mismatch_raises_value_error():
-    """fit() with mismatched shape raises ValueError with descriptive dimension diff."""
+def test_second_fit_different_sample_count_succeeds():
+    """fit() after a prior fit with a different n_samples rebuilds and succeeds."""
     np.random.seed(43)
     config = _make_config()
     est = TsgamEstimator(config=config)
@@ -67,33 +68,9 @@ def test_shape_mismatch_raises_value_error():
     X1 = pd.DataFrame({"x": np.random.randn(n1)}, index=dates1)
     y1 = np.random.randn(n1)
     est.fit(X1, y1)
+    assert est.problem_.status in ("optimal", "optimal_inaccurate")
 
     n2 = 100
-    dates2 = pd.date_range("2020-01-01", periods=n2, freq="h")
-    X2 = pd.DataFrame({"x": np.random.randn(n2)}, index=dates2)
-    y2 = np.random.randn(n2)
-
-    with pytest.raises(ValueError) as exc_info:
-        est.fit(X2, y2)
-    msg = str(exc_info.value)
-    assert "shape" in msg.lower() or "n:" in msg or "expected" in msg
-    assert "invalidate_compiled_problem" in msg
-
-
-def test_invalidate_then_refit_new_shape_succeeds():
-    """invalidate_compiled_problem() then fit() with new shape succeeds."""
-    np.random.seed(44)
-    config = _make_config()
-    est = TsgamEstimator(config=config)
-
-    n1 = 60
-    dates1 = pd.date_range("2020-01-01", periods=n1, freq="h")
-    X1 = pd.DataFrame({"x": np.random.randn(n1)}, index=dates1)
-    y1 = np.random.randn(n1)
-    est.fit(X1, y1)
-
-    est.invalidate_compiled_problem()
-    n2 = 90
     dates2 = pd.date_range("2020-01-01", periods=n2, freq="h")
     X2 = pd.DataFrame({"x": np.random.randn(n2)}, index=dates2)
     y2 = np.random.randn(n2)
@@ -104,8 +81,8 @@ def test_invalidate_then_refit_new_shape_succeeds():
     assert c is not None and np.isfinite(np.asarray(c)).all()
 
 
-def test_rolling_window_reuse_timing():
-    """Repeated fit() with same shape reuses compiled problem (second fit completes)."""
+def test_repeated_fit_same_shape_succeeds():
+    """Repeated fit() with the same X, y completes optimally each time."""
     np.random.seed(45)
     n = 70
     config = _make_config()
@@ -115,9 +92,7 @@ def test_rolling_window_reuse_timing():
     y = np.random.randn(n)
 
     est.fit(X, y)
-    assert hasattr(est, "_parametric_problem") and est._parametric_problem is not None
-    assert est._problem_shape_sig[0] == n
+    assert est.problem_.status in ("optimal", "optimal_inaccurate")
 
-    # Second fit with same shape: should reuse (no recompile) and succeed
     est.fit(X, y)
     assert est.problem_.status in ("optimal", "optimal_inaccurate")
