@@ -625,6 +625,277 @@ def plot_ablation_comparison(
     return savefig(fig, Path(path_stem))
 
 
+def plot_scatter_train_test(
+    y_train_true: np.ndarray,
+    y_train_pred: np.ndarray,
+    y_test_true: np.ndarray,
+    y_test_pred: np.ndarray,
+    title: str,
+    path_stem: Path,
+    y_unit: str,
+    *,
+    model_name: str = '',
+) -> list[Path]:
+    """
+    Side-by-side scatter: (a) train actual vs predicted, (b) test actual vs predicted.
+    Each panel shows 1:1 line and R². Saves PDF and PNG.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return []
+    set_journal_style()
+    fig, axes = plt.subplots(1, 2, figsize=(7, 3.5))
+
+    for i, (yt, yp, label) in enumerate([
+        (y_train_true, y_train_pred, 'Training'),
+        (y_test_true, y_test_pred, 'Test'),
+    ]):
+        ax = axes[i]
+        valid = np.isfinite(yt) & np.isfinite(yp)
+        yt_v, yp_v = yt[valid], yp[valid]
+        ax.scatter(yt_v, yp_v, alpha=0.3, s=6,
+                   color=COLORS[0] if i == 0 else COLORS[1], edgecolors='none')
+        lims = [min(yt_v.min(), yp_v.min()), max(yt_v.max(), yp_v.max())]
+        ax.plot(lims, lims, 'k--', linewidth=1, label='1:1')
+        r2 = np.nan
+        if len(yt_v) > 1 and np.var(yt_v) > 0:
+            r2 = 1 - np.sum((yt_v - yp_v) ** 2) / np.sum((yt_v - np.mean(yt_v)) ** 2)
+        ax.text(0.05, 0.95, f'$R^2$ = {r2:.3f}', transform=ax.transAxes, va='top', fontsize=9)
+        ax.set_xlabel(f'Actual ({y_unit})')
+        ax.set_ylabel(f'Predicted ({y_unit})')
+        ax.set_xlim(lims)
+        ax.set_ylim(lims)
+        ax.set_aspect('equal', adjustable='box')
+        ax.text(0.02, 0.02, f'({chr(97 + i)})', transform=ax.transAxes, fontsize=11,
+                fontweight='bold', va='bottom')
+        subtitle = f'{label}'
+        if model_name:
+            subtitle += f' — {model_name}'
+        ax.set_title(subtitle, fontsize=9)
+
+    fig.suptitle(title, fontsize=11, fontweight='bold', y=1.02)
+    fig.tight_layout()
+    return savefig(fig, Path(path_stem))
+
+
+def _reshape_to_day_matrix(
+    timestamps: Any,
+    values: np.ndarray,
+    samples_per_day: int | None = None,
+) -> tuple[np.ndarray, list, np.ndarray]:
+    """Reshape a 1-D time series into a (time_slots, days) matrix.
+
+    Returns (matrix, day_labels, time_fractions) where time_fractions
+    are fractional hours [0, 24) for the y-axis.
+    """
+    import pandas as pd
+    ts = pd.DatetimeIndex(timestamps)
+    df = pd.DataFrame({'val': values}, index=ts)
+    df['date'] = df.index.date
+    df['time_frac'] = df.index.hour + df.index.minute / 60.0 + df.index.second / 3600.0
+
+    if samples_per_day is None:
+        samples_per_day = df.groupby('date').size().mode().iloc[0]
+
+    pivot = df.pivot_table(values='val', index='time_frac', columns='date', aggfunc='mean')
+    matrix = pivot.values
+    day_labels = [str(d) for d in pivot.columns]
+    time_fracs = pivot.index.values
+    return matrix, day_labels, time_fracs
+
+
+def plot_heatmap(
+    timestamps: Any,
+    variables: OrderedDict,
+    title: str,
+    path_stem: Path,
+    *,
+    cmap: str = 'viridis',
+) -> list[Path]:
+    """
+    Day-by-time-of-day heatmap(s). Days as columns, time-of-day as rows.
+    variables: label -> (values, unit). One subplot per variable.
+    Saves PDF and PNG.
+    """
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import Normalize
+    except ImportError:
+        return []
+    set_journal_style()
+    n = len(variables)
+    fig, axes = plt.subplots(n, 1, figsize=(max(7, 0.02 * 365), 2.5 * n))
+    if n == 1:
+        axes = [axes]
+
+    for i, (label, (values, unit)) in enumerate(variables.items()):
+        ax = axes[i]
+        matrix, day_labels, time_fracs = _reshape_to_day_matrix(timestamps, values)
+        im = ax.imshow(
+            matrix, aspect='auto', origin='lower', cmap=cmap,
+            extent=[0, matrix.shape[1], time_fracs[0], time_fracs[-1]],
+            interpolation='nearest',
+        )
+        cbar = fig.colorbar(im, ax=ax, pad=0.02)
+        cbar.set_label(f'{label} ({unit})' if unit else label, fontsize=8)
+        cbar.ax.tick_params(labelsize=7)
+        ax.set_ylabel('Hour of day')
+        n_ticks = min(12, len(day_labels))
+        tick_positions = np.linspace(0, len(day_labels) - 1, n_ticks, dtype=int)
+        ax.set_xticks(tick_positions)
+        ax.set_xticklabels([day_labels[j] for j in tick_positions], rotation=45,
+                           ha='right', fontsize=6)
+        ax.text(0.005, 0.95, f'({chr(97 + i)})', transform=ax.transAxes, fontsize=11,
+                fontweight='bold', va='top', color='white',
+                bbox=dict(facecolor='black', alpha=0.5, pad=1, linewidth=0))
+    axes[-1].set_xlabel('Date')
+    fig.suptitle(title, fontsize=11, fontweight='bold', y=1.02)
+    fig.tight_layout()
+    return savefig(fig, Path(path_stem))
+
+
+def plot_residual_heatmap(
+    timestamps: np.ndarray,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    title: str,
+    path_stem: Path,
+    y_unit: str,
+) -> list[Path]:
+    """
+    Residual heatmap (days x time-of-day) with diverging colormap centered at zero.
+    Shows systematic time-of-day or seasonal bias.  Saves PDF and PNG.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return []
+    set_journal_style()
+    residuals = y_true - y_pred
+    matrix, day_labels, time_fracs = _reshape_to_day_matrix(timestamps, residuals)
+
+    vmax = np.nanmax(np.abs(matrix))
+    fig, ax = plt.subplots(figsize=(max(7, 0.02 * 365), 3))
+    im = ax.imshow(
+        matrix, aspect='auto', origin='lower', cmap='RdBu_r',
+        vmin=-vmax, vmax=vmax,
+        extent=[0, matrix.shape[1], time_fracs[0], time_fracs[-1]],
+        interpolation='nearest',
+    )
+    cbar = fig.colorbar(im, ax=ax, pad=0.02)
+    cbar.set_label(f'Residual ({y_unit})', fontsize=8)
+    cbar.ax.tick_params(labelsize=7)
+    ax.set_ylabel('Hour of day')
+    ax.set_xlabel('Date')
+    n_ticks = min(12, len(day_labels))
+    tick_positions = np.linspace(0, len(day_labels) - 1, n_ticks, dtype=int)
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels([day_labels[j] for j in tick_positions], rotation=45,
+                       ha='right', fontsize=6)
+    fig.suptitle(title, fontsize=11, fontweight='bold', y=1.02)
+    fig.tight_layout()
+    return savefig(fig, Path(path_stem))
+
+
+def _select_diverse_days(
+    timestamps: Any,
+    values: np.ndarray,
+    n_pairs: int = 1,
+) -> list[tuple]:
+    """Auto-select pairs of days with contrasting behavior (high vs low variance).
+
+    For solar PV this picks a clear day vs an overcast day.
+    For load data it picks a high-demand vs low-demand day.
+    """
+    import pandas as pd
+    ts = pd.DatetimeIndex(timestamps)
+    df = pd.DataFrame({'val': values}, index=ts)
+    df['date'] = df.index.date
+    daily = df.groupby('date')['val'].agg(['std', 'mean', 'count'])
+    daily = daily[daily['count'] >= daily['count'].median() * 0.5]
+    if len(daily) < 2:
+        return []
+    daily = daily.sort_values('std')
+    pairs = []
+    for k in range(n_pairs):
+        lo_idx = min(k, len(daily) - 2)
+        hi_idx = max(len(daily) - 1 - k, 1)
+        pairs.append((daily.index[lo_idx], daily.index[hi_idx]))
+    return pairs
+
+
+def plot_selected_days(
+    timestamps: np.ndarray,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    title: str,
+    path_stem: Path,
+    y_unit: str,
+    *,
+    day_pairs: list[tuple] | None = None,
+    n_pairs: int = 2,
+    model_name: str = '',
+) -> list[Path]:
+    """
+    Plot curated day-pair overlays: actual vs predicted on selected days.
+    If day_pairs is None, auto-selects contrasting days (high vs low variance).
+    Each pair gets two panels side by side; pairs stacked vertically.
+    Saves PDF and PNG.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return []
+    import pandas as pd
+
+    set_journal_style()
+    ts = pd.DatetimeIndex(timestamps)
+    df = pd.DataFrame({'actual': y_true, 'predicted': y_pred}, index=ts)
+    df['date'] = df.index.date
+    df['hour'] = df.index.hour + df.index.minute / 60.0
+
+    if day_pairs is None:
+        day_pairs = _select_diverse_days(timestamps, y_true, n_pairs=n_pairs)
+    if not day_pairs:
+        return []
+
+    n_rows = len(day_pairs)
+    fig, axes = plt.subplots(n_rows, 2, figsize=(7, 2.5 * n_rows), squeeze=False)
+    panel_idx = 0
+    for row, (day_lo, day_hi) in enumerate(day_pairs):
+        for col, day in enumerate([day_lo, day_hi]):
+            ax = axes[row, col]
+            mask = df['date'] == day
+            if not mask.any():
+                ax.text(0.5, 0.5, f'No data for {day}', ha='center', va='center',
+                        transform=ax.transAxes)
+                panel_idx += 1
+                continue
+            sub = df[mask].sort_index()
+            ax.plot(sub['hour'], sub['actual'], color='black', linewidth=1.2,
+                    alpha=0.9, label='Actual')
+            ax.plot(sub['hour'], sub['predicted'], color=COLORS[0], linewidth=1.0,
+                    alpha=0.8, linestyle='--', label='Predicted')
+            ax.set_xlabel('Hour of day')
+            ax.set_ylabel(f'Value ({y_unit})')
+            ax.set_xlim(0, 24)
+            variance_label = 'Low variability' if col == 0 else 'High variability'
+            ax.set_title(f'{day}  ({variance_label})', fontsize=8)
+            ax.text(0.02, 0.95, f'({chr(97 + panel_idx)})', transform=ax.transAxes,
+                    fontsize=11, fontweight='bold', va='top')
+            if panel_idx == 0:
+                ax.legend(loc='upper right', fontsize=7)
+            panel_idx += 1
+
+    subtitle = title
+    if model_name:
+        subtitle += f' — {model_name}'
+    fig.suptitle(subtitle, fontsize=11, fontweight='bold', y=1.02)
+    fig.tight_layout()
+    return savefig(fig, Path(path_stem))
+
+
 def plot_outlier_detection(
     day_indices: np.ndarray,
     true_outlier_values: np.ndarray,

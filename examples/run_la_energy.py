@@ -31,7 +31,11 @@ from common_cli import (
     plot_ablation_bars,
     plot_ablation_comparison,
     plot_data_overview,
+    plot_heatmap,
     plot_model_summary,
+    plot_residual_heatmap,
+    plot_scatter_train_test,
+    plot_selected_days,
     print_ablation_table,
     quiet,
     run_ablation_parallel,
@@ -93,12 +97,18 @@ def _fit_single_la(cfg: dict) -> dict:
         ))
         est.fit(cfg['X_train'], cfg['y_tr'])
         pred_log = est.predict(cfg['X_test'])
-        pred = np.exp(pred_log) - 1.0 if cfg.get('take_log') else pred_log
+        pred_train_log = est.predict(cfg['X_train'])
+        take_log = cfg.get('take_log')
+        pred = np.exp(pred_log) - 1.0 if take_log else pred_log
+        pred_train = np.exp(pred_train_log) - 1.0 if take_log else pred_train_log
         y_true_orig = cfg['y_te']
+        y_train_orig = np.exp(cfg['y_tr']) - 1.0 if take_log else cfg['y_tr']
         metrics = compute_standard_metrics(y_true_orig, pred)
-        return {'name': name, **metrics, 'y_pred': pred, 'y_true': y_true_orig}
+        return {'name': name, **metrics, 'y_pred': pred, 'y_true': y_true_orig,
+                'y_train_pred': pred_train, 'y_train_true': y_train_orig}
     except Exception:
-        return {'name': name, 'rmse': np.nan, 'mae': np.nan, 'mape': np.nan, 'r2': np.nan, 'y_pred': None, 'y_true': None}
+        return {'name': name, 'rmse': np.nan, 'mae': np.nan, 'mape': np.nan, 'r2': np.nan,
+                'y_pred': None, 'y_true': None, 'y_train_pred': None, 'y_train_true': None}
 
 
 def _build_ablation_configs(
@@ -298,6 +308,55 @@ def main(
     )
     if png_path:
         success(f'Plot: {png_path}')
+
+    # Find best model for detailed plots
+    valid_results = [r for r in results_list
+                     if r.get('y_pred') is not None and r.get('y_train_pred') is not None]
+    best = min(valid_results, key=lambda r: r.get('rmse', np.inf), default=None)
+    if best is not None:
+        best_name = best['name']
+
+        # Train vs test scatter
+        with quiet():
+            paths = plot_scatter_train_test(
+                best['y_train_true'], best['y_train_pred'],
+                best['y_true'], best['y_pred'],
+                'LA Energy — Actual vs Predicted', output_dir / 'la_energy_scatter',
+                'MW', model_name=best_name,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+        # Selected-day overlays (auto-detect high vs low demand)
+        with quiet():
+            paths = plot_selected_days(
+                X_test.index, best['y_true'], best['y_pred'],
+                'LA Energy — Selected days', output_dir / 'la_energy_days',
+                'MW', model_name=best_name,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+        # Residual heatmap
+        with quiet():
+            paths = plot_residual_heatmap(
+                X_test.index, best['y_true'], best['y_pred'],
+                'LA Energy — Residual heatmap', output_dir / 'la_energy_residual_heatmap',
+                'MW',
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+    # Data heatmap (full series -- shows daily + weekly + yearly patterns)
+    heatmap_series = OrderedDict([(target, (df_full[target].values, 'MW'))])
+    with quiet():
+        paths = plot_heatmap(
+            df_full.index, heatmap_series,
+            'LA Energy — Data heatmap', output_dir / 'la_energy_heatmap',
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
     success('Done.')
 
 

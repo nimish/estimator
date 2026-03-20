@@ -32,7 +32,11 @@ from common_cli import (
     plot_ablation_bars,
     plot_ablation_comparison,
     plot_data_overview,
+    plot_heatmap,
     plot_model_summary,
+    plot_residual_heatmap,
+    plot_scatter_train_test,
+    plot_selected_days,
     print_ablation_table,
     quiet,
     run_ablation_parallel,
@@ -94,13 +98,19 @@ def _fit_single_aq(cfg: dict) -> dict:
         ))
         est.fit(cfg['X_train'], cfg['y_train'])
         pred_log = est.predict(cfg['X_test'])
+        pred_train_log = est.predict(cfg['X_train'])
         y_true_orig = np.exp(cfg['y_test']) - 1.0
         y_pred_orig = np.exp(pred_log) - 1.0
+        y_train_true_orig = np.exp(cfg['y_train']) - 1.0
+        y_train_pred_orig = np.exp(pred_train_log) - 1.0
         metrics = compute_standard_metrics(y_true_orig, y_pred_orig)
-        return {'name': name, **metrics, 'y_pred': y_pred_orig, 'y_true': y_true_orig}
+        return {'name': name, **metrics, 'y_pred': y_pred_orig, 'y_true': y_true_orig,
+                'y_train_pred': y_train_pred_orig, 'y_train_true': y_train_true_orig}
     except Exception:
         return {'name': name, 'rmse': float('nan'), 'mae': float('nan'),
-                'mape': float('nan'), 'r2': float('nan'), 'y_pred': None, 'y_true': None}
+                'mape': float('nan'), 'r2': float('nan'),
+                'y_pred': None, 'y_true': None,
+                'y_train_pred': None, 'y_train_true': None}
 
 
 def _build_aq_configs(X_train, y_train, X_test, y_test) -> list[dict]:
@@ -274,6 +284,57 @@ def main(
     )
     if png_path:
         success(f'Plot: {png_path}')
+
+    # Find best model for detailed plots
+    valid_results = [r for r in results_list
+                     if r.get('y_pred') is not None and r.get('y_train_pred') is not None]
+    best = min(valid_results, key=lambda r: r.get('rmse', np.inf), default=None)
+    if best is not None:
+        best_name = best['name']
+
+        # Train vs test scatter
+        with quiet():
+            paths = plot_scatter_train_test(
+                best['y_train_true'], best['y_train_pred'],
+                best['y_true'], best['y_pred'],
+                'Air Quality — Actual vs Predicted', output_dir / 'air_quality_scatter',
+                'PM2.5 (μg/m³)', model_name=best_name,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+        # Selected-day overlays (auto-detect high vs low pollution)
+        with quiet():
+            paths = plot_selected_days(
+                X_test.index, best['y_true'], best['y_pred'],
+                'Air Quality — Selected days', output_dir / 'air_quality_days',
+                'PM2.5 (μg/m³)', model_name=best_name,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+        # Residual heatmap
+        with quiet():
+            paths = plot_residual_heatmap(
+                X_test.index, best['y_true'], best['y_pred'],
+                'Air Quality — Residual heatmap', output_dir / 'air_quality_residual_heatmap',
+                'PM2.5 (μg/m³)',
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+    # Data heatmap (full series -- shows daily + yearly patterns)
+    heatmap_series = OrderedDict([
+        ('PM2.5', (df_full['pm25'].values, 'μg/m³')),
+    ])
+    with quiet():
+        paths = plot_heatmap(
+            df_full.index, heatmap_series,
+            'Air Quality — Data heatmap', output_dir / 'air_quality_heatmap',
+            cmap='YlOrRd',
+        )
+    for p in paths:
+        success(f'Figure: {p}')
 
     success('Done.')
 
