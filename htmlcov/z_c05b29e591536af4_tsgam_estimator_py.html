@@ -55,8 +55,8 @@
         </aside>
         <h2>
             <span class="text">708 statements &nbsp;</span>
-            <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">410<span class="text"> run</span></button>
-            <button type="button" class="mis show_mis button_toggle_mis" value="mis" data-shortcut="m" title="Toggle lines missing">298<span class="text"> missing</span></button>
+            <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">414<span class="text"> run</span></button>
+            <button type="button" class="mis show_mis button_toggle_mis" value="mis" data-shortcut="m" title="Toggle lines missing">294<span class="text"> missing</span></button>
             <button type="button" class="exc show_exc button_toggle_exc" value="exc" data-shortcut="x" title="Toggle lines excluded">9<span class="text"> excluded</span></button>
         </h2>
         <p class="text">
@@ -65,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_36f028580bb02cc8_load_model_estimator_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.13.1">coverage.py v7.13.1</a>,
-            created at 2026-03-14 22:40 +0000
+            created at 2026-03-20 17:20 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -1311,8 +1311,8 @@
     <p class="run"><span class="n"><a id="t1229" href="#t1229">1229</a></span><span class="t">                <span class="nam">H0</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_make_H</span><span class="op">(</span><span class="nam">exog_var</span><span class="op">,</span> <span class="nam">knots</span><span class="op">,</span> <span class="nam">include_offset</span><span class="op">=</span><span class="key">False</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t1230" href="#t1230">1230</a></span><span class="t">                <span class="nam">H_lag</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_make_offset_H</span><span class="op">(</span><span class="nam">H0</span><span class="op">,</span> <span class="nam">lag</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1231" href="#t1231">1231</a></span><span class="t">            <span class="key">else</span><span class="op">:</span>  <span class="com"># TsgamLinearConfig</span>&nbsp;</span><span class="r"></span></p>
-    <p class="mis show_mis"><span class="n"><a id="t1232" href="#t1232">1232</a></span><span class="t">                <span class="nam">H0</span> <span class="op">=</span> <span class="nam">exog_var</span>&nbsp;</span><span class="r"></span></p>
-    <p class="mis show_mis"><span class="n"><a id="t1233" href="#t1233">1233</a></span><span class="t">                <span class="nam">H_lag</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_make_offset_H</span><span class="op">(</span><span class="nam">H0</span><span class="op">,</span> <span class="nam">lag</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t1232" href="#t1232">1232</a></span><span class="t">                <span class="nam">H0</span> <span class="op">=</span> <span class="nam">exog_var</span><span class="op">.</span><span class="nam">reshape</span><span class="op">(</span><span class="op">-</span><span class="num">1</span><span class="op">,</span> <span class="num">1</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t1233" href="#t1233">1233</a></span><span class="t">                <span class="nam">H_lag</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_make_offset_H</span><span class="op">(</span><span class="nam">H0</span><span class="op">,</span> <span class="nam">lag</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1234" href="#t1234">1234</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t1235" href="#t1235">1235</a></span><span class="t">            <span class="nam">Hs</span><span class="op">.</span><span class="nam">append</span><span class="op">(</span><span class="nam">H_lag</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1236" href="#t1236">1236</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
@@ -1350,7 +1350,7 @@
     <p class="pln"><span class="n"><a id="t1268" href="#t1268">1268</a></span><span class="t">                <span class="key">else</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="mis show_mis"><span class="n"><a id="t1269" href="#t1269">1269</a></span><span class="t">                    <span class="nam">knots</span> <span class="op">=</span> <span class="nam">cfg_knots</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1270" href="#t1270">1270</a></span><span class="t">            <span class="key">else</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
-    <p class="mis show_mis"><span class="n"><a id="t1271" href="#t1271">1271</a></span><span class="t">                <span class="nam">knots</span> <span class="op">=</span> <span class="key">None</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t1271" href="#t1271">1271</a></span><span class="t">                <span class="nam">knots</span> <span class="op">=</span> <span class="key">None</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1272" href="#t1272">1272</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1273" href="#t1273">1273</a></span><span class="t">        <span class="com"># Build Hs using helper method</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1274" href="#t1274">1274</a></span><span class="t">        <span class="com"># Ensure knots is a numpy array if provided</span>&nbsp;</span><span class="r"></span></p>
@@ -1520,7 +1520,7 @@
     <p class="pln"><span class="n"><a id="t1438" href="#t1438">1438</a></span><span class="t">                    <span class="key">else</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="mis show_mis"><span class="n"><a id="t1439" href="#t1439">1439</a></span><span class="t">                        <span class="nam">self</span><span class="op">.</span><span class="nam">exog_knots_</span><span class="op">.</span><span class="nam">append</span><span class="op">(</span><span class="key">None</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1440" href="#t1440">1440</a></span><span class="t">                <span class="key">else</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
-    <p class="mis show_mis"><span class="n"><a id="t1441" href="#t1441">1441</a></span><span class="t">                    <span class="nam">self</span><span class="op">.</span><span class="nam">exog_knots_</span><span class="op">.</span><span class="nam">append</span><span class="op">(</span><span class="key">None</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t1441" href="#t1441">1441</a></span><span class="t">                    <span class="nam">self</span><span class="op">.</span><span class="nam">exog_knots_</span><span class="op">.</span><span class="nam">append</span><span class="op">(</span><span class="key">None</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1442" href="#t1442">1442</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1443" href="#t1443">1443</a></span><span class="t">                <span class="com"># Create CVXPY variable for coefficients</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t1444" href="#t1444">1444</a></span><span class="t">                <span class="com"># Shape: (basis_dim, num_lags)</span>&nbsp;</span><span class="r"></span></p>
@@ -2262,7 +2262,7 @@
             <a class="nav" href="z_36f028580bb02cc8_load_model_estimator_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.13.1">coverage.py v7.13.1</a>,
-            created at 2026-03-14 22:40 +0000
+            created at 2026-03-20 17:20 +0000
         </p>
     </div>
 </footer>
