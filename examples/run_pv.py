@@ -32,7 +32,11 @@ from common_cli import (
     plot_ablation_bars,
     plot_ablation_comparison,
     plot_data_overview,
+    plot_heatmap,
     plot_model_summary,
+    plot_residual_heatmap,
+    plot_scatter_train_test,
+    plot_selected_days,
     print_ablation_table,
     quiet,
     run_ablation_parallel,
@@ -119,19 +123,26 @@ def _fit_single_pv(cfg: dict) -> dict:
     try:
         est = TsgamEstimator(config=cfg['estimator_config'])
         est.fit(cfg['X_train'], cfg['y_train'])
-        pred_log = est.predict(cfg['X_test'])
+        pred_test_log = est.predict(cfg['X_test'])
+        pred_train_log = est.predict(cfg['X_train'])
         y_max = cfg['y_max']
         y_true_orig = np.exp(cfg['y_test']) * y_max
-        y_pred_orig = np.exp(pred_log) * y_max
+        y_pred_orig = np.exp(pred_test_log) * y_max
+        y_train_true_orig = np.exp(cfg['y_train']) * y_max
+        y_train_pred_orig = np.exp(pred_train_log) * y_max
         metrics = compute_standard_metrics(y_true_orig, y_pred_orig)
         slope = None
         if hasattr(est, 'variables_') and est.variables_ and 'trend_slope' in est.variables_:
             sl = est.variables_['trend_slope'].value
             slope = float(sl) if sl is not None else None
-        return {'name': name, **metrics, 'trend_slope': slope, 'y_pred': y_pred_orig, 'y_true': y_true_orig}
+        return {'name': name, **metrics, 'trend_slope': slope,
+                'y_pred': y_pred_orig, 'y_true': y_true_orig,
+                'y_train_pred': y_train_pred_orig, 'y_train_true': y_train_true_orig}
     except Exception:
         return {'name': name, 'rmse': np.nan, 'mae': np.nan, 'mape': np.nan,
-                'r2': np.nan, 'trend_slope': None, 'y_pred': None, 'y_true': None}
+                'r2': np.nan, 'trend_slope': None,
+                'y_pred': None, 'y_true': None,
+                'y_train_pred': None, 'y_train_true': None}
 
 
 def _build_pv_configs(
@@ -298,6 +309,58 @@ def main(
     )
     if png_path:
         success(f'Plot: {png_path}')
+
+    # Find best model for detailed plots
+    valid_results = [r for r in results_list
+                     if r.get('y_pred') is not None and r.get('y_train_pred') is not None]
+    best = min(valid_results, key=lambda r: r.get('rmse', np.inf), default=None)
+    if best is not None:
+        best_name = best['name']
+
+        # Train vs test scatter
+        with quiet():
+            paths = plot_scatter_train_test(
+                best['y_train_true'], best['y_train_pred'],
+                best['y_true'], best['y_pred'],
+                'PV — Actual vs Predicted', output_dir / 'pv_scatter',
+                'W', model_name=best_name,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+        # Selected-day overlays (auto-detect sunny vs cloudy)
+        with quiet():
+            paths = plot_selected_days(
+                X_test.index, best['y_true'], best['y_pred'],
+                'PV — Selected days', output_dir / 'pv_days',
+                'W', model_name=best_name,
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+        # Residual heatmap
+        with quiet():
+            paths = plot_residual_heatmap(
+                X_test.index, best['y_true'], best['y_pred'],
+                'PV — Residual heatmap', output_dir / 'pv_residual_heatmap',
+                'W',
+            )
+        for p in paths:
+            success(f'Figure: {p}')
+
+    # Data heatmap (full series)
+    heatmap_series = OrderedDict([
+        ('AC Power', (np.exp(y) * y_max, 'W')),
+    ])
+    with quiet():
+        paths = plot_heatmap(
+            X.index, heatmap_series,
+            'PV — Data heatmap', output_dir / 'pv_heatmap',
+            cmap='plasma',
+        )
+    for p in paths:
+        success(f'Figure: {p}')
+
     success('Done.')
 
 
