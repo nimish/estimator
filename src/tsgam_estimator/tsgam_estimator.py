@@ -1739,7 +1739,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         timestamps, X_array = self._ensure_timestamp_index(X)
 
         # Prediction data must be regularly spaced with no gaps
-        self._validate_frequency(timestamps, self.freq_)
+        self._validate_frequency(timestamps, self.freq_, allow_gaps=True)
 
         # Convert timestamps to indices using stored reference
         time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
