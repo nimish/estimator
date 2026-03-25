@@ -1688,7 +1688,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             self.ar_noise_loc_ = None
             self.ar_noise_scale_ = None
 
-    def predict(self, X: pd.DataFrame) -> ndarray:
+    def predict(self, X: pd.DataFrame,
+                remove_periodic : bool = False, remove_exogenous : bool = False, 
+                remove_trend : bool = False) -> ndarray:
         """
         Predict target values for new data.
 
@@ -1754,7 +1756,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         predictions = np.full(len(X_array), constant_value)
 
         # Add exogenous terms if present
-        if self.config.exog_config:
+        if self.config.exog_config and not remove_exogenous:
             for ix, exog_cfg in enumerate(self.config.exog_config):
                 exog_var = X_array[:, ix]
 
@@ -1798,7 +1800,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 predictions += exog_pred
 
         # Add Fourier terms if present
-        if self.config.multi_periodic_config:
+        if self.config.multi_periodic_config and not remove_periodic:
             # Check for NaN in time_indices
             if np.any(np.isnan(time_indices)):
                 raise ValueError("Time indices contain NaN. Check timestamp conversion.")
@@ -1866,7 +1868,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             predictions += fourier_contrib
 
         # Add trend term if present
-        if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_:
+        if (self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE 
+            and 'trend' in self.variables_ and not remove_trend):
             trend = self.variables_['trend'].value
             if trend is None:
                 raise ValueError("Trend coefficients are None. Model may not have converged.")
@@ -1906,7 +1909,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                     trend_extended[n_periods_fit:] = trend[-1]
 
                 trend = trend_extended
-
+            elif n_periods_pred < n_periods_fit:
+                trend = trend[:T_pred.shape[1]]
             # Add trend term to predictions
             predictions += T_pred @ trend
 
