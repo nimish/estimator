@@ -1688,7 +1688,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             self.ar_noise_loc_ = None
             self.ar_noise_scale_ = None
 
-    def predict(self, X: pd.DataFrame) -> ndarray:
+    def predict(self, X: pd.DataFrame, remove_periodic=False, remove_exogenous=False, remove_trend=False) -> ndarray:
         """
         Predict target values for new data.
 
@@ -1739,7 +1739,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         timestamps, X_array = self._ensure_timestamp_index(X)
 
         # Prediction data must be regularly spaced with no gaps
-        self._validate_frequency(timestamps, self.freq_)
+        self._validate_frequency(timestamps, self.freq_, allow_gaps=True)
 
         # Convert timestamps to indices using stored reference
         time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
@@ -1754,7 +1754,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         predictions = np.full(len(X_array), constant_value)
 
         # Add exogenous terms if present
-        if self.config.exog_config:
+        if self.config.exog_config and not remove_exogenous:
             for ix, exog_cfg in enumerate(self.config.exog_config):
                 exog_var = X_array[:, ix]
 
@@ -1798,7 +1798,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 predictions += exog_pred
 
         # Add Fourier terms if present
-        if self.config.multi_periodic_config:
+        if self.config.multi_periodic_config and not remove_periodic:
             # Check for NaN in time_indices
             if np.any(np.isnan(time_indices)):
                 raise ValueError("Time indices contain NaN. Check timestamp conversion.")
@@ -1866,8 +1866,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             predictions += fourier_contrib
 
         # Add trend term if present
-        if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_:
-            trend = self.variables_['trend'].value
+        if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_ and not remove_trend:
+            trend = np.copy(self.variables_['trend'].value)
             if trend is None:
                 raise ValueError("Trend coefficients are None. Model may not have converged.")
 
@@ -1881,34 +1881,37 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 )
 
             # Calculate period indices for prediction timestamps
+            time_indices_full = np.arange(time_indices.max() - time_indices.min() + 1)
             period_indices = (time_indices / period_hours).astype(int)
-            n_periods_fit = len(trend)
-            n_periods_pred = period_indices.max() + 1
+            period_indices_full = (time_indices_full / period_hours).astype(int)
+            n_periods_pred = period_indices.max() - period_indices.min() + 1
 
             # Create T matrix for predictions
-            T_pred = np.zeros((len(predictions), n_periods_pred))
+            T_pred = np.zeros((len(time_indices_full), n_periods_pred))
             # Use numpy advanced indexing for efficiency
             # Filter out negative indices (can occur if predicting before training data)
-            valid_mask = period_indices >= 0
-            T_pred[np.arange(len(period_indices))[valid_mask], period_indices[valid_mask]] = 1.0
+            # TODO: fix this
+            valid_mask = period_indices_full >= 0
+            T_pred[np.arange(len(period_indices_full))[valid_mask], period_indices_full[valid_mask]] = 1.0
+
 
             # Extend trend if prediction extends beyond training data
-            if n_periods_pred > n_periods_fit:
+            if period_indices.max() > len(trend) - 1:
                 # Extend trend using the last value or extrapolate based on trend type
-                trend_extended = np.zeros(n_periods_pred)
-                trend_extended[:n_periods_fit] = trend
+                trend_extended = np.zeros(period_indices.max()+1)
+                trend_extended[:len(trend)] = trend
 
                 if self.config.trend_config.trend_type == TrendType.LINEAR and self.variables_['trend_slope'].value is not None:
-                    for i in range(n_periods_fit, n_periods_pred):
+                    for i in range(len(trend), period_indices_full.max()+1):
                         trend_extended[i] = trend[-1] + self.variables_['trend_slope'].value * (i - n_periods_fit + 1)
                 else:
                     # fallback: use last value
-                    trend_extended[n_periods_fit:] = trend[-1]
+                    trend_extended[len(trend):] = trend[-1]
 
                 trend = trend_extended
 
             # Add trend term to predictions
-            predictions += T_pred @ trend
+            predictions += (T_pred @ trend[period_indices.min():period_indices.max()+1])[time_indices - time_indices.min()]
 
         # Final check for NaN in predictions
         if np.any(np.isnan(predictions)):
