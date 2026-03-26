@@ -303,6 +303,8 @@ class TsgamOutlierConfig:
     reg_weight: float
     period_hours: float | None = None
 
+type SolverOptionValue = int | float | bool | str | dict[str, SolverOptionValue]
+
 @dataclass
 class TsgamSolverConfig:
     """
@@ -319,13 +321,39 @@ class TsgamSolverConfig:
     verbose : bool, default=True
         Whether to print solver output during optimization. Useful for debugging
         but can be verbose for large problems.
+    warm_start : bool, default=True
+        Whether to warm-start the solver using cached results from a previous
+        solve. Can significantly speed up repeated solves with similar data.
+    solver_opts : dict[str, SolverOptionValue] | None, default=None
+        Additional keyword arguments forwarded to ``cvxpy.Problem.solve()``.
+        Each solver accepts its own options; see
+        https://www.cvxpy.org/tutorial/solvers/index.html#setting-solver-options
+
+        CLARABEL options include ``max_iter`` (default 50) and
+        ``time_limit`` (default 0.0, no limit).
+
+        MOSEK options are passed via a ``mosek_params`` dict with string
+        parameter names, e.g.
+        ``{"mosek_params": {"MSK_IPAR_INTPNT_MAX_ITERATIONS": 400}}``.
 
     Examples
     --------
     >>> config = TsgamSolverConfig(solver='CLARABEL', verbose=False)
+    >>> config = TsgamSolverConfig(
+    ...     solver='CLARABEL',
+    ...     solver_opts={"max_iter": 200, "time_limit": 60.0},
+    ... )
+    >>> config = TsgamSolverConfig(
+    ...     solver='MOSEK',
+    ...     solver_opts={
+    ...         "mosek_params": {"MSK_IPAR_INTPNT_MAX_ITERATIONS": 400}
+    ...     },
+    ... )
     """
     solver: str = 'CLARABEL'
     verbose: bool = True
+    warm_start: bool = True
+    solver_opts: dict[str, SolverOptionValue] | None = None
 
 @dataclass
 class TsgamEstimatorConfig:
@@ -1569,7 +1597,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         weight_valid = self._sample_weight_[self.combined_valid_mask_]
         error = cvxpy.sum_squares(cvxpy.multiply(np.sqrt(weight_valid), residual)) / np.sum(weight_valid)
         self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term), constraints)
-        self.problem_.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
+        self.problem_.solve(
+            solver=self.config.solver_config.solver,
+            verbose=self.config.solver_config.verbose,
+            warm_start=self.config.solver_config.warm_start,
+            **(self.config.solver_config.solver_opts or {}),
+        )
 
         # Check convergence
         if self.problem_.status not in ["optimal", "optimal_inaccurate"]:
@@ -1669,7 +1702,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             cvxpy.Minimize(cvxpy.sum_squares(residuals[ar_valid_mask] - B[ar_valid_mask] @ theta - constant)),
             [cvxpy.norm1(theta) <= ar_config.l1_constraint]
         )
-        ar_problem.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
+        ar_problem.solve(
+            solver=self.config.solver_config.solver,
+            verbose=self.config.solver_config.verbose,
+            warm_start=self.config.solver_config.warm_start,
+            **(self.config.solver_config.solver_opts or {}),
+        )
 
         if ar_problem.status not in ["infeasible", "unbounded"]:
             assert theta.value is not None, "AR coefficients should be set"

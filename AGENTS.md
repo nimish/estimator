@@ -7,6 +7,7 @@
 
 * Prefer positive boolean config flags (e.g. `use_dpp: True`) over negated ones (e.g. `ignore_dpp: False`).
 * Prefer bash scripts with bashisms over POSIX sh.
+* Prefer standalone test functions over test classes when a class isn't necessary.
 
 ## Learned Workspace Facts
 
@@ -20,5 +21,5 @@
 * Example/run scripts use Click and Rich for CLI and UI; deps are in dependency-groups.examples (uv sync --group examples).
 * Example run scripts produce publication-quality figures (data overview, model summary, ablation comparison) as PDF and PNG for journal or presentation use.
 * Tests that use pd.read_excel require openpyxl; include openpyxl in the dev dependency group so CI (uv sync --group dev) passes.
-* TsgamSolverConfig has warm_start (default True) and use_dpp (default False); call invalidate_compiled_problem() before fitting with different data shapes.
+* TsgamSolverConfig has solver, verbose, warm_start (default True), and solver_opts (dict forwarded as **kwargs to cvxpy Problem.solve); SolverOptionValue is the recursive type alias for option values.
 * CVXPY DPP compliance requires pre-weighting design matrices by sqrt(w/sum(w)); products of cp.Parameter violate DPP rules.
