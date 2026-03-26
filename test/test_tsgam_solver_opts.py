@@ -76,8 +76,16 @@ def test_solver_opts_bad_option_raises():
         ),
     )
     est = TsgamEstimator(config=config)
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="not_a_real_option"):
         est.fit(X, y)
+
+
+@pytest.mark.parametrize("key", ["solver", "verbose", "warm_start"])
+def test_solver_opts_rejects_reserved_keys(key):
+    """Reserved keys in solver_opts raise ValueError before calling the solver."""
+    config = TsgamSolverConfig(solver_opts={key: "ignored"})
+    with pytest.raises(ValueError, match="passed explicitly"):
+        config._solve_kwargs()
 
 
 def test_solver_opts_defaults_to_none():
