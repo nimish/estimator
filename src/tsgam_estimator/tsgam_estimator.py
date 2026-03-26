@@ -355,6 +355,19 @@ class TsgamSolverConfig:
     warm_start: bool = True
     solver_opts: dict[str, SolverOptionValue] | None = None
 
+    _RESERVED_KEYS = frozenset({"solver", "verbose", "warm_start"})
+
+    def _solve_kwargs(self) -> dict[str, SolverOptionValue]:
+        """Build the extra kwargs dict for ``Problem.solve()``, validating no reserved keys."""
+        opts = dict(self.solver_opts or {})
+        conflict = self._RESERVED_KEYS & opts.keys()
+        if conflict:
+            raise ValueError(
+                f"solver_opts must not contain keys that are passed explicitly: "
+                f"{sorted(conflict)}"
+            )
+        return opts
+
 @dataclass
 class TsgamEstimatorConfig:
     """
@@ -1601,7 +1614,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             solver=self.config.solver_config.solver,
             verbose=self.config.solver_config.verbose,
             warm_start=self.config.solver_config.warm_start,
-            **(self.config.solver_config.solver_opts or {}),
+            **self.config.solver_config._solve_kwargs(),
         )
 
         # Check convergence
@@ -1706,7 +1719,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             solver=self.config.solver_config.solver,
             verbose=self.config.solver_config.verbose,
             warm_start=self.config.solver_config.warm_start,
-            **(self.config.solver_config.solver_opts or {}),
+            **self.config.solver_config._solve_kwargs(),
         )
 
         if ar_problem.status not in ["infeasible", "unbounded"]:
