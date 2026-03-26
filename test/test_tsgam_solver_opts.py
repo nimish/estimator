@@ -76,7 +76,7 @@ def test_solver_opts_bad_option_raises():
         ),
     )
     est = TsgamEstimator(config=config)
-    with pytest.raises(Exception, match="not_a_real_option"):
+    with pytest.raises(TypeError, match="not_a_real_option"):
         est.fit(X, y)
 
 
