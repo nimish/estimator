@@ -409,9 +409,10 @@ class TsgamEstimatorConfig:
         If True, sort the data by its datetime index before fit/predict so that
         row order matches time order. If False, require the index to already be
         sorted (chronologically); raise ValueError if not.
-    random_state : RandomState or None, default=None
-        Random state for reproducible results. Used in AR sampling if ar_config
-        is provided.
+    random_state : int, RandomState instance or None, default=None
+        Random seed/state for reproducible stochastic sampling. Integer seeds are
+        convenient for shared configs, while ``RandomState`` instances allow
+        callers to manage RNG state explicitly.
     debug : bool, default=False
         If True, stores additional debug attributes (e.g., _baseline_residuals_,
         _B_running_view_) for inspection.
@@ -437,7 +438,7 @@ class TsgamEstimatorConfig:
     outlier_config: TsgamOutlierConfig | None = None
     solver_config: TsgamSolverConfig = field(default_factory=TsgamSolverConfig)
     sort_index: bool = True
-    random_state: RandomState | None = None
+    random_state: RandomState | int | None = None
     debug: bool = False
 
 
@@ -2021,6 +2022,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         >>> p95 = np.percentile(samples_original, 95, axis=0)
         """
         check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
+        if random_state is None:
+            random_state = self.config.random_state
         random_state = check_random_state(random_state)
 
         # Get baseline predictions
