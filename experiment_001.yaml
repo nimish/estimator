@@ -1,0 +1,43 @@
+sample_options:
+  - P-0038-01
+  - P-0050-01
+  - P-0061-02
+
+targets:
+  - pmp
+  - imp
+  - vmp
+
+take_log:
+  - true
+
+use_periodic:
+  - true
+
+first_harmonics:
+  - 0
+  - 1
+  - 2
+
+second_harmonics:
+  - 8
+  - 16
+  - 32
+
+use_exog:
+  - true
+
+trends:
+  - none
+  - linear
+  - nonlinear
+
+num_knots:
+  - 8
+  - 16
+  - 32
+
+holdout_method:
+  - last 20%
+  - every 5th day
+  - every 5th week
