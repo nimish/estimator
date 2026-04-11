@@ -25,7 +25,11 @@ def _():
         TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS,
     )
     from tidal_analysis_helpers import compute_periodogram, infer_samples_per_hour
-    from tidal_model_shared import tidal_metrics
+    from tidal_model_shared import (
+        make_tidal_spline_configs,
+        prepare_split_regressors,
+        tidal_metrics,
+    )
 
     return (
         PERIODS,
@@ -38,9 +42,11 @@ def _():
         infer_samples_per_hour,
         load_station,
         make_subplots,
+        make_tidal_spline_configs,
         mo,
         np,
         pd,
+        prepare_split_regressors,
         stats,
         tidal_metrics,
     )
@@ -110,7 +116,7 @@ def _(df, explore_end, explore_resample, explore_start, go, make_subplots):
 
 
 @app.cell
-def _(PERIODS, date_max, date_min, mo, pd):
+def _(PERIODS, date_max, date_min, df, mo, pd):
     _defaults = {
         "M2": 4, "S2": 1, "N2": 1, "K1": 2,
         "O1": 1, "Mf": 1, "Mm": 1, "annual": 2,
@@ -124,10 +130,15 @@ def _(PERIODS, date_max, date_min, mo, pd):
         for name, n in _defaults.items()
     }
 
-    train_end_default = pd.Timestamp("2024-01-01").date()
+    _met_candidates = ["pressure", "water_temp", "wind_u", "wind_v", "air_temp"]
+    _available = [c for c in _met_candidates if c in df.columns and df[c].notna().any()]
+    regressor_toggles = {
+        c: mo.ui.switch(value=False, label=c)
+        for c in _available
+    }
 
     train_start = mo.ui.date(value=date_min, label="Train start")
-    train_end = mo.ui.date(value=train_end_default, label="Train end")
+    train_end = mo.ui.date(value=pd.Timestamp("2024-01-01").date(), label="Train end")
     test_end = mo.ui.date(value=date_max, label="Test end")
     run_fit = mo.ui.run_button(label="Fit model")
 
@@ -135,11 +146,22 @@ def _(PERIODS, date_max, date_min, mo, pd):
         mo.md("## Configure model"),
         mo.hstack([
             mo.vstack([mo.md("**Harmonics** (0 = exclude)")] + list(harmonic_inputs.values())),
+            mo.vstack([
+                mo.md("**Regressors**"),
+                *regressor_toggles.values(),
+            ]) if regressor_toggles else mo.md(""),
             mo.vstack([mo.md("**Date ranges**"), train_start, train_end, test_end]),
         ], justify="start", gap=2),
         run_fit,
     ])
-    return harmonic_inputs, run_fit, test_end, train_end, train_start
+    return (
+        harmonic_inputs,
+        regressor_toggles,
+        run_fit,
+        test_end,
+        train_end,
+        train_start,
+    )
 
 
 @app.cell
@@ -151,8 +173,11 @@ def _(
     TsgamSolverConfig,
     df,
     harmonic_inputs,
+    make_tidal_spline_configs,
     mo,
     pd,
+    prepare_split_regressors,
+    regressor_toggles,
     run_fit,
     sph,
     test_end,
@@ -173,26 +198,43 @@ def _(
     _ok_tr = _tr["water_level"].notna()
     _y_tr = _tr.loc[_ok_tr, "water_level"].values
 
+    _selected_regs = [c for c, sw in regressor_toggles.items() if sw.value]
+    if _selected_regs:
+        _X_tr, _X_te, _active, _dropped = prepare_split_regressors(
+            _tr, _te, _selected_regs,
+        )
+        _spline_map, _default_spline = make_tidal_spline_configs(sph)
+        _exog_config = [_spline_map.get(c, _default_spline) for c in _active]
+        _X_tr_fit = _X_tr.loc[_ok_tr]
+    else:
+        _X_tr_fit = pd.DataFrame(index=_tr.index[_ok_tr])
+        _X_te = pd.DataFrame(index=_te.index)
+        _exog_config = None
+        _active = []
+
     _mdl = TsgamEstimator(TsgamEstimatorConfig(
         multi_periodic_config=TsgamMultiPeriodicConfig(
             periods=[p * sph for p, _ in picked.values()],
             num_harmonics=[n for _, n in picked.values()],
             reg_weight=1e-4,
         ),
-        exog_config=None,
+        exog_config=_exog_config or None,
         solver_config=TsgamSolverConfig(solver="SCS", verbose=False),
     ))
-    _mdl.fit(pd.DataFrame(index=_tr.index[_ok_tr]), _y_tr)
+    _mdl.fit(_X_tr_fit, _y_tr)
 
-    _yh_tr = _mdl.predict(pd.DataFrame(index=_tr.index))
-    _yh_te = _mdl.predict(pd.DataFrame(index=_te.index))
+    _yh_tr = _mdl.predict(_X_tr if _selected_regs else pd.DataFrame(index=_tr.index))
+    _yh_te = _mdl.predict(_X_te)
     _ok_te = _te["water_level"].notna()
 
     fit_metrics = pd.DataFrame({
         "train": tidal_metrics(_y_tr, _yh_tr[_ok_tr]),
         "test": tidal_metrics(_te.loc[_ok_te, "water_level"].values, _yh_te[_ok_te]),
     }).T
-    fit_label = f"{', '.join(picked)} \u2014 {len(_y_tr):,} train / {_ok_te.sum():,} test"
+    _parts = [', '.join(picked)]
+    if _active:
+        _parts.append(f"+ {', '.join(_active)}")
+    fit_label = f"{' '.join(_parts)} \u2014 {len(_y_tr):,} train / {_ok_te.sum():,} test"
     fit_te_index = _te.index
     fit_te_obs = _te["water_level"].values
     fit_te_pred = _yh_te
@@ -200,7 +242,6 @@ def _(
     fit_te_pred_clean = _yh_te[_ok_te]
     fit_residuals = fit_te_obs - fit_te_pred
     fit_sph = sph
-    mo.Html(fit_metrics.to_html(float_format="%.3f", classes="table table-striped"))
     return (
         fit_label,
         fit_residuals,
