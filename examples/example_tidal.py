@@ -153,6 +153,39 @@ TIDE_TO_WEATHER: dict[str, tuple[str, str]] = {
     '1612340': ('91182022521', 'Honolulu Intl, HI'),
 }
 
+DEFAULT_DATA_DIR = Path(__file__).parent / 'data' / 'tidal'
+
+
+def find_station(query: str) -> str:
+    """Look up a station ID by name substring (case-insensitive)."""
+    if query in STATION_CATALOG:
+        return query
+    matches = [
+        sid for sid, info in STATION_CATALOG.items()
+        if query.lower() in info['name'].lower()
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise KeyError(f'No station matching {query!r}')
+    names = [STATION_CATALOG[s]['name'] for s in matches]
+    raise KeyError(f'Ambiguous query {query!r}: {names}')
+
+
+def load_station(
+    query: str,
+    data_dir: Path | str | None = None,
+    **kwargs,
+) -> pd.DataFrame:
+    """Load tidal data by station name or ID.
+
+    >>> df = load_station("San Francisco")
+    """
+    sid = find_station(query)
+    data_dir = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
+    return load_tidal_data(data_dir / f'{sid}_combined.csv', **kwargs)
+
+
 STATION_CATALOG: dict[str, dict] = {
     '8518750': {
         'name': 'The Battery, NY',
