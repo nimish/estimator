@@ -21,7 +21,10 @@ def _():
     )
     from example_tidal import (
         STATION_CATALOG,
+        TIDE_TO_WEATHER,
+        load_lcd_weather,
         load_station,
+        merge_tidal_weather,
         TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS,
     )
     from tidal_analysis_helpers import compute_periodogram, infer_samples_per_hour
@@ -34,15 +37,18 @@ def _():
     return (
         PERIODS,
         STATION_CATALOG,
+        TIDE_TO_WEATHER,
         TsgamEstimator,
         TsgamEstimatorConfig,
         TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
         go,
         infer_samples_per_hour,
+        load_lcd_weather,
         load_station,
         make_subplots,
         make_tidal_spline_configs,
+        merge_tidal_weather,
         mo,
         np,
         pd,
@@ -53,21 +59,61 @@ def _():
 
 
 @app.cell
-def _(STATION_CATALOG, mo):
+def _(STATION_CATALOG, TIDE_TO_WEATHER, mo):
     _options = {v["name"]: k for k, v in STATION_CATALOG.items()}
     station_picker = mo.ui.dropdown(options=_options, value="The Battery, NY", label="Station")
-    station_picker
-    return (station_picker,)
+
+    _sid = station_picker.value
+    _wx = TIDE_TO_WEATHER.get(_sid)
+    if _wx:
+        _wx_id, _wx_name = _wx
+        use_weather = mo.ui.switch(value=False, label=f"Merge LCD weather from {_wx_name}")
+    else:
+        use_weather = mo.ui.switch(value=False, label="No mapped weather station")
+
+    mo.vstack([station_picker, use_weather])
+    return station_picker, use_weather
 
 
 @app.cell
-def _(infer_samples_per_hour, load_station, station_picker):
+def _(
+    TIDE_TO_WEATHER,
+    infer_samples_per_hour,
+    load_lcd_weather,
+    load_station,
+    merge_tidal_weather,
+    mo,
+    station_picker,
+    use_weather,
+):
     df = load_station(station_picker.value)
     if df.index.tz is not None:
         df.index = df.index.tz_convert(None)
+
+    _sid = station_picker.value
+    _wx = TIDE_TO_WEATHER.get(_sid)
+    weather_status = ""
+    if use_weather.value and _wx:
+        _wx_id, _wx_name = _wx
+        try:
+            _wdf = load_lcd_weather(
+                "data/tidal", station_id=_wx_id,
+                begin_date=str(df.index[0].date()),
+                end_date=str(df.index[-1].date()),
+            )
+            df = merge_tidal_weather(df, _wdf)
+            weather_status = f"Merged {len(_wdf.columns)} weather columns from {_wx_name}"
+        except FileNotFoundError:
+            weather_status = (
+                f"LCD files not found for {_wx_name}. "
+                f"Run `download_lcd_weather('data/tidal', station_id='{_wx_id}')` first."
+            )
+
     sph = infer_samples_per_hour(df.index)
     date_min = df.index[0].date()
     date_max = df.index[-1].date()
+    if weather_status:
+        mo.output.replace(mo.md(f"*{weather_status}*"))
     return date_max, date_min, df, sph
 
 
