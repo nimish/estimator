@@ -114,6 +114,7 @@ def _(
     _sid = station_picker.value
     _wx = TIDE_TO_WEATHER.get(_sid)
     weather_status = ""
+
     if use_weather.value and _wx:
         _wx_id, _wx_name = _wx
 
@@ -135,8 +136,8 @@ def _(
                 end_date=str(df.index[-1].date()),
             )
 
-    
-    
+
+
         df = merge_tidal_weather(df, _wdf)
 
 
@@ -444,11 +445,6 @@ def _(
 
 
 @app.cell
-def _():
-    return
-
-
-@app.cell
 def _(fit_te_obs_clean, fit_te_pred_clean, go):
     _lo = min(fit_te_pred_clean.min(), fit_te_obs_clean.min())
     _hi = max(fit_te_pred_clean.max(), fit_te_obs_clean.max())
@@ -584,6 +580,7 @@ def _(
             mode="lines", name=_col, line=dict(width=1.5),
         ))
     _fig.add_hline(y=0, line_width=0.5, line_color="black")
+    _fig.add_vline(x=0, line_width=2.0, line_color="red")
     _fig.update_layout(
         title="Residual\u2013regressor cross-correlation (\u00b112 h)",
         xaxis_title="Lag (hours)",
