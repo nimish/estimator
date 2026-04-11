@@ -18,6 +18,7 @@ def _():
         TsgamEstimatorConfig,
         TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
+        TsgamSplineConfig,
     )
     from example_tidal import (
         STATION_CATALOG,
@@ -25,9 +26,10 @@ def _():
         load_lcd_weather,
         load_station,
         merge_tidal_weather,
+        download_lcd_weather,
         TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS,
     )
-    from tidal_analysis_helpers import compute_periodogram, infer_samples_per_hour
+    from tidal_analysis_helpers import compute_lagged_correlation, compute_periodogram, infer_samples_per_hour
     from tidal_model_shared import (
         make_tidal_spline_configs,
         prepare_split_regressors,
@@ -42,12 +44,14 @@ def _():
         TsgamEstimatorConfig,
         TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
+        TsgamSplineConfig,
+        compute_lagged_correlation,
+        download_lcd_weather,
         go,
         infer_samples_per_hour,
         load_lcd_weather,
         load_station,
         make_subplots,
-        make_tidal_spline_configs,
         merge_tidal_weather,
         mo,
         np,
@@ -59,25 +63,41 @@ def _():
 
 
 @app.cell
-def _(STATION_CATALOG, TIDE_TO_WEATHER, mo):
+def _(STATION_CATALOG, mo):
     _options = {v["name"]: k for k, v in STATION_CATALOG.items()}
     station_picker = mo.ui.dropdown(options=_options, value="The Battery, NY", label="Station")
+    mo.vstack([station_picker], justify="start")
+    return (station_picker,)
 
+
+@app.cell
+def _(TIDE_TO_WEATHER, mo, station_picker):
+    mo.stop(not station_picker.value, mo.md("*Select a station to enable weather options.*"))
     _sid = station_picker.value
     _wx = TIDE_TO_WEATHER.get(_sid)
+
+    toggles = []
     if _wx:
         _wx_id, _wx_name = _wx
-        use_weather = mo.ui.switch(value=False, label=f"Merge LCD weather from {_wx_name}")
-    else:
-        use_weather = mo.ui.switch(value=False, label="No mapped weather station")
+        use_weather = mo.ui.switch(value=True, label=f"Merge LCD weather from {_wx_name}")
+        download_toggle = mo.ui.switch(label="Download weather data if not found", value=True)
 
-    mo.vstack([station_picker, use_weather])
-    return station_picker, use_weather
+        toggles = [use_weather, download_toggle]
+    else:
+        use_weather = mo.ui.switch(value=False, label="No mapped weather station", disabled=True)
+        toggles = [use_weather]
+
+
+
+    mo.hstack(toggles, justify="start")
+    return download_toggle, use_weather
 
 
 @app.cell
 def _(
     TIDE_TO_WEATHER,
+    download_lcd_weather,
+    download_toggle,
     infer_samples_per_hour,
     load_lcd_weather,
     load_station,
@@ -86,6 +106,7 @@ def _(
     station_picker,
     use_weather,
 ):
+
     df = load_station(station_picker.value)
     if df.index.tz is not None:
         df.index = df.index.tz_convert(None)
@@ -95,19 +116,37 @@ def _(
     weather_status = ""
     if use_weather.value and _wx:
         _wx_id, _wx_name = _wx
+
         try:
             _wdf = load_lcd_weather(
                 "data/tidal", station_id=_wx_id,
                 begin_date=str(df.index[0].date()),
                 end_date=str(df.index[-1].date()),
             )
-            df = merge_tidal_weather(df, _wdf)
-            weather_status = f"Merged {len(_wdf.columns)} weather columns from {_wx_name}"
         except FileNotFoundError:
-            weather_status = (
-                f"LCD files not found for {_wx_name}. "
-                f"Run `download_lcd_weather('data/tidal', station_id='{_wx_id}')` first."
+            if not download_toggle.value:
+                raise
+            download_lcd_weather(
+                "data/tidal", station_id=_wx_id,
             )
+            _wdf = load_lcd_weather(
+                "data/tidal", station_id=_wx_id,
+                begin_date=str(df.index[0].date()),
+                end_date=str(df.index[-1].date()),
+            )
+
+    
+    
+        df = merge_tidal_weather(df, _wdf)
+
+
+        weather_status = f"Merged {len(_wdf.columns)} weather columns from {_wx_name}"
+
+
+    if "pressure" in df.columns:
+        df["dp_dt"] = df["pressure"].diff()
+    if "wind_u" in df.columns and "wind_v" in df.columns:
+        df["wind_stress"] = df["wind_u"] ** 2 + df["wind_v"] ** 2
 
     sph = infer_samples_per_hour(df.index)
     date_min = df.index[0].date()
@@ -122,11 +161,19 @@ def _(date_max, date_min, mo):
     explore_start = mo.ui.date(value=date_min, label="From")
     explore_end = mo.ui.date(value=date_max, label="To")
     explore_resample = mo.ui.dropdown(
-        options={"Raw": None, "Hourly": "1h", "6-hourly": "6h", "Daily": "1D"},
-        value=None, label="Resample",
+        options={"---": None, "Hourly": "1h", "6-hourly": "6h", "Daily": "1D"},
+        value="---", label="Resample",
     )
     mo.hstack([explore_start, explore_end, explore_resample], justify="start")
     return explore_end, explore_resample, explore_start
+
+
+@app.cell
+def _(df):
+    viz_df = df.copy()
+    viz_df['time'] = viz_df.index
+    viz_df
+    return
 
 
 @app.cell
@@ -135,10 +182,19 @@ def _(df, explore_end, explore_resample, explore_start, go, make_subplots):
     if explore_resample.value is not None:
         _w = _w.resample(explore_resample.value).mean()
 
-    _cols = [c for c in ["water_level", "pressure", "water_temp"]
-             if c in _w.columns and _w[c].notna().any()]
-    _ylabels = {"water_level": "Water level (m)", "pressure": "Pressure (hPa)",
-                "water_temp": "Water temp (\u00b0C)"}
+    _ylabels = {
+        "water_level": "Water level (m)",
+        "pressure": "Pressure (hPa)",
+        "dp_dt": "dP/dt (hPa/step)",
+        "water_temp": "Water temp (°C)",
+        "air_temp": "Air temp (°C)",
+        "wind_u": "Wind U (m/s)",
+        "wind_v": "Wind V (m/s)",
+        "wind_speed": "Wind speed (m/s)",
+        "wind_stress": "Wind stress (m²/s²)",
+        "lcd_slp": "LCD sea level pressure (hPa)",
+    }
+    _cols = [c for c in _ylabels if c in _w.columns and _w[c].notna().any()]
 
     _fig = make_subplots(rows=len(_cols), cols=1, shared_xaxes=True,
                          vertical_spacing=0.04)
@@ -162,6 +218,28 @@ def _(df, explore_end, explore_resample, explore_start, go, make_subplots):
 
 
 @app.cell
+def _(df, go, mo, np):
+    _candidates = ["water_level", "pressure", "dp_dt", "water_temp", "wind_u", "wind_v",
+                    "air_temp", "wind_speed", "wind_stress", "lcd_slp"]
+    _cols = [c for c in _candidates if c in df.columns and df[c].notna().any()]
+    mo.stop(len(_cols) < 2, mo.md("*Merge weather data above to see regressor correlations.*"))
+
+    _corr = df[_cols].corr()
+    _fig = go.Figure(go.Heatmap(
+        z=_corr.values, x=_corr.columns.tolist(), y=_corr.columns.tolist(),
+        colorscale="RdBu_r", zmin=-1, zmax=1,
+        text=np.round(_corr.values, 2), texttemplate="%{text}",
+    ))
+    _fig.update_layout(
+        title="Pairwise Pearson correlation",
+        width=520, height=520,
+        margin=dict(l=100, r=20, t=40, b=100),
+    )
+    _fig
+    return
+
+
+@app.cell
 def _(PERIODS, date_max, date_min, df, mo, pd):
     _defaults = {
         "M2": 4, "S2": 1, "N2": 1, "K1": 2,
@@ -176,12 +254,26 @@ def _(PERIODS, date_max, date_min, df, mo, pd):
         for name, n in _defaults.items()
     }
 
-    _met_candidates = ["pressure", "water_temp", "wind_u", "wind_v", "air_temp"]
+    _met_candidates = ["pressure", "dp_dt", "water_temp", "wind_u", "wind_v",
+                        "air_temp", "wind_stress"]
     _available = [c for c in _met_candidates if c in df.columns and df[c].notna().any()]
-    regressor_toggles = {
-        c: mo.ui.switch(value=False, label=c)
-        for c in _available
+
+    _lag_defaults = {
+        "pressure": (-2, 0), "dp_dt": (-2, 0), "water_temp": (0, 0),
+        "wind_u": (-1, 0), "wind_v": (-1, 0), "air_temp": (0, 0),
+        "wind_stress": (-1, 0),
     }
+    regressor_toggles = {}
+    regressor_lags = {}
+    _reg_rows = []
+    for c in _available:
+        regressor_toggles[c] = mo.ui.switch(value=False, label=c)
+        _lo, _hi = _lag_defaults.get(c, (-2, 0))
+        regressor_lags[c] = mo.ui.range_slider(
+            start=-6, stop=6, value=(_lo, _hi),
+            label="lag (h)", show_value=True,
+        )
+        _reg_rows.append(mo.hstack([regressor_toggles[c], regressor_lags[c]], justify="start"))
 
     train_start = mo.ui.date(value=date_min, label="Train start")
     train_end = mo.ui.date(value=pd.Timestamp("2024-01-01").date(), label="Train end")
@@ -192,16 +284,15 @@ def _(PERIODS, date_max, date_min, df, mo, pd):
         mo.md("## Configure model"),
         mo.hstack([
             mo.vstack([mo.md("**Harmonics** (0 = exclude)")] + list(harmonic_inputs.values())),
-            mo.vstack([
-                mo.md("**Regressors**"),
-                *regressor_toggles.values(),
-            ]) if regressor_toggles else mo.md(""),
+            mo.vstack([mo.md("**Regressors** (toggle + lag range in hours)")] + _reg_rows)
+                if _available else mo.md(""),
             mo.vstack([mo.md("**Date ranges**"), train_start, train_end, test_end]),
         ], justify="start", gap=2),
         run_fit,
     ])
     return (
         harmonic_inputs,
+        regressor_lags,
         regressor_toggles,
         run_fit,
         test_end,
@@ -217,12 +308,13 @@ def _(
     TsgamEstimatorConfig,
     TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
+    TsgamSplineConfig,
     df,
     harmonic_inputs,
-    make_tidal_spline_configs,
     mo,
     pd,
     prepare_split_regressors,
+    regressor_lags,
     regressor_toggles,
     run_fit,
     sph,
@@ -249,8 +341,15 @@ def _(
         _X_tr, _X_te, _active, _dropped = prepare_split_regressors(
             _tr, _te, _selected_regs,
         )
-        _spline_map, _default_spline = make_tidal_spline_configs(sph)
-        _exog_config = [_spline_map.get(c, _default_spline) for c in _active]
+        _exog_config = []
+        for _col in _active:
+            _lo, _hi = regressor_lags[_col].value
+            _exog_config.append(TsgamSplineConfig(
+                n_knots=10 if _col == "pressure" else 8,
+                lags=[h * sph for h in range(_lo, _hi + 1)],
+                reg_weight=1e-5,
+                diff_reg_weight=0.3,
+            ))
         _X_tr_fit = _X_tr.loc[_ok_tr]
     else:
         _X_tr_fit = pd.DataFrame(index=_tr.index[_ok_tr])
@@ -288,6 +387,8 @@ def _(
     fit_te_pred_clean = _yh_te[_ok_te]
     fit_residuals = fit_te_obs - fit_te_pred
     fit_sph = sph
+
+    mo.Html(fit_metrics.to_html())
     return (
         fit_label,
         fit_residuals,
@@ -339,6 +440,11 @@ def _(
         margin=dict(l=60, r=20, t=60, b=30),
     )
     _fig
+    return
+
+
+@app.cell
+def _():
     return
 
 
@@ -442,6 +548,48 @@ def _(fit_residuals, fit_sph, fit_te_index, go, np, pd):
         xaxis_title=None, yaxis_title="RMSE (m)",
         margin=dict(l=60, r=20, t=40, b=30),
         height=300,
+    )
+    _fig
+    return
+
+
+@app.cell
+def _(
+    compute_lagged_correlation,
+    df,
+    fit_residuals,
+    fit_sph,
+    fit_te_index,
+    go,
+    mo,
+    np,
+):
+    _candidates = ["pressure", "dp_dt", "water_temp", "wind_u", "wind_v", "air_temp",
+                    "wind_speed", "wind_stress", "lcd_slp"]
+    _regs = [c for c in _candidates if c in df.columns and df[c].notna().any()]
+    mo.stop(not _regs, mo.md("*No regressors available for residual analysis.*"))
+
+    _clean = np.isfinite(fit_residuals)
+    _resid = fit_residuals[_clean]
+    _te_df = df.loc[fit_te_index[_clean]]
+    _max_lag = int(12 * fit_sph)
+
+    _fig = go.Figure()
+    for _col in _regs:
+        _feat = _te_df[_col].values
+        _lc = compute_lagged_correlation(_resid, _feat, _max_lag)
+        _lc["lag_hours"] = _lc["lag"] / fit_sph
+        _fig.add_trace(go.Scatter(
+            x=_lc["lag_hours"], y=_lc["correlation"],
+            mode="lines", name=_col, line=dict(width=1.5),
+        ))
+    _fig.add_hline(y=0, line_width=0.5, line_color="black")
+    _fig.update_layout(
+        title="Residual\u2013regressor cross-correlation (\u00b112 h)",
+        xaxis_title="Lag (hours)",
+        yaxis_title="Pearson r",
+        height=400,
+        margin=dict(l=60, r=20, t=40, b=50),
     )
     _fig
     return
