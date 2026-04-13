@@ -24,6 +24,7 @@ from .tsgam_estimator import (
     TsgamTrendConfig,
     TsgamOutlierConfig,
     TsgamSolverConfig,
+    SolverOptionValue,
     # Enums
     TrendType,
     # Utility functions
@@ -49,6 +50,7 @@ __all__ = [
     "TsgamTrendConfig",
     "TsgamOutlierConfig",
     "TsgamSolverConfig",
+    "SolverOptionValue",
     "TrendType",
     "get_recommended_periods",
     "PERIOD_HOURLY_DAILY",
