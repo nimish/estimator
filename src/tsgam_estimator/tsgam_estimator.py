@@ -303,6 +303,8 @@ class TsgamOutlierConfig:
     reg_weight: float
     period_hours: float | None = None
 
+type SolverOptionValue = int | float | bool | str | dict[str, SolverOptionValue]
+
 @dataclass
 class TsgamSolverConfig:
     """
@@ -319,13 +321,52 @@ class TsgamSolverConfig:
     verbose : bool, default=True
         Whether to print solver output during optimization. Useful for debugging
         but can be verbose for large problems.
+    warm_start : bool, default=True
+        Whether to warm-start the solver using cached results from a previous
+        solve. Can significantly speed up repeated solves with similar data.
+    solver_opts : dict[str, SolverOptionValue] | None, default=None
+        Additional keyword arguments forwarded to ``cvxpy.Problem.solve()``.
+        Each solver accepts its own options; see
+        https://www.cvxpy.org/tutorial/solvers/index.html#setting-solver-options
+
+        CLARABEL options include ``max_iter`` (default 50) and
+        ``time_limit`` (default 0.0, no limit).
+
+        MOSEK options are passed via a ``mosek_params`` dict with string
+        parameter names, e.g.
+        ``{"mosek_params": {"MSK_IPAR_INTPNT_MAX_ITERATIONS": 400}}``.
 
     Examples
     --------
     >>> config = TsgamSolverConfig(solver='CLARABEL', verbose=False)
+    >>> config = TsgamSolverConfig(
+    ...     solver='CLARABEL',
+    ...     solver_opts={"max_iter": 200, "time_limit": 60.0},
+    ... )
+    >>> config = TsgamSolverConfig(
+    ...     solver='MOSEK',
+    ...     solver_opts={
+    ...         "mosek_params": {"MSK_IPAR_INTPNT_MAX_ITERATIONS": 400}
+    ...     },
+    ... )
     """
     solver: str = 'CLARABEL'
     verbose: bool = True
+    warm_start: bool = True
+    solver_opts: dict[str, SolverOptionValue] | None = None
+
+    _RESERVED_KEYS = frozenset({"solver", "verbose", "warm_start"})
+
+    def _solve_kwargs(self) -> dict[str, SolverOptionValue]:
+        """Build the extra kwargs dict for ``Problem.solve()``, validating no reserved keys."""
+        opts = dict(self.solver_opts or {})
+        conflict = self._RESERVED_KEYS & opts.keys()
+        if conflict:
+            raise ValueError(
+                f"solver_opts must not contain keys that are passed explicitly: "
+                f"{sorted(conflict)}"
+            )
+        return opts
 
 @dataclass
 class TsgamEstimatorConfig:
@@ -368,9 +409,10 @@ class TsgamEstimatorConfig:
         If True, sort the data by its datetime index before fit/predict so that
         row order matches time order. If False, require the index to already be
         sorted (chronologically); raise ValueError if not.
-    random_state : RandomState or None, default=None
-        Random state for reproducible results. Used in AR sampling if ar_config
-        is provided.
+    random_state : int, RandomState instance or None, default=None
+        Random seed/state for reproducible stochastic sampling. Integer seeds are
+        convenient for shared configs, while ``RandomState`` instances allow
+        callers to manage RNG state explicitly.
     debug : bool, default=False
         If True, stores additional debug attributes (e.g., _baseline_residuals_,
         _B_running_view_) for inspection.
@@ -396,7 +438,7 @@ class TsgamEstimatorConfig:
     outlier_config: TsgamOutlierConfig | None = None
     solver_config: TsgamSolverConfig = field(default_factory=TsgamSolverConfig)
     sort_index: bool = True
-    random_state: RandomState | None = None
+    random_state: RandomState | int | None = None
     debug: bool = False
 
 
@@ -1569,7 +1611,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         weight_valid = self._sample_weight_[self.combined_valid_mask_]
         error = cvxpy.sum_squares(cvxpy.multiply(np.sqrt(weight_valid), residual)) / np.sum(weight_valid)
         self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term), constraints)
-        self.problem_.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
+        self.problem_.solve(
+            solver=self.config.solver_config.solver,
+            verbose=self.config.solver_config.verbose,
+            warm_start=self.config.solver_config.warm_start,
+            **self.config.solver_config._solve_kwargs(),
+        )
 
         # Check convergence
         if self.problem_.status not in ["optimal", "optimal_inaccurate"]:
@@ -1669,7 +1716,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             cvxpy.Minimize(cvxpy.sum_squares(residuals[ar_valid_mask] - B[ar_valid_mask] @ theta - constant)),
             [cvxpy.norm1(theta) <= ar_config.l1_constraint]
         )
-        ar_problem.solve(solver=self.config.solver_config.solver, verbose=self.config.solver_config.verbose)
+        ar_problem.solve(
+            solver=self.config.solver_config.solver,
+            verbose=self.config.solver_config.verbose,
+            warm_start=self.config.solver_config.warm_start,
+            **self.config.solver_config._solve_kwargs(),
+        )
 
         if ar_problem.status not in ["infeasible", "unbounded"]:
             assert theta.value is not None, "AR coefficients should be set"
@@ -1974,6 +2026,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         >>> p95 = np.percentile(samples_original, 95, axis=0)
         """
         check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
+        if random_state is None:
+            random_state = self.config.random_state
         random_state = check_random_state(random_state)
 
         # Get baseline predictions
