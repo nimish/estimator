@@ -1,6 +1,6 @@
-# estimator
+# Time-series generalized additive model (tsgam)
 
-Time series GAM (Generalized Additive Model) estimators for load forecasting.
+Time series generalized additive model (tsgam) is a package for fitting "generalized addive models" (GAMs) augmented with time-dependent features. The idea is to fit a statistical model that estimates a target time-series based on linear or nonlinear responses to exogenous variables, features encoding one or more natural periodicies, and a features encoding long-term trends. For nonlinear exogenous variables, we model the response with natural cubic basis splines. The (multi-)periodic components are modeled with trucated Fourier series, plus cross terms when multiple periods are present (e.g., daily and year periodicities). We currently have two long-term trend models: linear and nonlinear. The nonlinear model uses a monotonic signal class (only increasing or decreasing), with an optional smoothing parameter.
 
 ## Installation
 
