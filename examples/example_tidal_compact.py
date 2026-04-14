@@ -3,9 +3,13 @@ import marimo
 __generated_with = "0.23.1"
 app = marimo.App(width="full")
 
+with app.setup:
+    import os
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from functools import partial
+    from math import factorial
+    from typing import TypedDict, cast
 
-@app.cell
-def _():
     import marimo as mo
     import numpy as np
     import pandas as pd
@@ -13,404 +17,298 @@ def _():
     from plotly.subplots import make_subplots
     from scipy import stats
 
+    from example_tidal import (
+        DEFAULT_DATA_DIR,
+        STATION_CATALOG,
+        TIDE_TO_WEATHER,
+        download_lcd_weather,
+        download_tidal_data,
+        find_station,
+        load_lcd_weather,
+        load_station,
+        load_tidal_data,
+        merge_tidal_weather,
+        TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS,
+    )
+    from tidal_analysis_helpers import compute_lagged_correlation, compute_periodogram, infer_samples_per_hour
+    from tidal_model_shared import prepare_split_regressors, tidal_metrics
     from tsgam_estimator import (
         TsgamEstimator,
         TsgamEstimatorConfig,
+        TsgamLinearConfig,
         TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
         TsgamSplineConfig,
-    )
-    from example_tidal import (
-        STATION_CATALOG,
-        TIDE_TO_WEATHER,
-        load_lcd_weather,
-        load_station,
-        merge_tidal_weather,
-        download_lcd_weather,
-        TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS,
-    )
-    from tidal_analysis_helpers import compute_lagged_correlation, infer_samples_per_hour
-    from tidal_model_shared import (
-        prepare_split_regressors,
-        tidal_metrics,
     )
 
-    return (
-        PERIODS,
-        STATION_CATALOG,
-        TIDE_TO_WEATHER,
-        TsgamEstimator,
-        TsgamEstimatorConfig,
-        TsgamMultiPeriodicConfig,
-        TsgamSolverConfig,
-        TsgamSplineConfig,
-        compute_lagged_correlation,
-        download_lcd_weather,
-        go,
-        infer_samples_per_hour,
-        load_lcd_weather,
-        load_station,
-        make_subplots,
-        merge_tidal_weather,
-        mo,
-        np,
-        pd,
-        prepare_split_regressors,
-        stats,
-        tidal_metrics,
-    )
+    COLUMN_LABELS = {
+        "water_level": "Water level (m)",
+        "pressure": "Pressure (hPa)",
+        "dp_dt": "dP/dt (hPa/step)",
+        "water_temp": "Water temp (degC)",
+        "air_temp": "Air temp (degC)",
+        "wind_u": "Wind U (m/s)",
+        "wind_v": "Wind V (m/s)",
+        "wind_speed": "Wind speed (m/s)",
+        "wind_stress": "Wind stress (m^2/s^2)",
+        "lcd_slp": "LCD sea level pressure (hPa)",
+    }
+    REGRESSOR_ANALYSIS_CANDIDATES = [
+        "pressure",
+        "dp_dt",
+        "water_temp",
+        "wind_u",
+        "wind_v",
+        "air_temp",
+        "wind_speed",
+        "wind_stress",
+        "lcd_slp",
+    ]
+    CORRELATION_CANDIDATES = ["water_level", *REGRESSOR_ANALYSIS_CANDIDATES]
+    MODEL_REGRESSOR_CANDIDATES = [
+        "pressure",
+        "dp_dt",
+        "water_temp",
+        "wind_u",
+        "wind_v",
+        "air_temp",
+        "wind_stress",
+    ]
+    LAG_DEFAULTS = {
+        "pressure": (-2, 0),
+        "dp_dt": (-2, 0),
+        "water_temp": (0, 0),
+        "wind_u": (-1, 0),
+        "wind_v": (-1, 0),
+        "air_temp": (0, 0),
+        "wind_stress": (-1, 0),
+    }
+    DEFAULT_HARMONICS = {
+        "M2": 4,
+        "S2": 1,
+        "N2": 1,
+        "K1": 2,
+        "O1": 1,
+        "Mf": 1,
+        "Mm": 1,
+        "annual": 2,
+    }
+    METRIC_SPECS = {
+        "rmse": ("RMSE", "m", 3),
+        "mae": ("MAE", "m", 3),
+        "mape": ("MAPE", "%", 2),
+        "r2": ("R^2", "", 3),
+    }
+
+    class StationData(TypedDict):
+        df: pd.DataFrame
+        sph: int
+        date_min: object
+        date_max: object
+        status_message: str
+
+    class ModelKwargs(TypedDict):
+        df: pd.DataFrame
+        sph: int
+        harmonic_orders: dict[str, int]
+        lag_ranges: dict[str, tuple[int, int]]
+        train_start: str
+        train_end: str
+        test_end: str
+
+    class MetricDict(TypedDict):
+        rmse: float
+        mae: float
+        mape: float
+        r2: float
+
+    class FitResult(TypedDict):
+        metrics_train: MetricDict
+        metrics_test: MetricDict
+        te_index: pd.DatetimeIndex
+        te_obs: np.ndarray
+        te_pred: np.ndarray
+        te_obs_clean: np.ndarray
+        te_pred_clean: np.ndarray
+        residuals: np.ndarray
+        picked: dict[str, tuple[float, int]]
+        active_regs: list[str]
+        n_train: int
+        n_test: int
+        sph: int
+
+    class ShapleyResult(TypedDict):
+        components: list[str]
+        coalitions: int
+        failed: int
+        baseline_rmse: float
+        full_r2: float
+        full_rmse: float
+        shap_r2: dict[str, float]
+        shap_rmse: dict[str, float]
 
 
 @app.cell
-def _(STATION_CATALOG, mo):
-    _options = {v["name"]: k for k, v in STATION_CATALOG.items()}
-    station_picker = mo.ui.dropdown(options=_options, value="The Battery, NY", label="Station")
-    mo.vstack([station_picker], justify="start")
+def _():
+    _station_options = {meta["name"]: station_name for station_name, meta in STATION_CATALOG.items()}
+    station_picker = mo.ui.dropdown(options=_station_options, value="The Battery, NY", label="Station")
+    station_picker
     return (station_picker,)
 
 
 @app.cell
-def _(TIDE_TO_WEATHER, mo, station_picker):
+def _(station_picker):
     mo.stop(not station_picker.value, mo.md("*Select a station to enable weather options.*"))
-    _sid = station_picker.value
-    _wx = TIDE_TO_WEATHER.get(_sid)
-
-    toggles = []
-    if _wx:
-        _wx_id, _wx_name = _wx
-        use_weather = mo.ui.switch(value=True, label=f"Merge LCD weather from {_wx_name}")
-        download_toggle = mo.ui.switch(label="Download weather data if not found", value=True)
-
-        toggles = [use_weather, download_toggle]
+    _station_id = find_station(station_picker.value)
+    _weather_station = TIDE_TO_WEATHER.get(_station_id)
+    download_tidal = mo.ui.switch(label="Download tidal data if not found", value=True)
+    if _weather_station:
+        _, _station_label = _weather_station
+        use_weather = mo.ui.switch(value=True, label=f"Merge LCD weather from {_station_label}")
+        download_weather = mo.ui.switch(label="Download weather data if not found", value=True)
     else:
         use_weather = mo.ui.switch(value=False, label="No mapped weather station", disabled=True)
-        toggles = [use_weather]
+        download_weather = mo.ui.switch(
+            value=False,
+            label="Download weather data if not found",
+            disabled=True,
+        )
 
-    mo.hstack(toggles, justify="start")
-    return download_toggle, use_weather
-
-
-@app.cell
-def _(
-    TIDE_TO_WEATHER,
-    download_lcd_weather,
-    download_toggle,
-    infer_samples_per_hour,
-    load_lcd_weather,
-    load_station,
-    merge_tidal_weather,
-    mo,
-    station_picker,
-    use_weather,
-):
-
-    df = load_station(station_picker.value)
-    if df.index.tz is not None:
-        df.index = df.index.tz_convert(None)
-
-    _sid = station_picker.value
-    _wx = TIDE_TO_WEATHER.get(_sid)
-    weather_status = ""
-
-    if use_weather.value and _wx:
-        _wx_id, _wx_name = _wx
-
-        try:
-            _wdf = load_lcd_weather(
-                "data/tidal", station_id=_wx_id,
-                begin_date=str(df.index[0].date()),
-                end_date=str(df.index[-1].date()),
-            )
-        except FileNotFoundError:
-            if not download_toggle.value:
-                raise
-            download_lcd_weather(
-                "data/tidal", station_id=_wx_id,
-            )
-            _wdf = load_lcd_weather(
-                "data/tidal", station_id=_wx_id,
-                begin_date=str(df.index[0].date()),
-                end_date=str(df.index[-1].date()),
-            )
-
-        df = merge_tidal_weather(df, _wdf)
-        weather_status = f"Merged {len(_wdf.columns)} weather columns from {_wx_name}"
-
-    if "pressure" in df.columns:
-        df["dp_dt"] = df["pressure"].diff()
-    if "wind_u" in df.columns and "wind_v" in df.columns:
-        df["wind_stress"] = df["wind_u"] ** 2 + df["wind_v"] ** 2
-
-    sph = infer_samples_per_hour(df.index)
-    date_min = df.index[0].date()
-    date_max = df.index[-1].date()
-    if weather_status:
-        mo.output.replace(mo.md(f"*{weather_status}*"))
-    return date_max, date_min, df, sph
+    mo.hstack([download_tidal, use_weather, download_weather], justify="start")
+    return download_tidal, download_weather, use_weather
 
 
 @app.cell
-def _(date_max, date_min, mo):
-    explore_start = mo.ui.date(value=date_min, label="From")
-    explore_end = mo.ui.date(value=date_max, label="To")
+def _(download_tidal, download_weather, station_picker, use_weather):
+    station_data = load_station_frame(
+        station_picker.value,
+        use_weather=bool(use_weather.value),
+        download_tidal=bool(download_tidal.value),
+        download_weather=bool(download_weather.value),
+    )
+    return (station_data,)
+
+
+@app.cell
+def _(station_data):
+    _status_message = station_data["status_message"]
+    mo.md(f"*{_status_message}*") if _status_message else mo.md("")
+    return
+
+
+@app.cell
+def _(station_data):
+    explore_start = mo.ui.date(value=station_data["date_min"], label="From")
+    explore_end = mo.ui.date(value=station_data["date_max"], label="To")
     explore_resample = mo.ui.dropdown(
         options={"---": None, "Hourly": "1h", "6-hourly": "6h", "Daily": "1D"},
-        value="---", label="Resample",
+        value="---",
+        label="Resample",
     )
     mo.hstack([explore_start, explore_end, explore_resample], justify="start")
     return explore_end, explore_resample, explore_start
 
 
 @app.cell
-def _(COLUMN_LABELS, df, explore_end, explore_resample, explore_start, go, make_subplots):
-    _w = df[str(explore_start.value) : str(explore_end.value)]
-    if explore_resample.value is not None:
-        _w = _w.resample(explore_resample.value).mean()
-
-    _cols = [c for c in COLUMN_LABELS if c in _w.columns and _w[c].notna().any()]
-
-    _fig = make_subplots(rows=len(_cols), cols=1, shared_xaxes=True,
-                         vertical_spacing=0.04)
-    for _i, _col in enumerate(_cols, 1):
-        _fig.add_trace(
-            go.Scattergl(x=_w.index, y=_w[_col], mode="lines",
-                         line=dict(width=0.8), name=_col),
-            row=_i, col=1,
-        )
-        _fig.update_yaxes(title_text=COLUMN_LABELS.get(_col, _col), row=_i, col=1)
-
-    _n = len(_w.dropna(how="all"))
-    _suffix = f", {explore_resample.value}" if explore_resample.value else ""
-    _fig.update_layout(
-        height=180 * len(_cols),
-        title=f"{_n:,} points ({explore_start.value} \u2014 {explore_end.value}{_suffix})",
-        showlegend=False, margin=dict(l=60, r=20, t=40, b=30),
+def _(explore_end, explore_resample, explore_start, station_data):
+    build_overview_figure(
+        station_data["df"],
+        explore_start.value,
+        explore_end.value,
+        explore_resample.value,
     )
-    _fig
     return
 
 
 @app.cell
-def _(df, go, mo, np):
-    _candidates = ["water_level", "pressure", "dp_dt", "water_temp", "wind_u", "wind_v",
-                    "air_temp", "wind_speed", "wind_stress", "lcd_slp"]
-    _cols = [c for c in _candidates if c in df.columns and df[c].notna().any()]
-    mo.stop(len(_cols) < 2, mo.md("*Merge weather data above to see regressor correlations.*"))
-
-    _corr = df[_cols].corr()
-    _fig = go.Figure(go.Heatmap(
-        z=_corr.values, x=_corr.columns.tolist(), y=_corr.columns.tolist(),
-        colorscale="RdBu_r", zmin=-1, zmax=1,
-        text=np.round(_corr.values, 2), texttemplate="%{text}",
-    ))
-    _fig.update_layout(
-        title="Pairwise Pearson correlation",
-        width=520, height=520,
-        margin=dict(l=100, r=20, t=40, b=100),
+def _(station_data):
+    options, default_name = build_periodogram_selector_options(station_data["df"])
+    explore_periodogram_series = mo.ui.dropdown(
+        options=options,
+        value=default_name,
+        label="Spectrum series",
     )
-    _fig
+    explore_periodogram_series
+    return (explore_periodogram_series,)
+
+
+@app.cell
+def _(explore_end, explore_periodogram_series, explore_start, station_data):
+    window = station_data["df"][str(explore_start.value) : str(explore_end.value)]
+    series = window[explore_periodogram_series.value]
+    mo.stop(
+        series.notna().sum() < 4,
+        mo.md("*Need at least a few non-null samples in the selected window to compute a periodogram.*"),
+    )
+    build_periodogram_figure(
+        window.index,
+        series.to_numpy(dtype=float),
+        title=f"{COLUMN_LABELS.get(explore_periodogram_series.value, explore_periodogram_series.value)} spectrum",
+    )
     return
 
 
 @app.cell
-def _(
-    PERIODS,
-    TsgamEstimator,
-    TsgamEstimatorConfig,
-    TsgamMultiPeriodicConfig,
-    TsgamSolverConfig,
-    TsgamSplineConfig,
-    np,
-    pd,
-    prepare_split_regressors,
-    tidal_metrics,
-):
-    def run_tidal_model(
-        component_mask: dict[str, bool],
-        *,
-        df: pd.DataFrame,
-        sph: int,
-        harmonic_orders: dict[str, int],
-        lag_ranges: dict[str, tuple[int, int]],
-        train_start: str,
-        train_end: str,
-        test_end: str,
-    ) -> dict:
-        """Fit model with a subset of components, return full results."""
-        _split = pd.Timestamp(train_end)
-        _dfw = df[train_start:test_end]
-        _tr = _dfw[_dfw.index < _split]
-        _te = _dfw[_dfw.index >= _split]
-        _ok_tr = _tr["water_level"].notna()
-        _y_tr = _tr.loc[_ok_tr, "water_level"].values
-        _ok_te = _te["water_level"].notna()
-
-        picked = {}
-        for name, active in component_mask.items():
-            if active and name in PERIODS:
-                order = harmonic_orders.get(name, 0)
-                if order > 0:
-                    picked[name] = (PERIODS[name], order)
-
-        _reg_names = [c for c, on in component_mask.items() if on and c not in PERIODS]
-
-        _multi_periodic = None
-        if picked:
-            _multi_periodic = TsgamMultiPeriodicConfig(
-                periods=[p * sph for p, _ in picked.values()],
-                num_harmonics=[n for _, n in picked.values()],
-                reg_weight=1e-4,
-            )
-
-        _exog_config = None
-        _X_tr_fit = pd.DataFrame(index=_tr.index[_ok_tr])
-        _X_tr_pred = pd.DataFrame(index=_tr.index)
-        _X_te_pred = pd.DataFrame(index=_te.index)
-        _active_regs: list[str] = []
-        if _reg_names:
-            _X_tr_r, _X_te_r, _active_regs, _ = prepare_split_regressors(
-                _tr, _te, _reg_names,
-            )
-            if _active_regs:
-                _exog_config = []
-                for _col in _active_regs:
-                    _lo, _hi = lag_ranges.get(_col, (-2, 0))
-                    _exog_config.append(TsgamSplineConfig(
-                        n_knots=10 if _col == "pressure" else 8,
-                        lags=[h * sph for h in range(_lo, _hi + 1)],
-                        reg_weight=1e-5,
-                        diff_reg_weight=0.3,
-                    ))
-                _X_tr_fit = _X_tr_r.loc[_ok_tr]
-                _X_tr_pred = _X_tr_r
-                _X_te_pred = _X_te_r
-
-        def _pack(yh_tr, yh_te):
-            _te_obs = _te["water_level"].values
-            return {
-                "metrics_train": tidal_metrics(_y_tr, yh_tr[_ok_tr]),
-                "metrics_test": tidal_metrics(
-                    _te.loc[_ok_te, "water_level"].values, yh_te[_ok_te],
-                ),
-                "te_index": _te.index,
-                "te_obs": _te_obs,
-                "te_pred": yh_te,
-                "te_obs_clean": _te.loc[_ok_te, "water_level"].values,
-                "te_pred_clean": yh_te[_ok_te],
-                "residuals": _te_obs - yh_te,
-                "picked": picked,
-                "active_regs": _active_regs,
-                "n_train": len(_y_tr),
-                "n_test": int(_ok_te.sum()),
-                "sph": sph,
-            }
-
-        if _multi_periodic is None and _exog_config is None:
-            _mean = np.nanmean(_y_tr)
-            return _pack(np.full(len(_tr), _mean), np.full(len(_te), _mean))
-
-        try:
-            _mdl = TsgamEstimator(TsgamEstimatorConfig(
-                multi_periodic_config=_multi_periodic,
-                exog_config=_exog_config,
-                solver_config=TsgamSolverConfig(solver="SCS", verbose=False),
-            ))
-            _mdl.fit(_X_tr_fit, _y_tr)
-            return _pack(_mdl.predict(_X_tr_pred), _mdl.predict(_X_te_pred))
-        except Exception:
-            return _pack(np.full(len(_tr), np.nan), np.full(len(_te), np.nan))
-
-    return (run_tidal_model,)
+def _(station_data):
+    _columns = available_columns(station_data["df"], CORRELATION_CANDIDATES)
+    mo.stop(len(_columns) < 2, mo.md("*Merge weather data above to see regressor correlations.*"))
+    build_correlation_heatmap(station_data["df"])
+    return
 
 
 @app.cell
-def _():
-    COLUMN_LABELS = {
-        "water_level": "Water level (m)",
-        "pressure": "Pressure (hPa)",
-        "dp_dt": "dP/dt (hPa/step)",
-        "water_temp": "Water temp (\u00b0C)",
-        "air_temp": "Air temp (\u00b0C)",
-        "wind_u": "Wind U (m/s)",
-        "wind_v": "Wind V (m/s)",
-        "wind_speed": "Wind speed (m/s)",
-        "wind_stress": "Wind stress (m\u00b2/s\u00b2)",
-        "lcd_slp": "LCD sea level pressure (hPa)",
-    }
-    return (COLUMN_LABELS,)
-
-
-@app.cell
-def _():
-    def collect_model_params(harmonic_inputs, regressor_lags, regressor_toggles,
-                             df, sph, train_start, train_end, test_end):
-        """Read current widget values into a component mask and model kwargs dict."""
-        mask = {k: int(w.value) > 0 for k, w in harmonic_inputs.items()}
-        mask.update({c: sw.value for c, sw in regressor_toggles.items()})
-        kw = dict(
-            df=df, sph=sph,
-            harmonic_orders={k: int(w.value) for k, w in harmonic_inputs.items()},
-            lag_ranges={c: regressor_lags[c].value for c in regressor_lags},
-            train_start=str(train_start.value),
-            train_end=str(train_end.value),
-            test_end=str(test_end.value),
-        )
-        return mask, kw
-
-    return (collect_model_params,)
-
-
-@app.cell
-def _(PERIODS, date_max, date_min, df, mo, pd):
-    _defaults = {
-        "M2": 4, "S2": 1, "N2": 1, "K1": 2,
-        "O1": 1, "Mf": 1, "Mm": 1, "annual": 2,
-    }
+def _(station_data):
+    _df = station_data["df"]
     harmonic_inputs = {
         name: mo.ui.slider(
-            start=0, stop=8, value=n,
+            start=0,
+            stop=8,
+            value=order,
             label=f"{name} ({PERIODS.get(name, 8766.0):.1f} h)",
-            show_value=True, full_width=True,
+            show_value=True,
+            full_width=True,
         )
-        for name, n in _defaults.items()
+        for name, order in DEFAULT_HARMONICS.items()
     }
 
-    _met_candidates = ["pressure", "dp_dt", "water_temp", "wind_u", "wind_v",
-                        "air_temp", "wind_stress"]
-    _available = [c for c in _met_candidates if c in df.columns and df[c].notna().any()]
-
-    _lag_defaults = {
-        "pressure": (-2, 0), "dp_dt": (-2, 0), "water_temp": (0, 0),
-        "wind_u": (-1, 0), "wind_v": (-1, 0), "air_temp": (0, 0),
-        "wind_stress": (-1, 0),
-    }
+    _available_regressors = available_columns(_df, MODEL_REGRESSOR_CANDIDATES)
     regressor_toggles = {}
     regressor_lags = {}
-    _reg_rows = []
-    for c in _available:
-        regressor_toggles[c] = mo.ui.switch(value=False, label=c)
-        _lo, _hi = _lag_defaults.get(c, (-2, 0))
-        regressor_lags[c] = mo.ui.range_slider(
-            start=-6, stop=6, value=(_lo, _hi),
-            label="lag (h)", show_value=True,
+    _regressor_rows = []
+    for name in _available_regressors:
+        regressor_toggles[name] = mo.ui.switch(value=False, label=name)
+        _lag_start, _lag_end = LAG_DEFAULTS.get(name, (-2, 0))
+        regressor_lags[name] = mo.ui.range_slider(
+            start=-6,
+            stop=6,
+            value=(_lag_start, _lag_end),
+            label="lag (h)",
+            show_value=True,
         )
-        _reg_rows.append(mo.hstack([regressor_toggles[c], regressor_lags[c]], justify="start"))
+        _regressor_rows.append(mo.hstack([regressor_toggles[name], regressor_lags[name]], justify="start"))
 
-    train_start = mo.ui.date(value=date_min, label="Train start")
+    train_start = mo.ui.date(value=station_data["date_min"], label="Train start")
     train_end = mo.ui.date(value=pd.Timestamp("2024-01-01").date(), label="Train end")
-    test_end = mo.ui.date(value=date_max, label="Test end")
+    test_end = mo.ui.date(value=station_data["date_max"], label="Test end")
     run_fit = mo.ui.run_button(label="Fit model")
 
-    mo.vstack([
-        mo.md("## Configure model"),
-        mo.hstack([
-            mo.vstack([mo.md("**Harmonics** (0 = exclude)")] + list(harmonic_inputs.values())),
-            mo.vstack([mo.md("**Regressors** (toggle + lag range in hours)")] + _reg_rows)
-                if _available else mo.md(""),
-            mo.vstack([mo.md("**Date ranges**"), train_start, train_end, test_end]),
-        ], justify="start", gap=2),
-        run_fit,
-    ])
+    mo.vstack(
+        [
+            mo.md("## Configure model"),
+            mo.hstack(
+                [
+                    mo.vstack([mo.md("**Harmonics** (0 = exclude)")] + list(harmonic_inputs.values())),
+                    mo.vstack([mo.md("**Regressors** (toggle + lag range in hours)")] + _regressor_rows)
+                    if _available_regressors
+                    else mo.md(""),
+                    mo.vstack([mo.md("**Date ranges**"), train_start, train_end, test_end]),
+                ],
+                justify="start",
+                gap=2,
+            ),
+            run_fit,
+        ]
+    )
     return (
         harmonic_inputs,
         regressor_lags,
@@ -424,233 +322,53 @@ def _(PERIODS, date_max, date_min, df, mo, pd):
 
 @app.cell
 def _(
-    collect_model_params,
-    df,
     harmonic_inputs,
-    mo,
-    pd,
     regressor_lags,
     regressor_toggles,
     run_fit,
-    run_tidal_model,
-    sph,
+    station_data,
     test_end,
     train_end,
     train_start,
 ):
     mo.stop(not run_fit.value, mo.md("*Configure parameters above and click **Fit model**.*"))
-
-    _mask, _kw = collect_model_params(
-        harmonic_inputs, regressor_lags, regressor_toggles,
-        df, sph, train_start, train_end, test_end,
+    _component_mask, _model_kwargs = collect_model_params(
+        harmonic_inputs,
+        regressor_lags,
+        regressor_toggles,
+        df=station_data["df"],
+        sph=station_data["sph"],
+        train_start=train_start,
+        train_end=train_end,
+        test_end=test_end,
     )
-    mo.stop(not any(_mask.values()),
-            mo.md("*Set at least one constituent to harmonics > 0.*"))
+    mo.stop(not any(_component_mask.values()), mo.md("*Set at least one constituent to harmonics > 0.*"))
 
-    fit_result = run_tidal_model(_mask, **_kw)
-
-    _parts = [", ".join(fit_result["picked"])]
-    if fit_result["active_regs"]:
-        _parts.append(f"+ {', '.join(fit_result['active_regs'])}")
-    fit_label = (
-        f"{' '.join(_parts)} \u2014 "
-        f"{fit_result['n_train']:,} train / {fit_result['n_test']:,} test"
-    )
-
-    mo.Html(pd.DataFrame({
-        "train": fit_result["metrics_train"],
-        "test": fit_result["metrics_test"],
-    }).T.to_html())
+    fit_result = run_tidal_model(_component_mask, **_model_kwargs)
+    fit_label = build_fit_label(fit_result)
     return fit_label, fit_result
 
 
 @app.cell
-def _(fit_label, fit_result, go, make_subplots):
-    _idx = fit_result["te_index"]
-    _fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                         vertical_spacing=0.06, row_heights=[0.7, 0.3])
-    _fig.add_trace(
-        go.Scattergl(x=_idx, y=fit_result["te_obs"], mode="lines",
-                     line=dict(width=0.8, color="steelblue"), name="observed",
-                     opacity=0.8),
-        row=1, col=1,
-    )
-    _fig.add_trace(
-        go.Scattergl(x=_idx, y=fit_result["te_pred"], mode="lines",
-                     line=dict(width=0.8, color="coral"), name="predicted",
-                     opacity=0.8),
-        row=1, col=1,
-    )
-    _fig.add_trace(
-        go.Scattergl(x=_idx, y=fit_result["residuals"], mode="lines",
-                     line=dict(width=0.6, color="seagreen"), name="residual",
-                     showlegend=False),
-        row=2, col=1,
-    )
-    _fig.add_hline(y=0, line_width=0.5, line_color="black", row=2, col=1)
-    _fig.update_yaxes(title_text="Water level (m)", row=1, col=1)
-    _fig.update_yaxes(title_text="Residual (m)", row=2, col=1)
-    _fig.update_layout(
-        height=500, title=fit_label,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
-        margin=dict(l=60, r=20, t=60, b=30),
-    )
-    _fig
+def _(fit_result):
+    mo.Html(build_metrics_table_html(fit_result))
     return
 
 
 @app.cell
-def _(compute_lagged_correlation, df, fit_result, go, mo, np, pd, stats):
-    _resid = fit_result["residuals"]
-    _idx = fit_result["te_index"]
-    _obs = fit_result["te_obs_clean"]
-    _pred = fit_result["te_pred_clean"]
-    _sph = fit_result["sph"]
-    _clean = _resid[np.isfinite(_resid)]
-
-    # --- Predicted vs Observed ---
-    _lo, _hi = min(_pred.min(), _obs.min()), max(_pred.max(), _obs.max())
-    _scatter = go.Figure()
-    _scatter.add_trace(go.Scattergl(
-        x=_pred, y=_obs, mode="markers",
-        marker=dict(size=2, opacity=0.15, color="steelblue"), showlegend=False,
-    ))
-    _scatter.add_trace(go.Scatter(
-        x=[_lo, _hi], y=[_lo, _hi], mode="lines",
-        line=dict(dash="dash", width=0.8, color="black"), showlegend=False,
-    ))
-    _scatter.update_layout(
-        width=450, height=450, title="Predicted vs Observed",
-        xaxis=dict(title="Predicted (m)", scaleanchor="y", range=[_lo, _hi]),
-        yaxis=dict(title="Observed (m)", range=[_lo, _hi]),
-        margin=dict(l=60, r=20, t=40, b=50),
-    )
-
-    # --- Q-Q plot ---
-    ((_theo, _sample), (_slope, _intercept, _)) = stats.probplot(_clean, dist="norm")
-    _qq = go.Figure()
-    _qq.add_trace(go.Scattergl(
-        x=_theo, y=_sample, mode="markers",
-        marker=dict(size=3, opacity=0.3, color="steelblue"), name="residuals",
-    ))
-    _qq.add_trace(go.Scatter(
-        x=_theo, y=_slope * _theo + _intercept, mode="lines",
-        line=dict(color="red", width=1, dash="dash"), name="normal ref",
-    ))
-    _qq.update_layout(
-        width=450, height=450, title="Q-Q plot (residuals)",
-        xaxis_title="Theoretical quantiles", yaxis_title="Sample quantiles (m)",
-        margin=dict(l=60, r=20, t=40, b=50),
-    )
-
-    # --- Residual histogram ---
-    _mu, _sigma = _clean.mean(), _clean.std()
-    _xr = np.linspace(_clean.min(), _clean.max(), 200)
-    _bw = (_clean.max() - _clean.min()) / 80
-    _hist = go.Figure()
-    _hist.add_trace(go.Histogram(
-        x=_clean, nbinsx=80, name="residuals",
-        marker_color="steelblue", opacity=0.7,
-    ))
-    _hist.add_trace(go.Scatter(
-        x=_xr, y=stats.norm.pdf(_xr, _mu, _sigma) * len(_clean) * _bw,
-        mode="lines", line=dict(color="red", width=1.5),
-        name=f"N({_mu:.3f}, {_sigma:.3f}\u00b2)",
-    ))
-    _hist.update_layout(
-        title="Residual distribution",
-        xaxis_title="Residual (m)", yaxis_title="Count",
-        margin=dict(l=60, r=20, t=40, b=50),
-        height=350, barmode="overlay",
-    )
-
-    # --- Rolling RMSE ---
-    _window = int(168 * _sph)
-    _rolling = pd.Series(_resid ** 2, index=_idx).rolling(
-        _window, min_periods=_window // 2,
-    ).mean().pipe(np.sqrt)
-    _rmse_fig = go.Figure()
-    _rmse_fig.add_trace(go.Scattergl(
-        x=_rolling.index, y=_rolling.values, mode="lines",
-        line=dict(width=0.8, color="steelblue"), showlegend=False,
-    ))
-    _rmse_fig.update_layout(
-        title="Rolling RMSE (7-day window)",
-        yaxis_title="RMSE (m)", height=300,
-        margin=dict(l=60, r=20, t=40, b=30),
-    )
-
-    # --- Residual-regressor cross-correlation ---
-    _reg_candidates = ["pressure", "dp_dt", "water_temp", "wind_u", "wind_v",
-                        "air_temp", "wind_speed", "wind_stress", "lcd_slp"]
-    _regs = [c for c in _reg_candidates if c in df.columns and df[c].notna().any()]
-    _xcorr = None
-    if _regs:
-        _ok = np.isfinite(_resid)
-        _te_df = df.loc[_idx[_ok]]
-        _max_lag = int(12 * _sph)
-        _xcorr = go.Figure()
-        for _col in _regs:
-            _lc = compute_lagged_correlation(_resid[_ok], _te_df[_col].values, _max_lag)
-            _lc["lag_hours"] = _lc["lag"] / _sph
-            _xcorr.add_trace(go.Scatter(
-                x=_lc["lag_hours"], y=_lc["correlation"],
-                mode="lines", name=_col, line=dict(width=1.5),
-            ))
-        _xcorr.add_hline(y=0, line_width=0.5, line_color="black")
-        _xcorr.add_vline(x=0, line_width=2.0, line_color="red")
-        _xcorr.update_layout(
-            title="Residual\u2013regressor cross-correlation (\u00b112 h)",
-            xaxis_title="Lag (hours)", yaxis_title="Pearson r",
-            height=400, margin=dict(l=60, r=20, t=40, b=50),
-        )
-
-    _tabs = {
-        "Pred vs Obs": _scatter,
-        "Q-Q": _qq,
-        "Residual dist": _hist,
-        "Rolling RMSE": _rmse_fig,
-    }
-    if _xcorr is not None:
-        _tabs["Resid \u00d7 regressor"] = _xcorr
-
-    mo.ui.tabs(_tabs, lazy=False)
+def _(fit_label, fit_result):
+    build_fit_timeseries_figure(fit_label, fit_result)
     return
 
 
 @app.cell
-def _(np):
-    from math import factorial
-
-    def compute_shapley(
-        results: dict[int, dict],
-        components: list[str],
-        metric: str,
-        baseline: float,
-    ) -> dict[str, float]:
-        """Shapley attribution over precomputed coalition metrics."""
-        n = len(components)
-        vals = {0: baseline}
-        for bits, m in results.items():
-            v = m.get(metric, baseline)
-            vals[bits] = v if np.isfinite(v) else baseline
-        shapley = {}
-        for i, comp in enumerate(components):
-            sv = 0.0
-            for S in range(2**n):
-                if S & (1 << i):
-                    continue
-                s_size = bin(S).count("1")
-                w = factorial(s_size) * factorial(n - s_size - 1) / factorial(n)
-                sv += w * (vals[S | (1 << i)] - vals[S])
-            shapley[comp] = sv
-        return shapley
-
-    return (compute_shapley,)
+def _(fit_result, station_data):
+    mo.ui.tabs(build_diagnostic_figures(station_data["df"], fit_result), lazy=False)
+    return
 
 
 @app.cell
-def _(mo):
+def _():
     run_shapley = mo.ui.run_button(label="Run Shapley analysis")
     mo.vstack([mo.md("## Shapley value analysis"), run_shapley])
     return (run_shapley,)
@@ -658,104 +376,857 @@ def _(mo):
 
 @app.cell
 def _(
-    collect_model_params,
-    compute_shapley,
-    df,
-    go,
     harmonic_inputs,
-    make_subplots,
-    mo,
-    np,
     regressor_lags,
     regressor_toggles,
     run_shapley,
-    run_tidal_model,
-    sph,
+    station_data,
     test_end,
     train_end,
     train_start,
 ):
-    mo.stop(not run_shapley.value,
-            mo.md("*Click above to compute Shapley values for active components.*"))
-    import os
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from functools import partial
-
-    _mask, _kw = collect_model_params(
-        harmonic_inputs, regressor_lags, regressor_toggles,
-        df, sph, train_start, train_end, test_end,
+    mo.stop(not run_shapley.value, mo.md("*Click above to compute Shapley values for active components.*"))
+    _component_mask, _model_kwargs = collect_model_params(
+        harmonic_inputs,
+        regressor_lags,
+        regressor_toggles,
+        df=station_data["df"],
+        sph=station_data["sph"],
+        train_start=train_start,
+        train_end=train_end,
+        test_end=test_end,
     )
-    _components = [c for c, on in _mask.items() if on]
-    _n = len(_components)
+    _components = [name for name, active in _component_mask.items() if active]
+    _num_components = len(_components)
 
-    mo.stop(_n < 2, mo.md("*Need at least 2 active components for Shapley analysis.*"))
-    mo.stop(_n > 12, mo.md(f"*{_n} components \u2192 {2**_n:,} model runs \u2014 cap at 12.*"))
+    mo.stop(_num_components < 2, mo.md("*Need at least 2 active components for Shapley analysis.*"))
+    mo.stop(
+        _num_components > 12,
+        mo.md(f"*{_num_components} components -> {2**_num_components:,} model runs - cap at 12.*"),
+    )
 
-    _run = partial(run_tidal_model, **_kw)
+    _run_model = partial(run_tidal_model, **_model_kwargs)
+    _total_coalitions = 2**_num_components - 1
+    _failed_runs = 0
+    _coalition_metrics: dict[int, dict[str, float]] = {}
+    _max_workers = min(os.cpu_count() or 4, _total_coalitions, 8)
 
-    _total = 2**_n - 1
-    _failed = 0
-    _workers = min(os.cpu_count() or 4, _total, 8)
-    _results: dict[int, dict] = {}
-
-    with mo.status.progress_bar(total=_total) as _bar:
-        _masks = {
-            bits: {c: bool(bits & (1 << i)) for i, c in enumerate(_components)}
-            for bits in range(1, 2**_n)
+    with mo.status.progress_bar(total=_total_coalitions) as _progress:
+        _coalition_masks = {
+            bits: {component: bool(bits & (1 << idx)) for idx, component in enumerate(_components)}
+            for bits in range(1, 2**_num_components)
         }
-        with ThreadPoolExecutor(max_workers=_workers) as _pool:
+        with ThreadPoolExecutor(max_workers=_max_workers) as _pool:
             _futures = {
-                _pool.submit(_run, mask): bits
-                for bits, mask in _masks.items()
+                _pool.submit(_run_model, coalition_mask): bits
+                for bits, coalition_mask in _coalition_masks.items()
             }
-            for _fut in as_completed(_futures):
-                _bits = _futures[_fut]
-                _m = _fut.result()["metrics_test"]
-                if np.isnan(_m.get("r2", 0.0)):
-                    _failed += 1
-                _results[_bits] = _m
-                _bar.update()
+            for _future in as_completed(_futures):
+                _bits = _futures[_future]
+                _metrics = _future.result()["metrics_test"]
+                if np.isnan(_metrics.get("r2", 0.0)):
+                    _failed_runs += 1
+                _coalition_metrics[_bits] = _metrics
+                _progress.update()
 
-    _baseline_rmse = _run({c: False for c in _components})["metrics_test"]["rmse"]
-    _shap_r2 = compute_shapley(_results, _components, "r2", 0.0)
-    _shap_rmse = compute_shapley(_results, _components, "rmse", _baseline_rmse)
+    _baseline_rmse = _run_model({component: False for component in _components})["metrics_test"]["rmse"]
+    _full_mask = 2**_num_components - 1
+    shapley_result: ShapleyResult = {
+        "components": _components,
+        "coalitions": _total_coalitions,
+        "failed": _failed_runs,
+        "baseline_rmse": _baseline_rmse,
+        "full_r2": _coalition_metrics[_full_mask].get("r2", 0.0)
+        if np.isfinite(_coalition_metrics[_full_mask].get("r2", 0.0))
+        else 0.0,
+        "full_rmse": _coalition_metrics[_full_mask].get("rmse", _baseline_rmse),
+        "shap_r2": compute_shapley(_coalition_metrics, _components, "r2", 0.0),
+        "shap_rmse": compute_shapley(_coalition_metrics, _components, "rmse", _baseline_rmse),
+    }
+    return (shapley_result,)
 
-    _full = 2**_n - 1
-    _full_r2 = _results[_full].get("r2", 0.0) if np.isfinite(_results[_full].get("r2", 0.0)) else 0.0
-    _full_rmse = _results[_full].get("rmse", _baseline_rmse)
 
-    _fig = make_subplots(rows=1, cols=2, subplot_titles=["R\u00b2 attribution", "RMSE attribution"])
-    for _col_idx, (_shap, _bl, _full_v, _ylabel) in enumerate([
-        (_shap_r2, 0.0, _full_r2, "R\u00b2"),
-        (_shap_rmse, _baseline_rmse, _full_rmse, "RMSE (m)"),
-    ], 1):
-        _sorted = sorted(_shap.items(), key=lambda x: abs(x[1]), reverse=True)
-        _names = [x[0] for x in _sorted]
-        _vals = [x[1] for x in _sorted]
-        _fig.add_trace(go.Waterfall(
-            x=["baseline"] + _names + ["full model"],
-            y=[_bl] + _vals + [0.0],
-            measure=["absolute"] + ["relative"] * _n + ["total"],
-            text=[f"{v:.4f}" for v in [_bl] + _vals + [_full_v]],
-            textposition="outside",
-            increasing=dict(marker_color="steelblue" if _col_idx == 1 else "coral"),
-            decreasing=dict(marker_color="coral" if _col_idx == 1 else "steelblue"),
-            totals=dict(marker_color="midnightblue"),
-            connector=dict(line=dict(color="gray", width=0.5, dash="dot")),
-        ), row=1, col=_col_idx)
-        _fig.update_yaxes(title_text=_ylabel, row=1, col=_col_idx)
+@app.cell
+def _(shapley_result: ShapleyResult):
+    build_shapley_figure(shapley_result)
+    return
 
-    _title = f"Shapley component attribution ({_total} coalitions)"
-    if _failed:
-        _title += f", {_failed} solver failures"
-    _fig.update_layout(
-        title=_title, showlegend=False,
-        height=max(400, 40 * _n),
+
+@app.function
+def available_columns(df: pd.DataFrame, candidates: list[str]) -> list[str]:
+    return [col for col in candidates if col in df.columns and df[col].notna().any()]
+
+
+@app.function
+def load_station_frame(
+    station_name: str,
+    use_weather: bool,
+    download_tidal: bool,
+    download_weather: bool,
+) -> StationData:
+    station_id = find_station(station_name)
+    status_messages: list[str] = []
+    try:
+        df = load_station(station_id).copy()
+    except FileNotFoundError:
+        if not download_tidal:
+            raise
+        data_file = download_tidal_data(DEFAULT_DATA_DIR, station=station_id)
+        df = load_tidal_data(data_file).copy()
+        status_messages.append(
+            f"Downloaded tidal data for {STATION_CATALOG[station_id]['name']}"
+        )
+    time_index = pd.DatetimeIndex(df.index)
+    if time_index.tz is not None:
+        time_index = time_index.tz_convert(None)
+    df.index = time_index
+
+    weather_station = TIDE_TO_WEATHER.get(station_id)
+    if use_weather and weather_station:
+        weather_station_id, station_label = weather_station
+        try:
+            weather_df = load_lcd_weather(
+                DEFAULT_DATA_DIR,
+                station_id=weather_station_id,
+                begin_date=str(df.index[0].date()),
+                end_date=str(df.index[-1].date()),
+            )
+        except FileNotFoundError:
+            if not download_weather:
+                raise
+            download_lcd_weather(DEFAULT_DATA_DIR, station_id=weather_station_id)
+            weather_df = load_lcd_weather(
+                DEFAULT_DATA_DIR,
+                station_id=weather_station_id,
+                begin_date=str(df.index[0].date()),
+                end_date=str(df.index[-1].date()),
+            )
+
+        df = merge_tidal_weather(df, weather_df)
+        status_messages.append(
+            f"Merged {len(weather_df.columns)} weather columns from {station_label}"
+        )
+
+    if "pressure" in df.columns:
+        df["dp_dt"] = df["pressure"].diff()
+    if "wind_u" in df.columns and "wind_v" in df.columns:
+        df["wind_stress"] = df["wind_u"] ** 2 + df["wind_v"] ** 2
+
+    return {
+        "df": df,
+        "sph": infer_samples_per_hour(time_index),
+        "date_min": time_index[0].date(),
+        "date_max": time_index[-1].date(),
+        "status_message": "; ".join(status_messages),
+    }
+
+
+@app.function
+def build_overview_figure(
+    df: pd.DataFrame,
+    start_date,
+    end_date,
+    resample_rule: str | None,
+) -> go.Figure:
+    window = df[str(start_date) : str(end_date)]
+    if resample_rule is not None:
+        window = window.resample(resample_rule).mean()
+
+    columns = available_columns(window, list(COLUMN_LABELS))
+    fig = make_subplots(rows=len(columns), cols=1, shared_xaxes=True, vertical_spacing=0.04)
+    for idx, column in enumerate(columns, 1):
+        fig.add_trace(
+            go.Scattergl(
+                x=window.index,
+                y=window[column],
+                mode="lines",
+                line=dict(width=0.8),
+                name=column,
+            ),
+            row=idx,
+            col=1,
+        )
+        fig.update_yaxes(title_text=COLUMN_LABELS.get(column, column), row=idx, col=1)
+
+    points = len(window.dropna(how="all"))
+    suffix = f", {resample_rule}" if resample_rule else ""
+    fig.update_layout(
+        height=180 * len(columns),
+        title=f"{points:,} points ({start_date} - {end_date}{suffix})",
+        showlegend=False,
+        margin=dict(l=60, r=20, t=40, b=30),
+    )
+    return fig
+
+
+@app.function
+def build_correlation_heatmap(df: pd.DataFrame) -> go.Figure:
+    columns = available_columns(df, CORRELATION_CANDIDATES)
+    corr = df[columns].corr()
+    fig = go.Figure(
+        go.Heatmap(
+            z=corr.values,
+            x=corr.columns.tolist(),
+            y=corr.columns.tolist(),
+            colorscale="RdBu_r",
+            zmin=-1,
+            zmax=1,
+            text=np.round(corr.values, 2),
+            texttemplate="%{text}",
+        )
+    )
+    fig.update_layout(
+        title="Pairwise Pearson correlation",
+        width=520,
+        height=520,
+        margin=dict(l=100, r=20, t=40, b=100),
+    )
+    return fig
+
+
+@app.function
+def build_periodogram_selector_options(df: pd.DataFrame) -> tuple[dict[str, str], str]:
+    options = {
+        COLUMN_LABELS.get(column, column): column
+        for column in available_columns(df, list(COLUMN_LABELS))
+    }
+    default_name = COLUMN_LABELS.get("water_level", "water_level")
+    if default_name not in options:
+        default_name = next(iter(options))
+    return options, default_name
+
+
+@app.function
+def build_periodogram_figure(
+    index: pd.DatetimeIndex,
+    values: np.ndarray | pd.Series,
+    title: str,
+    *,
+    min_period_hours: float = 2.0,
+    max_period_hours: float | None = None,
+) -> go.Figure:
+    spectrum = compute_periodogram(
+        pd.DatetimeIndex(index),
+        values,
+        min_period_hours=min_period_hours,
+        max_period_hours=max_period_hours,
+    )
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=spectrum["period_hours"],
+            y=spectrum["power"],
+            mode="lines",
+            line=dict(width=1.5, color="steelblue"),
+            name="power",
+        )
+    )
+
+    axis_max = float(spectrum["period_hours"].max()) if not spectrum.empty else max_period_hours or 48.0
+    for label, period_hours in PERIODS.items():
+        if period_hours < min_period_hours or period_hours > axis_max:
+            continue
+        fig.add_vline(x=period_hours, line_width=0.8, line_color="gray", line_dash="dot")
+        fig.add_annotation(
+            x=period_hours,
+            y=1.0,
+            yref="paper",
+            text=label,
+            textangle=-90,
+            showarrow=False,
+            yanchor="top",
+            xanchor="right",
+            font=dict(size=10, color="gray"),
+        )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Period (hours)",
+        yaxis_title="Power",
+        margin=dict(l=60, r=20, t=50, b=50),
+        height=360,
+        showlegend=False,
+    )
+    return fig
+
+
+@app.function
+def collect_model_params(
+    harmonic_inputs,
+    regressor_lags,
+    regressor_toggles,
+    *,
+    df: pd.DataFrame,
+    sph: int,
+    train_start,
+    train_end,
+    test_end,
+) -> tuple[dict[str, bool], ModelKwargs]:
+    mask = {name: int(widget.value) > 0 for name, widget in harmonic_inputs.items()}
+    mask.update({name: widget.value for name, widget in regressor_toggles.items()})
+    return mask, {
+        "df": df,
+        "sph": sph,
+        "harmonic_orders": {name: int(widget.value) for name, widget in harmonic_inputs.items()},
+        "lag_ranges": {name: widget.value for name, widget in regressor_lags.items()},
+        "train_start": str(train_start.value),
+        "train_end": str(train_end.value),
+        "test_end": str(test_end.value),
+    }
+
+
+@app.function
+def build_periodic_config(
+    component_mask: dict[str, bool],
+    harmonic_orders: dict[str, int],
+    sph: int,
+) -> tuple[dict[str, tuple[float, int]], TsgamMultiPeriodicConfig | None]:
+    picked: dict[str, tuple[float, int]] = {}
+    for name, active in component_mask.items():
+        if not active or name not in PERIODS:
+            continue
+        order = harmonic_orders.get(name, 0)
+        if order > 0:
+            picked[name] = (PERIODS[name], order)
+
+    config = None
+    if picked:
+        config = TsgamMultiPeriodicConfig(
+            periods=[period * sph for period, _ in picked.values()],
+            num_harmonics=[order for _, order in picked.values()],
+            reg_weight=1e-4,
+        )
+    return picked, config
+
+
+@app.function
+def build_exog_design_matrices(
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    ok_train: pd.Series,
+    reg_names: list[str],
+    lag_ranges: dict[str, tuple[int, int]],
+    sph: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str], list[TsgamSplineConfig | TsgamLinearConfig] | None]:
+    x_train_fit = pd.DataFrame(index=df_train.index[ok_train])
+    x_train_pred = pd.DataFrame(index=df_train.index)
+    x_test_pred = pd.DataFrame(index=df_test.index)
+    if not reg_names:
+        return x_train_fit, x_train_pred, x_test_pred, [], None
+
+    x_train_raw, x_test_raw, active_regs, _ = prepare_split_regressors(df_train, df_test, reg_names)
+    if not active_regs:
+        return x_train_fit, x_train_pred, x_test_pred, [], None
+
+    exog_config = []
+    for column in active_regs:
+        lag_start, lag_end = lag_ranges.get(column, (-2, 0))
+        exog_config.append(
+            TsgamSplineConfig(
+                n_knots=10 if column == "pressure" else 8,
+                lags=[hour * sph for hour in range(lag_start, lag_end + 1)],
+                reg_weight=1e-5,
+                diff_reg_weight=0.3,
+            )
+        )
+
+    return (
+        x_train_raw.loc[ok_train],
+        x_train_raw,
+        x_test_raw,
+        active_regs,
+        exog_config,
+    )
+
+
+@app.function
+def pack_model_result(
+    df_test: pd.DataFrame,
+    y_train: np.ndarray,
+    ok_train: pd.Series,
+    ok_test: pd.Series,
+    yhat_train: np.ndarray,
+    yhat_test: np.ndarray,
+    picked: dict[str, tuple[float, int]],
+    active_regs: list[str],
+    sph: int,
+) -> FitResult:
+    ok_train_np = ok_train.to_numpy(dtype=bool)
+    ok_test_np = ok_test.to_numpy(dtype=bool)
+    te_index = pd.DatetimeIndex(df_test.index)
+    test_obs = df_test["water_level"].to_numpy(dtype=float)
+    test_obs_clean = df_test.loc[ok_test, "water_level"].to_numpy(dtype=float)
+    train_metrics = cast(MetricDict, tidal_metrics(y_train, yhat_train[ok_train_np]))
+    test_metrics = cast(MetricDict, tidal_metrics(test_obs_clean, yhat_test[ok_test_np]))
+    return cast(FitResult, {
+        "metrics_train": train_metrics,
+        "metrics_test": test_metrics,
+        "te_index": te_index,
+        "te_obs": test_obs,
+        "te_pred": yhat_test,
+        "te_obs_clean": test_obs_clean,
+        "te_pred_clean": yhat_test[ok_test_np],
+        "residuals": test_obs - yhat_test,
+        "picked": picked,
+        "active_regs": active_regs,
+        "n_train": len(y_train),
+        "n_test": int(ok_test.sum()),
+        "sph": sph,
+    })
+
+
+@app.function
+def run_tidal_model(
+    component_mask: dict[str, bool],
+    *,
+    df: pd.DataFrame,
+    sph: int,
+    harmonic_orders: dict[str, int],
+    lag_ranges: dict[str, tuple[int, int]],
+    train_start: str,
+    train_end: str,
+    test_end: str,
+) -> FitResult:
+    split_time = pd.Timestamp(train_end)
+    window = df[train_start:test_end]
+    df_train = window[window.index < split_time]
+    df_test = window[window.index >= split_time]
+    ok_train = df_train["water_level"].notna()
+    ok_test = df_test["water_level"].notna()
+    y_train = df_train.loc[ok_train, "water_level"].to_numpy(dtype=float)
+
+    picked, periodic_config = build_periodic_config(component_mask, harmonic_orders, sph)
+    reg_names = [name for name, active in component_mask.items() if active and name not in PERIODS]
+    x_train_fit, x_train_pred, x_test_pred, active_regs, exog_config = build_exog_design_matrices(
+        df_train,
+        df_test,
+        ok_train,
+        reg_names,
+        lag_ranges,
+        sph,
+    )
+
+    if periodic_config is None and exog_config is None:
+        baseline = float(np.nanmean(y_train))
+        return pack_model_result(
+            df_test,
+            y_train,
+            ok_train,
+            ok_test,
+            np.full(len(df_train), baseline),
+            np.full(len(df_test), baseline),
+            picked,
+            active_regs,
+            sph,
+        )
+
+    try:
+        model = TsgamEstimator(
+            TsgamEstimatorConfig(
+                multi_periodic_config=periodic_config,
+                exog_config=exog_config,
+                solver_config=TsgamSolverConfig(solver="SCS", verbose=False),
+            )
+        )
+        model.fit(x_train_fit, y_train)
+        return pack_model_result(
+            df_test,
+            y_train,
+            ok_train,
+            ok_test,
+            model.predict(x_train_pred),
+            model.predict(x_test_pred),
+            picked,
+            active_regs,
+            sph,
+        )
+    except Exception:
+        return pack_model_result(
+            df_test,
+            y_train,
+            ok_train,
+            ok_test,
+            np.full(len(df_train), np.nan),
+            np.full(len(df_test), np.nan),
+            picked,
+            active_regs,
+            sph,
+        )
+
+
+@app.function
+def build_fit_label(fit_result: FitResult) -> str:
+    parts = []
+    picked = list(fit_result["picked"])
+    active_regs = fit_result["active_regs"]
+    if picked:
+        parts.append(", ".join(picked))
+    if active_regs:
+        parts.append(f"+ {', '.join(active_regs)}")
+    summary = " ".join(parts) if parts else "Mean baseline"
+    return f"{summary} - {fit_result['n_train']:,} train / {fit_result['n_test']:,} test"
+
+
+@app.function
+def format_metric_value(metric_name: str, value: float) -> str:
+    _, unit, digits = METRIC_SPECS[metric_name]
+    if not np.isfinite(value):
+        return "nan"
+    value_text = f"{value:.{digits}f}"
+    return f"{value_text} {unit}".strip()
+
+
+@app.function
+def build_metrics_table_html(fit_result: FitResult) -> str:
+    rows = []
+    for metric_name, (label, _, _) in METRIC_SPECS.items():
+        rows.append(
+            {
+                "Metric": label,
+                "Train": format_metric_value(metric_name, fit_result["metrics_train"].get(metric_name, np.nan)),
+                "Test": format_metric_value(metric_name, fit_result["metrics_test"].get(metric_name, np.nan)),
+            }
+        )
+    return pd.DataFrame(rows).to_html(index=False)
+
+
+@app.function
+def build_fit_timeseries_figure(fit_label: str, fit_result: FitResult) -> go.Figure:
+    time_index = fit_result["te_index"]
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06, row_heights=[0.7, 0.3])
+    fig.add_trace(
+        go.Scattergl(
+            x=time_index,
+            y=fit_result["te_obs"],
+            mode="lines",
+            line=dict(width=0.8, color="steelblue"),
+            name="observed",
+            opacity=0.8,
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scattergl(
+            x=time_index,
+            y=fit_result["te_pred"],
+            mode="lines",
+            line=dict(width=0.8, color="coral"),
+            name="predicted",
+            opacity=0.8,
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scattergl(
+            x=time_index,
+            y=fit_result["residuals"],
+            mode="lines",
+            line=dict(width=0.6, color="seagreen"),
+            name="residual",
+            showlegend=False,
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_hline(y=0, line_width=0.5, line_color="black", row=2, col=1)
+    fig.update_yaxes(title_text="Water level (m)", row=1, col=1)
+    fig.update_yaxes(title_text="Residual (m)", row=2, col=1)
+    fig.update_layout(
+        height=500,
+        title=fit_label,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        margin=dict(l=60, r=20, t=60, b=30),
+    )
+    return fig
+
+
+@app.function
+def build_pred_vs_obs_figure(fit_result: FitResult) -> go.Figure:
+    observed = fit_result["te_obs_clean"]
+    predicted = fit_result["te_pred_clean"]
+    lo = min(predicted.min(), observed.min())
+    hi = max(predicted.max(), observed.max())
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scattergl(
+            x=predicted,
+            y=observed,
+            mode="markers",
+            marker=dict(size=2, opacity=0.15, color="steelblue"),
+            showlegend=False,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[lo, hi],
+            y=[lo, hi],
+            mode="lines",
+            line=dict(dash="dash", width=0.8, color="black"),
+            showlegend=False,
+        )
+    )
+    fig.update_layout(
+        width=450,
+        height=450,
+        title="Predicted vs Observed",
+        xaxis=dict(title="Predicted (m)", scaleanchor="y", range=[lo, hi]),
+        yaxis=dict(title="Observed (m)", range=[lo, hi]),
+        margin=dict(l=60, r=20, t=40, b=50),
+    )
+    return fig
+
+
+@app.function
+def build_residual_qq_figure(fit_result: FitResult) -> go.Figure:
+    residuals = fit_result["residuals"]
+    clean = residuals[np.isfinite(residuals)]
+    (theoretical, sample), (slope, intercept, _) = stats.probplot(clean, dist="norm")
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scattergl(
+            x=theoretical,
+            y=sample,
+            mode="markers",
+            marker=dict(size=3, opacity=0.3, color="steelblue"),
+            name="residuals",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=theoretical,
+            y=slope * theoretical + intercept,
+            mode="lines",
+            line=dict(color="red", width=1, dash="dash"),
+            name="normal ref",
+        )
+    )
+    fig.update_layout(
+        width=450,
+        height=450,
+        title="Q-Q plot (residuals)",
+        xaxis_title="Theoretical quantiles",
+        yaxis_title="Sample quantiles (m)",
+        margin=dict(l=60, r=20, t=40, b=50),
+    )
+    return fig
+
+
+@app.function
+def build_residual_hist_figure(fit_result: FitResult) -> go.Figure:
+    residuals = fit_result["residuals"]
+    clean = residuals[np.isfinite(residuals)]
+    mean = clean.mean()
+    sigma = clean.std()
+    x_grid = np.linspace(clean.min(), clean.max(), 200)
+    bin_width = (clean.max() - clean.min()) / 80
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Histogram(
+            x=clean,
+            nbinsx=80,
+            name="residuals",
+            marker_color="steelblue",
+            opacity=0.7,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_grid,
+            y=stats.norm.pdf(x_grid, mean, sigma) * len(clean) * bin_width,
+            mode="lines",
+            line=dict(color="red", width=1.5),
+            name=f"N({mean:.3f}, {sigma:.3f}^2)",
+        )
+    )
+    fig.update_layout(
+        title="Residual distribution",
+        xaxis_title="Residual (m)",
+        yaxis_title="Count",
+        margin=dict(l=60, r=20, t=40, b=50),
+        height=350,
+        barmode="overlay",
+    )
+    return fig
+
+
+@app.function
+def build_rolling_rmse_figure(fit_result: FitResult) -> go.Figure:
+    residuals = fit_result["residuals"]
+    time_index = fit_result["te_index"]
+    samples_per_hour = fit_result["sph"]
+    window = int(168 * samples_per_hour)
+    rolling_rmse = (
+        pd.Series(residuals ** 2, index=time_index)
+        .rolling(window, min_periods=window // 2)
+        .mean()
+        .pipe(np.sqrt)
+    )
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scattergl(
+            x=rolling_rmse.index,
+            y=rolling_rmse.values,
+            mode="lines",
+            line=dict(width=0.8, color="steelblue"),
+            showlegend=False,
+        )
+    )
+    fig.update_layout(
+        title="Rolling RMSE (7-day window)",
+        yaxis_title="RMSE (m)",
+        height=300,
+        margin=dict(l=60, r=20, t=40, b=30),
+    )
+    return fig
+
+
+@app.function
+def build_residual_regressor_xcorr_figure(
+    df: pd.DataFrame,
+    fit_result: FitResult,
+) -> go.Figure | None:
+    regressors = available_columns(df, REGRESSOR_ANALYSIS_CANDIDATES)
+    if not regressors:
+        return None
+
+    residuals = fit_result["residuals"]
+    time_index = fit_result["te_index"]
+    samples_per_hour = fit_result["sph"]
+    ok = np.isfinite(residuals)
+    reg_df = df.loc[time_index[ok]]
+    max_lag = int(12 * samples_per_hour)
+
+    fig = go.Figure()
+    for column in regressors:
+        lagged_corr = compute_lagged_correlation(
+            np.asarray(residuals[ok], dtype=float),
+            np.asarray(reg_df[column].values, dtype=float),
+            max_lag,
+        )
+        lagged_corr["lag_hours"] = lagged_corr["lag"] / samples_per_hour
+        fig.add_trace(
+            go.Scatter(
+                x=lagged_corr["lag_hours"],
+                y=lagged_corr["correlation"],
+                mode="lines",
+                name=column,
+                line=dict(width=1.5),
+            )
+        )
+
+    fig.add_hline(y=0, line_width=0.5, line_color="black")
+    fig.add_vline(x=0, line_width=2.0, line_color="red")
+    fig.update_layout(
+        title="Residual-regressor cross-correlation (+/-12 h)",
+        xaxis_title="Lag (hours)",
+        yaxis_title="Pearson r",
+        height=400,
+        margin=dict(l=60, r=20, t=40, b=50),
+    )
+    return fig
+
+
+@app.function
+def build_diagnostic_figures(
+    df: pd.DataFrame,
+    fit_result: FitResult,
+) -> dict[str, go.Figure]:
+    figures: dict[str, go.Figure] = {
+        "Pred vs Obs": build_pred_vs_obs_figure(fit_result),
+        "Q-Q": build_residual_qq_figure(fit_result),
+        "Residual dist": build_residual_hist_figure(fit_result),
+        "Rolling RMSE": build_rolling_rmse_figure(fit_result),
+        "Residual spectrum": build_periodogram_figure(
+            fit_result["te_index"],
+            fit_result["residuals"],
+            title="Residual spectrum",
+            min_period_hours=2.0,
+        ),
+    }
+    xcorr_figure = build_residual_regressor_xcorr_figure(df, fit_result)
+    if xcorr_figure is not None:
+        figures["Resid x regressor"] = xcorr_figure
+    return figures
+
+
+@app.function
+def compute_shapley(
+    results: dict[int, dict[str, float]],
+    components: list[str],
+    metric: str,
+    baseline: float,
+) -> dict[str, float]:
+    values = {0: baseline}
+    for bits, metrics in results.items():
+        value = metrics.get(metric, baseline)
+        values[bits] = value if np.isfinite(value) else baseline
+
+    shapley: dict[str, float] = {}
+    num_components = len(components)
+    for idx, component in enumerate(components):
+        contribution = 0.0
+        for subset in range(2**num_components):
+            if subset & (1 << idx):
+                continue
+            subset_size = bin(subset).count("1")
+            weight = factorial(subset_size) * factorial(num_components - subset_size - 1) / factorial(num_components)
+            contribution += weight * (values[subset | (1 << idx)] - values[subset])
+        shapley[component] = contribution
+    return shapley
+
+
+@app.function
+def build_shapley_figure(shapley_result: ShapleyResult) -> go.Figure:
+    components = shapley_result["components"]
+    shap_r2 = shapley_result["shap_r2"]
+    shap_rmse = shapley_result["shap_rmse"]
+    baseline_rmse = shapley_result["baseline_rmse"]
+    full_r2 = shapley_result["full_r2"]
+    full_rmse = shapley_result["full_rmse"]
+
+    fig = make_subplots(rows=1, cols=2, subplot_titles=["R^2 attribution", "RMSE attribution"])
+    for col_idx, (shapley_values, baseline, full_value, ylabel) in enumerate(
+        [
+            (shap_r2, 0.0, full_r2, "R^2"),
+            (shap_rmse, baseline_rmse, full_rmse, "RMSE (m)"),
+        ],
+        1,
+    ):
+        ordered = sorted(shapley_values.items(), key=lambda item: abs(item[1]), reverse=True)
+        names = [item[0] for item in ordered]
+        values = [item[1] for item in ordered]
+        fig.add_trace(
+            go.Waterfall(
+                x=["baseline"] + names + ["full model"],
+                y=[baseline] + values + [0.0],
+                measure=["absolute"] + ["relative"] * len(components) + ["total"],
+                text=[f"{value:.4f}" for value in [baseline] + values + [full_value]],
+                textposition="outside",
+                increasing=dict(marker_color="steelblue" if col_idx == 1 else "coral"),
+                decreasing=dict(marker_color="coral" if col_idx == 1 else "steelblue"),
+                totals=dict(marker_color="midnightblue"),
+                connector=dict(line=dict(color="gray", width=0.5, dash="dot")),
+            ),
+            row=1,
+            col=col_idx,
+        )
+        fig.update_yaxes(title_text=ylabel, row=1, col=col_idx)
+
+    title = f"Shapley component attribution ({shapley_result['coalitions']} coalitions)"
+    if shapley_result["failed"]:
+        title += f", {shapley_result['failed']} solver failures"
+    fig.update_layout(
+        title=title,
+        showlegend=False,
+        height=max(400, 40 * len(components)),
         margin=dict(l=60, r=40, t=60, b=80),
     )
-    _fig.update_xaxes(tickangle=-30)
-    _fig
-    return
+    fig.update_xaxes(tickangle=-30)
+    return fig
 
 
 if __name__ == "__main__":
