@@ -321,4 +321,8 @@ examples/reports/*.png
 examples/reports/*.pdf
 examples/plots/
 
+# Local agent / IDE workspace state
+.worktrees/
+.cursor/
+
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm+all,visualstudiocode,macos
