@@ -14,7 +14,7 @@ uv sync --group examples
 |--------|-------------|
 | `run_air_quality.py` | Beijing PM2.5: exogenous variable ablation. Default data: `examples/data/air_quality` (downloads if missing). |
 | `run_la_energy.py` | LA energy demand: harmonics → +exog → +AR → +outlier ablation. Default data: `examples/data/energy`. |
-| `run_pv.py` | PV/solar: trend-type ablation (none, linear, nonlinear). Default data: `examples/data/pv/2107_data_combined.csv`. |
+| `run_pv.py` | PV/solar: trend-type ablation (none, linear, nonlinear_decreasing, nonlinear_increasing). Default data: `examples/data/pv/2107_data_combined.csv`. |
 | `run_outlier_detector.py` | Synthetic data: with vs without outlier detector. No data file. |
 
 **Common options (where applicable):** `--data-dir`, `--output-dir`, `--train-start`, `--train-end`, `--test-start`, `--test-end`. Reports are written to `--output-dir` (default: `examples/reports`).
