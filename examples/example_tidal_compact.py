@@ -141,6 +141,7 @@ with app.setup:
         components: list[str]
         coalitions: int
         failed: int
+        baseline_r2: float
         baseline_rmse: float
         full_r2: float
         full_rmse: float
@@ -406,12 +407,14 @@ def _(
     )
 
     _run_model = partial(run_tidal_model, **_model_kwargs)
-    _total_coalitions = 2**_num_components - 1
+    _total_coalitions = 2**_num_components
     _failed_runs = 0
-    _coalition_metrics: dict[int, dict[str, float]] = {}
+    _baseline_metrics = _run_model({component: False for component in _components})["metrics_test"]
+    _coalition_metrics: dict[int, dict[str, float]] = {0: _baseline_metrics}
     _max_workers = min(os.cpu_count() or 4, _total_coalitions, 8)
 
     with mo.status.progress_bar(total=_total_coalitions) as _progress:
+        _progress.update()
         _coalition_masks = {
             bits: {component: bool(bits & (1 << idx)) for idx, component in enumerate(_components)}
             for bits in range(1, 2**_num_components)
@@ -429,18 +432,24 @@ def _(
                 _coalition_metrics[_bits] = _metrics
                 _progress.update()
 
-    _baseline_rmse = _run_model({component: False for component in _components})["metrics_test"]["rmse"]
+    _baseline_r2 = _baseline_metrics.get("r2", 0.0)
+    if not np.isfinite(_baseline_r2):
+        _baseline_r2 = 0.0
+    _baseline_rmse = _baseline_metrics.get("rmse", np.nan)
+    if not np.isfinite(_baseline_rmse):
+        _baseline_rmse = np.nan
     _full_mask = 2**_num_components - 1
     shapley_result: ShapleyResult = {
         "components": _components,
         "coalitions": _total_coalitions,
         "failed": _failed_runs,
+        "baseline_r2": _baseline_r2,
         "baseline_rmse": _baseline_rmse,
         "full_r2": _coalition_metrics[_full_mask].get("r2", 0.0)
         if np.isfinite(_coalition_metrics[_full_mask].get("r2", 0.0))
         else 0.0,
         "full_rmse": _coalition_metrics[_full_mask].get("rmse", _baseline_rmse),
-        "shap_r2": compute_shapley(_coalition_metrics, _components, "r2", 0.0),
+        "shap_r2": compute_shapley(_coalition_metrics, _components, "r2", _baseline_r2),
         "shap_rmse": compute_shapley(_coalition_metrics, _components, "rmse", _baseline_rmse),
     }
     return (shapley_result,)
@@ -954,7 +963,7 @@ def build_pred_vs_obs_figure(fit_result: FitResult) -> go.Figure:
             x=predicted,
             y=observed,
             mode="markers",
-            marker=dict(size=2, opacity=0.15, color="steelblue"),
+            marker=dict(size=2, opacity=0.15, color="black"),
             showlegend=False,
         )
     )
@@ -1184,6 +1193,7 @@ def build_shapley_figure(shapley_result: ShapleyResult) -> go.Figure:
     components = shapley_result["components"]
     shap_r2 = shapley_result["shap_r2"]
     shap_rmse = shapley_result["shap_rmse"]
+    baseline_r2 = shapley_result["baseline_r2"]
     baseline_rmse = shapley_result["baseline_rmse"]
     full_r2 = shapley_result["full_r2"]
     full_rmse = shapley_result["full_rmse"]
@@ -1191,7 +1201,7 @@ def build_shapley_figure(shapley_result: ShapleyResult) -> go.Figure:
     fig = make_subplots(rows=1, cols=2, subplot_titles=["R^2 attribution", "RMSE attribution"])
     for col_idx, (shapley_values, baseline, full_value, ylabel) in enumerate(
         [
-            (shap_r2, 0.0, full_r2, "R^2"),
+            (shap_r2, baseline_r2, full_r2, "R^2"),
             (shap_rmse, baseline_rmse, full_rmse, "RMSE (m)"),
         ],
         1,
