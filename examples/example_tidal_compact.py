@@ -86,6 +86,8 @@ with app.setup:
         "air_temp": (0, 0),
         "wind_stress": (-1, 0),
     }
+    KNOT_PRESET_TO_COUNT = {"low": 4, "med": 8, "high": 12}
+    KNOT_PRESET_OPTIONS = {"Low": "low", "Med": "med", "High": "high"}
     DEFAULT_HARMONICS = {
         "M2": 4,
         "S2": 1,
@@ -117,6 +119,7 @@ with app.setup:
         sph: int
         harmonic_orders: dict[str, int]
         lag_ranges: dict[str, tuple[int, int]]
+        knot_presets: dict[str, str]
         train_start: str
         train_end: str
         test_end: str
@@ -126,6 +129,14 @@ with app.setup:
         mae: float
         mape: float
         r2: float
+
+    class RegressorBasisInputs(TypedDict):
+        regressor_name: str
+        index: pd.DatetimeIndex
+        values: np.ndarray
+        knots: np.ndarray
+        grid: np.ndarray
+        basis: np.ndarray
 
     class FitResult(TypedDict):
         metrics_train: MetricDict
@@ -318,6 +329,7 @@ def _(station_data):
     _available_regressors = available_columns(_df, MODEL_REGRESSOR_CANDIDATES)
     regressor_toggles = {}
     regressor_lags = {}
+    regressor_knots = {}
     _regressor_rows = []
     for name in _available_regressors:
         regressor_toggles[name] = mo.ui.switch(value=False, label=name)
@@ -329,7 +341,14 @@ def _(station_data):
             label="lag (h)",
             show_value=True,
         )
-        _regressor_rows.append(mo.hstack([regressor_toggles[name], regressor_lags[name]], justify="start"))
+        regressor_knots[name] = mo.ui.dropdown(
+            options=KNOT_PRESET_OPTIONS,
+            value="med",
+            label="Knots",
+        )
+        _regressor_rows.append(
+            mo.hstack([regressor_toggles[name], regressor_lags[name], regressor_knots[name]], justify="start")
+        )
 
     train_start = mo.ui.date(value=_train_start_default, label="Train start")
     train_end = mo.ui.date(value=_train_end_default, label="Train end")
@@ -342,7 +361,7 @@ def _(station_data):
             mo.hstack(
                 [
                     mo.vstack([mo.md("**Harmonics** (0 = exclude)")] + list(harmonic_inputs.values())),
-                    mo.vstack([mo.md("**Regressors** (toggle + lag range in hours)")] + _regressor_rows)
+                    mo.vstack([mo.md("**Regressors** (toggle + lag range in hours + knots)")] + _regressor_rows)
                     if _available_regressors
                     else mo.md(""),
                     mo.vstack([mo.md("**Date ranges**"), train_start, train_end, test_end]),
@@ -355,6 +374,7 @@ def _(station_data):
     )
     return (
         harmonic_inputs,
+        regressor_knots,
         regressor_lags,
         regressor_toggles,
         run_fit,
@@ -365,8 +385,64 @@ def _(station_data):
 
 
 @app.cell
+def _(regressor_knots, station_data):
+    _available_regressors = available_columns(station_data["df"], MODEL_REGRESSOR_CANDIDATES)
+    mo.stop(
+        not _available_regressors,
+        mo.md("*No model regressors are available in the loaded dataset for inspection.*"),
+    )
+    _options = {
+        COLUMN_LABELS.get(name, name): name for name in _available_regressors
+    }
+    _default_label = COLUMN_LABELS.get(_available_regressors[0], _available_regressors[0])
+    inspect_regressor = mo.ui.dropdown(
+        options=_options,
+        value=_default_label,
+        label="Inspect regressor",
+    )
+    _selected_regressor = inspect_regressor.value
+    _selected_preset = regressor_knots[_selected_regressor].value
+    mo.vstack(
+        [
+            mo.md("## Regressor inspection"),
+            inspect_regressor,
+            mo.md(f"*Current knot preset for `{_selected_regressor}`: `{_selected_preset}`*"),
+        ]
+    )
+    return (inspect_regressor,)
+
+
+@app.cell
+def _(inspect_regressor, regressor_knots, station_data, test_end, train_end, train_start):
+    _regressor_name = inspect_regressor.value
+    _knot_preset = regressor_knots[_regressor_name].value
+    _window_message = build_model_window_validation_message(
+        station_data["date_min"],
+        station_data["date_max"],
+        train_start.value,
+        train_end.value,
+        test_end.value,
+    )
+    mo.stop(_window_message is not None, mo.md(f"*{_window_message}*"))
+    try:
+        _basis_inputs = build_model_regressor_basis_inputs(
+            station_data["df"],
+            _regressor_name,
+            _knot_preset,
+            train_start.value,
+            train_end.value,
+            test_end.value,
+        )
+    except ValueError as exc:
+        mo.stop(True, mo.md(f"*{exc}*"))
+    build_regressor_basis_figure(_basis_inputs, knot_preset=_knot_preset)
+    return
+
+
+@app.cell
 def _(
     harmonic_inputs,
+    regressor_knots,
     regressor_lags,
     regressor_toggles,
     run_fit,
@@ -388,6 +464,7 @@ def _(
         harmonic_inputs,
         regressor_lags,
         regressor_toggles,
+        regressor_knots,
         df=station_data["df"],
         sph=station_data["sph"],
         train_start=train_start,
@@ -429,6 +506,7 @@ def _():
 @app.cell
 def _(
     harmonic_inputs,
+    regressor_knots,
     regressor_lags,
     regressor_toggles,
     run_shapley,
@@ -450,6 +528,7 @@ def _(
         harmonic_inputs,
         regressor_lags,
         regressor_toggles,
+        regressor_knots,
         df=station_data["df"],
         sph=station_data["sph"],
         train_start=train_start,
@@ -470,7 +549,7 @@ def _(
     _failed_runs = 0
     _baseline_metrics = _run_model({component: False for component in _components})["metrics_test"]
     _coalition_metrics: dict[int, dict[str, float]] = {0: _baseline_metrics}
-    _max_workers = 16
+    _max_workers = min(os.cpu_count() or 4, _total_coalitions, 8)
 
     with mo.status.progress_bar(total=_total_coalitions) as _progress:
         _progress.update()
@@ -921,6 +1000,7 @@ def collect_model_params(
     harmonic_inputs,
     regressor_lags,
     regressor_toggles,
+    regressor_knots,
     *,
     df: pd.DataFrame,
     sph: int,
@@ -935,10 +1015,200 @@ def collect_model_params(
         "sph": sph,
         "harmonic_orders": {name: int(widget.value) for name, widget in harmonic_inputs.items()},
         "lag_ranges": {name: widget.value for name, widget in regressor_lags.items()},
+        "knot_presets": {name: widget.value for name, widget in regressor_knots.items()},
         "train_start": str(train_start.value),
         "train_end": str(train_end.value),
         "test_end": str(test_end.value),
     }
+
+
+@app.function
+def build_knot_count(preset: str) -> int:
+    try:
+        return KNOT_PRESET_TO_COUNT[preset]
+    except KeyError as exc:
+        raise ValueError(f"Unknown knot preset: {preset}") from exc
+
+
+@app.function
+def build_spline_basis_matrix(x: np.ndarray, knots: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    knots = np.asarray(knots, dtype=float)
+
+    def truncated_cubic_distance(values: np.ndarray, knot: float, knot_max: float) -> np.ndarray:
+        numerator = np.clip(np.power(values - knot, 3), 0.0, np.inf)
+        numerator -= np.clip(np.power(values - knot_max, 3), 0.0, np.inf)
+        return numerator / (knot_max - knot)
+
+    basis = np.ones((len(x), len(knots)), dtype=float)
+    basis[:, 1] = x
+    for knot_idx in range(len(knots) - 2):
+        basis_col = knot_idx + 2
+        basis[:, basis_col] = truncated_cubic_distance(x, knots[knot_idx], knots[-1]) - truncated_cubic_distance(
+            x,
+            knots[-2],
+            knots[-1],
+        )
+    return basis[:, 1:]
+
+
+@app.function
+def build_regressor_basis_inputs(
+    regressor: pd.Series,
+    knot_preset: str,
+    *,
+    basis_regressor: pd.Series | None = None,
+    grid_size: int = 200,
+) -> RegressorBasisInputs:
+    basis_regressor = regressor if basis_regressor is None else basis_regressor
+    clean_basis_regressor = basis_regressor.dropna()
+    if clean_basis_regressor.empty:
+        raise ValueError("regressor must contain at least one finite value")
+
+    knot_count = build_knot_count(knot_preset)
+    regressor_min = float(clean_basis_regressor.min())
+    regressor_max = float(clean_basis_regressor.max())
+    if not np.isfinite(regressor_min) or not np.isfinite(regressor_max):
+        raise ValueError("Selected regressor must have finite values for basis inspection.")
+    if np.isclose(regressor_min, regressor_max):
+        regressor_name = regressor.name or basis_regressor.name or "Selected regressor"
+        basis_window_label = "loaded window" if basis_regressor is regressor else "processed training window"
+        raise ValueError(
+            f"{regressor_name} is constant over the {basis_window_label}; basis inspection requires variation."
+        )
+    knots = np.linspace(regressor_min, regressor_max, knot_count)
+    grid = np.linspace(regressor_min, regressor_max, grid_size)
+    basis = build_spline_basis_matrix(grid, knots)
+    return {
+        "regressor_name": regressor.name or basis_regressor.name or "regressor",
+        "index": pd.DatetimeIndex(regressor.index),
+        "values": regressor.to_numpy(dtype=float),
+        "knots": knots,
+        "grid": grid,
+        "basis": basis,
+    }
+
+
+@app.function
+def split_model_window(
+    df: pd.DataFrame,
+    train_start: str | date,
+    train_end: str | date,
+    test_end: str | date,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    split_time = pd.Timestamp(train_end)
+    window = df[str(train_start) : str(test_end)]
+    df_train = window[window.index < split_time]
+    df_test = window[window.index >= split_time]
+    ok_train = df_train["water_level"].notna()
+    ok_test = df_test["water_level"].notna()
+    return df_train, df_test, ok_train, ok_test
+
+
+@app.function
+def build_model_regressor_basis_inputs(
+    df: pd.DataFrame,
+    regressor_name: str,
+    knot_preset: str,
+    train_start: str | date,
+    train_end: str | date,
+    test_end: str | date,
+    *,
+    grid_size: int = 200,
+) -> RegressorBasisInputs:
+    df_train, df_test, ok_train, _ok_test = split_model_window(
+        df,
+        train_start,
+        train_end,
+        test_end,
+    )
+    x_train_fit, _x_train_pred, _x_test_pred, active_regs, _exog_config = build_exog_design_matrices(
+        df_train,
+        df_test,
+        ok_train,
+        [regressor_name],
+        {regressor_name: (0, 0)},
+        {regressor_name: knot_preset},
+        1,
+    )
+    if regressor_name not in active_regs or regressor_name not in x_train_fit:
+        raise ValueError(
+            f"{regressor_name} is unavailable after model preprocessing for the current train/test window."
+        )
+    if x_train_fit.empty:
+        raise ValueError(
+            f"{regressor_name} has no usable training samples after model preprocessing for the current train/test window."
+        )
+    return build_regressor_basis_inputs(
+        df[regressor_name],
+        knot_preset,
+        basis_regressor=x_train_fit[regressor_name],
+        grid_size=grid_size,
+    )
+
+
+@app.function
+def build_regressor_basis_figure(
+    basis_inputs: RegressorBasisInputs,
+    *,
+    knot_preset: str,
+) -> go.Figure:
+    regressor_name = basis_inputs["regressor_name"]
+    regressor_label = COLUMN_LABELS.get(regressor_name, regressor_name)
+    figure = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=False,
+        vertical_spacing=0.12,
+        subplot_titles=(
+            f"{regressor_label} over loaded window",
+            f"Spline basis implied by `{knot_preset}` knots on processed training regressor",
+        ),
+    )
+    figure.add_trace(
+        go.Scattergl(
+            x=basis_inputs["index"],
+            y=basis_inputs["values"],
+            mode="lines",
+            line=dict(width=0.9, color="steelblue"),
+            name="loaded values",
+            showlegend=False,
+        ),
+        row=1,
+        col=1,
+    )
+    for basis_idx in range(basis_inputs["basis"].shape[1]):
+        figure.add_trace(
+            go.Scatter(
+                x=basis_inputs["grid"],
+                y=basis_inputs["basis"][:, basis_idx],
+                mode="lines",
+                line=dict(width=1.0),
+                name=f"basis {basis_idx + 1}",
+                showlegend=False,
+            ),
+            row=2,
+            col=1,
+        )
+    for knot in basis_inputs["knots"]:
+        figure.add_vline(
+            x=float(knot),
+            line_width=0.8,
+            line_color="gray",
+            line_dash="dot",
+            row=2,
+            col=1,
+        )
+    figure.update_yaxes(title_text=regressor_label, row=1, col=1)
+    figure.update_yaxes(title_text="Basis weight", row=2, col=1)
+    figure.update_xaxes(title_text="Time", row=1, col=1)
+    figure.update_xaxes(title_text=regressor_label, row=2, col=1)
+    figure.update_layout(
+        height=650,
+        title=f"Regressor inspection: {regressor_label}",
+        margin=dict(l=60, r=20, t=70, b=40),
+    )
+    return figure
 
 
 @app.function
@@ -972,6 +1242,7 @@ def build_exog_design_matrices(
     ok_train: pd.Series,
     reg_names: list[str],
     lag_ranges: dict[str, tuple[int, int]],
+    knot_presets: dict[str, str],
     sph: int,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str], list[TsgamSplineConfig | TsgamLinearConfig] | None]:
     x_train_fit = pd.DataFrame(index=df_train.index[ok_train])
@@ -987,9 +1258,14 @@ def build_exog_design_matrices(
     exog_config = []
     for column in active_regs:
         lag_start, lag_end = lag_ranges.get(column, (-2, 0))
+        try:
+            knot_preset = knot_presets[column]
+        except KeyError as exc:
+            raise ValueError(f"Missing knot preset for active regressor: {column}") from exc
+        knot_count = build_knot_count(knot_preset)
         exog_config.append(
             TsgamSplineConfig(
-                n_knots=10 if column == "pressure" else 8,
+                n_knots=knot_count,
                 lags=[hour * sph for hour in range(lag_start, lag_end + 1)],
                 reg_weight=1e-5,
                 diff_reg_weight=0.3,
@@ -1049,16 +1325,17 @@ def run_tidal_model(
     sph: int,
     harmonic_orders: dict[str, int],
     lag_ranges: dict[str, tuple[int, int]],
+    knot_presets: dict[str, str],
     train_start: str,
     train_end: str,
     test_end: str,
 ) -> FitResult:
-    split_time = pd.Timestamp(train_end)
-    window = df[train_start:test_end]
-    df_train = window[window.index < split_time]
-    df_test = window[window.index >= split_time]
-    ok_train = df_train["water_level"].notna()
-    ok_test = df_test["water_level"].notna()
+    df_train, df_test, ok_train, ok_test = split_model_window(
+        df,
+        train_start,
+        train_end,
+        test_end,
+    )
     y_train = df_train.loc[ok_train, "water_level"].to_numpy(dtype=float)
 
     picked, periodic_config = build_periodic_config(component_mask, harmonic_orders, sph)
@@ -1069,6 +1346,7 @@ def run_tidal_model(
         ok_train,
         reg_names,
         lag_ranges,
+        knot_presets,
         sph,
     )
 
