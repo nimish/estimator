@@ -6,8 +6,10 @@ app = marimo.App(width="full")
 with app.setup:
     import os
     from concurrent.futures import ThreadPoolExecutor, as_completed
+    from datetime import date, timedelta
     from functools import partial
     from math import factorial
+    from pathlib import Path
     from typing import TypedDict, cast
 
     import marimo as mo
@@ -28,6 +30,7 @@ with app.setup:
         load_station,
         load_tidal_data,
         merge_tidal_weather,
+        resolve_tidal_cache_path,
         TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS,
     )
     from tidal_analysis_helpers import compute_lagged_correlation, compute_periodogram, infer_samples_per_hour
@@ -99,12 +102,14 @@ with app.setup:
         "mape": ("MAPE", "%", 2),
         "r2": ("R^2", "", 3),
     }
+    DATA_WINDOW_DEFAULT_START = pd.Timestamp("2022-01-01").date()
+    DATA_WINDOW_DEFAULT_END = pd.Timestamp("2024-03-31").date()
 
     class StationData(TypedDict):
         df: pd.DataFrame
         sph: int
-        date_min: object
-        date_max: object
+        date_min: date
+        date_max: date
         status_message: str
 
     class ModelKwargs(TypedDict):
@@ -159,9 +164,11 @@ def _():
 
 @app.cell
 def _(station_picker):
-    mo.stop(not station_picker.value, mo.md("*Select a station to enable weather options.*"))
+    mo.stop(not station_picker.value, mo.md("*Select a station to configure data loading.*"))
     _station_id = find_station(station_picker.value)
     _weather_station = TIDE_TO_WEATHER.get(_station_id)
+    data_start = mo.ui.date(value=DATA_WINDOW_DEFAULT_START, label="Data start")
+    data_end = mo.ui.date(value=DATA_WINDOW_DEFAULT_END, label="Data end")
     download_tidal = mo.ui.switch(label="Download tidal data if not found", value=True)
     if _weather_station:
         _, _station_label = _weather_station
@@ -174,18 +181,50 @@ def _(station_picker):
             label="Download weather data if not found",
             disabled=True,
         )
+    load_data = mo.ui.run_button(label="Load data")
 
-    mo.hstack([download_tidal, use_weather, download_weather], justify="start")
-    return download_tidal, download_weather, use_weather
+    mo.vstack(
+        [
+            mo.hstack([data_start, data_end], justify="start"),
+            mo.hstack([download_tidal, use_weather, download_weather], justify="start"),
+            load_data,
+        ]
+    )
+    return (
+        data_end,
+        data_start,
+        download_tidal,
+        download_weather,
+        load_data,
+        use_weather,
+    )
 
 
 @app.cell
-def _(download_tidal, download_weather, station_picker, use_weather):
+def _(
+    data_end,
+    data_start,
+    download_tidal,
+    download_weather,
+    load_data,
+    station_picker,
+    use_weather,
+):
+    mo.stop(
+        not load_data.value,
+        mo.md("*Choose the window above and click **Load data** to fetch station data.*"),
+    )
+    mo.stop(
+        data_start.value > data_end.value,
+        mo.md("*`Data start` must be on or before `Data end`.*"),
+    )
     station_data = load_station_frame(
         station_picker.value,
         use_weather=bool(use_weather.value),
         download_tidal=bool(download_tidal.value),
         download_weather=bool(download_weather.value),
+        data_start=data_start.value,
+        data_end=data_end.value,
     )
     return (station_data,)
 
@@ -260,6 +299,10 @@ def _(station_data):
 @app.cell
 def _(station_data):
     _df = station_data["df"]
+    _train_start_default, _train_end_default, _test_end_default = build_model_date_defaults(
+        station_data["date_min"],
+        station_data["date_max"],
+    )
     harmonic_inputs = {
         name: mo.ui.slider(
             start=0,
@@ -288,9 +331,9 @@ def _(station_data):
         )
         _regressor_rows.append(mo.hstack([regressor_toggles[name], regressor_lags[name]], justify="start"))
 
-    train_start = mo.ui.date(value=station_data["date_min"], label="Train start")
-    train_end = mo.ui.date(value=pd.Timestamp("2024-01-01").date(), label="Train end")
-    test_end = mo.ui.date(value=station_data["date_max"], label="Test end")
+    train_start = mo.ui.date(value=_train_start_default, label="Train start")
+    train_end = mo.ui.date(value=_train_end_default, label="Train end")
+    test_end = mo.ui.date(value=_test_end_default, label="Test end")
     run_fit = mo.ui.run_button(label="Fit model")
 
     mo.vstack(
@@ -333,6 +376,14 @@ def _(
     train_start,
 ):
     mo.stop(not run_fit.value, mo.md("*Configure parameters above and click **Fit model**.*"))
+    _window_message = build_model_window_validation_message(
+        station_data["date_min"],
+        station_data["date_max"],
+        train_start.value,
+        train_end.value,
+        test_end.value,
+    )
+    mo.stop(_window_message is not None, mo.md(f"*{_window_message}*"))
     _component_mask, _model_kwargs = collect_model_params(
         harmonic_inputs,
         regressor_lags,
@@ -387,6 +438,14 @@ def _(
     train_start,
 ):
     mo.stop(not run_shapley.value, mo.md("*Click above to compute Shapley values for active components.*"))
+    _window_message = build_model_window_validation_message(
+        station_data["date_min"],
+        station_data["date_max"],
+        train_start.value,
+        train_end.value,
+        test_end.value,
+    )
+    mo.stop(_window_message is not None, mo.md(f"*{_window_message}*"))
     _component_mask, _model_kwargs = collect_model_params(
         harmonic_inputs,
         regressor_lags,
@@ -411,7 +470,7 @@ def _(
     _failed_runs = 0
     _baseline_metrics = _run_model({component: False for component in _components})["metrics_test"]
     _coalition_metrics: dict[int, dict[str, float]] = {0: _baseline_metrics}
-    _max_workers = min(os.cpu_count() or 4, _total_coalitions, 8)
+    _max_workers = 16
 
     with mo.status.progress_bar(total=_total_coalitions) as _progress:
         _progress.update()
@@ -467,65 +526,263 @@ def available_columns(df: pd.DataFrame, candidates: list[str]) -> list[str]:
 
 
 @app.function
+def missing_lcd_weather_years(
+    data_dir: Path | str,
+    station_id: str,
+    begin_year: int,
+    end_year: int,
+) -> list[int]:
+    data_dir = Path(data_dir)
+    return [
+        year
+        for year in range(begin_year, end_year + 1)
+        if not (data_dir / f"lcd_{station_id}_{year}.csv").exists()
+    ]
+
+
+@app.function
+def weather_frame_covers_window(
+    weather_df: pd.DataFrame,
+    window_start: date,
+    window_end: date,
+) -> bool:
+    if weather_df.empty:
+        return False
+    weather_index = pd.DatetimeIndex(weather_df.index)
+    if weather_index.tz is not None:
+        weather_index = weather_index.tz_convert(None)
+    return weather_index.min().date() <= window_start and weather_index.max().date() >= window_end
+
+
+@app.function
+def build_model_date_defaults(date_min: date, date_max: date) -> tuple[date, date, date]:
+    if date_min > date_max:
+        raise ValueError("date_min must be on or before date_max")
+
+    window_days = (date_max - date_min).days + 1
+    if window_days == 1:
+        return date_min, date_min, date_max
+
+    preferred_train_end = pd.Timestamp("2024-01-01").date()
+    if date_min <= preferred_train_end <= date_max:
+        train_end = preferred_train_end
+    else:
+        midpoint_days = (date_max - date_min).days // 2
+        train_end = date_min + timedelta(days=midpoint_days)
+
+    if train_end <= date_min:
+        train_end = date_min + timedelta(days=1)
+    return date_min, train_end, date_max
+
+
+@app.function
+def build_model_window_validation_message(
+    date_min: date,
+    date_max: date,
+    train_start: date,
+    train_end: date,
+    test_end: date,
+) -> str | None:
+    if date_min == date_max:
+        return (
+            "The loaded window is single-day. "
+            "Load at least two days of data to create non-empty train and test splits."
+        )
+    if train_end <= train_start:
+        return "`Train end` must be after `Train start` so the model has at least one training day."
+    if test_end < train_end:
+        return "`Test end` must be on or after `Train end` so the model has at least one test day."
+
+    train_window_start = max(date_min, train_start)
+    train_window_end = min(date_max, train_end - timedelta(days=1))
+    if train_window_start > train_window_end:
+        return "`Train end` must leave at least one loaded day before the split."
+
+    test_window_start = max(date_min, train_end)
+    test_window_end = min(date_max, test_end)
+    if test_window_start > test_window_end:
+        return "`Test end` must include at least one loaded day on or after `Train end`."
+
+    return None
+
+
+@app.function
 def load_station_frame(
     station_name: str,
     use_weather: bool,
     download_tidal: bool,
     download_weather: bool,
+    data_start: date | None = None,
+    data_end: date | None = None,
 ) -> StationData:
+    if (data_start is None) != (data_end is None):
+        raise ValueError("data_start and data_end must be provided together")
+    if data_start is not None and data_end is not None and data_start > data_end:
+        raise ValueError("data_start must be on or before data_end")
+
     station_id = find_station(station_name)
+    station_label = STATION_CATALOG[station_id]["name"]
     status_messages: list[str] = []
-    try:
-        df = load_station(station_id).copy()
-    except FileNotFoundError:
-        if not download_tidal:
-            raise
-        data_file = download_tidal_data(DEFAULT_DATA_DIR, station=station_id)
-        df = load_tidal_data(data_file).copy()
-        status_messages.append(
-            f"Downloaded tidal data for {STATION_CATALOG[station_id]['name']}"
+
+    if data_start is None or data_end is None:
+        try:
+            df = load_station(station_id).copy()
+            tidal_source = "cache"
+        except FileNotFoundError:
+            if not download_tidal:
+                raise
+            data_file = download_tidal_data(DEFAULT_DATA_DIR, station=station_id)
+            df = load_tidal_data(data_file).copy()
+            tidal_source = "download"
+    else:
+        request_begin = data_start.strftime("%Y%m%d")
+        request_end = data_end.strftime("%Y%m%d")
+        request_window = f"{data_start} to {data_end}"
+        data_file = resolve_tidal_cache_path(
+            DEFAULT_DATA_DIR,
+            station_id,
+            request_begin,
+            request_end,
         )
+        if data_file.exists():
+            tidal_source = "cache"
+        elif download_tidal:
+            data_file = download_tidal_data(
+                DEFAULT_DATA_DIR,
+                station=station_id,
+                begin_date=request_begin,
+                end_date=request_end,
+            )
+            tidal_source = "download"
+        else:
+            raise FileNotFoundError(
+                f"No tidal data found for requested tidal window {request_window}"
+            )
+        df = load_tidal_data(data_file).copy()
+
     time_index = pd.DatetimeIndex(df.index)
     if time_index.tz is not None:
         time_index = time_index.tz_convert(None)
     df.index = time_index
+    if "pressure" in df.columns:
+        df["dp_dt"] = df["pressure"].diff()
+    if data_start is not None and data_end is not None:
+        df = df.loc[str(data_start) : str(data_end)].copy()
+        if df.empty:
+            raise FileNotFoundError(
+                f"No tidal data found for requested tidal window {data_start} to {data_end}"
+            )
+        time_index = pd.DatetimeIndex(df.index)
+    status_messages.append(f"Loaded tidal data from {tidal_source} for {station_label}")
 
     weather_station = TIDE_TO_WEATHER.get(station_id)
+    weather_start = data_start if data_start is not None else time_index[0].date()
+    weather_end = data_end if data_end is not None else time_index[-1].date()
     if use_weather and weather_station:
-        weather_station_id, station_label = weather_station
+        weather_station_id, weather_label = weather_station
+
+        def weather_window_error(weather_df: pd.DataFrame | None = None) -> FileNotFoundError:
+            message = (
+                "No LCD weather data found for requested LCD weather window "
+                f"{weather_start} to {weather_end}"
+            )
+            if weather_df is None or weather_df.empty:
+                return FileNotFoundError(message)
+            weather_index = pd.DatetimeIndex(weather_df.index)
+            if weather_index.tz is not None:
+                weather_index = weather_index.tz_convert(None)
+            return FileNotFoundError(
+                f"{message} (loaded coverage: {weather_index.min().date()} to {weather_index.max().date()})"
+            )
+
+        missing_weather_years = missing_lcd_weather_years(
+            DEFAULT_DATA_DIR,
+            weather_station_id,
+            weather_start.year,
+            weather_end.year,
+        )
+        if missing_weather_years:
+            if not download_weather:
+                missing_year_text = ", ".join(str(year) for year in missing_weather_years)
+                raise FileNotFoundError(
+                    "No LCD weather data found for requested LCD weather window "
+                    f"{weather_start} to {weather_end} "
+                    f"(missing yearly files: {missing_year_text})"
+                )
+            download_lcd_weather(
+                DEFAULT_DATA_DIR,
+                station_id=weather_station_id,
+                begin_year=weather_start.year,
+                end_year=weather_end.year,
+            )
+            missing_weather_years = missing_lcd_weather_years(
+                DEFAULT_DATA_DIR,
+                weather_station_id,
+                weather_start.year,
+                weather_end.year,
+            )
+            if missing_weather_years:
+                missing_year_text = ", ".join(str(year) for year in missing_weather_years)
+                raise FileNotFoundError(
+                    "No LCD weather data found for requested LCD weather window "
+                    f"{weather_start} to {weather_end} "
+                    f"(missing yearly files: {missing_year_text})"
+                )
+            weather_source = "download"
+        else:
+            weather_source = "cache"
+
         try:
             weather_df = load_lcd_weather(
                 DEFAULT_DATA_DIR,
                 station_id=weather_station_id,
-                begin_date=str(df.index[0].date()),
-                end_date=str(df.index[-1].date()),
+                begin_date=str(weather_start),
+                end_date=str(weather_end),
             )
         except FileNotFoundError:
+            raise weather_window_error() from None
+
+        if not weather_frame_covers_window(weather_df, weather_start, weather_end):
             if not download_weather:
-                raise
-            download_lcd_weather(DEFAULT_DATA_DIR, station_id=weather_station_id)
-            weather_df = load_lcd_weather(
+                raise weather_window_error(weather_df)
+            download_lcd_weather(
                 DEFAULT_DATA_DIR,
                 station_id=weather_station_id,
-                begin_date=str(df.index[0].date()),
-                end_date=str(df.index[-1].date()),
+                begin_year=weather_start.year,
+                end_year=weather_end.year,
             )
+            weather_source = "download"
+            try:
+                weather_df = load_lcd_weather(
+                    DEFAULT_DATA_DIR,
+                    station_id=weather_station_id,
+                    begin_date=str(weather_start),
+                    end_date=str(weather_end),
+                )
+            except FileNotFoundError:
+                raise weather_window_error() from None
+            if not weather_frame_covers_window(weather_df, weather_start, weather_end):
+                raise weather_window_error(weather_df)
 
         df = merge_tidal_weather(df, weather_df)
         status_messages.append(
-            f"Merged {len(weather_df.columns)} weather columns from {station_label}"
+            f"Merged {len(weather_df.columns)} weather columns from {weather_label} "
+            f"via {weather_source}"
         )
 
-    if "pressure" in df.columns:
-        df["dp_dt"] = df["pressure"].diff()
     if "wind_u" in df.columns and "wind_v" in df.columns:
         df["wind_stress"] = df["wind_u"] ** 2 + df["wind_v"] ** 2
+
+    time_index = pd.DatetimeIndex(df.index)
+    loaded_start = time_index[0].date()
+    loaded_end = time_index[-1].date()
+    status_messages.append(f"Loaded window {loaded_start} to {loaded_end}")
 
     return {
         "df": df,
         "sph": infer_samples_per_hour(time_index),
-        "date_min": time_index[0].date(),
-        "date_max": time_index[-1].date(),
+        "date_min": loaded_start,
+        "date_max": loaded_end,
         "status_message": "; ".join(status_messages),
     }
 
