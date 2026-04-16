@@ -12,9 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 import example_tidal_compact as tidal_compact  # noqa: E402
 from example_tidal import TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS  # noqa: E402
 from example_tidal_compact import (  # noqa: E402
+    build_regressor_basis_figure,
+    build_regressor_basis_inputs,
     build_model_date_defaults,
     build_model_window_validation_message,
     build_diagnostic_figures,
+    build_exog_design_matrices,
+    build_knot_count,
     build_periodogram_figure,
     build_periodogram_selector_options,
     build_shapley_figure,
@@ -201,6 +205,186 @@ def test_build_shapley_figure_uses_explicit_r2_baseline():
     figure = build_shapley_figure(shapley_result)
 
     assert figure.data[0]["y"][0] == -0.25
+
+
+@pytest.mark.parametrize(
+    ("preset", "expected"),
+    [("low", 4), ("med", 8), ("high", 12)],
+)
+def test_build_knot_count_maps_named_presets(preset, expected):
+    assert build_knot_count(preset) == expected
+
+
+def test_build_exog_design_matrices_uses_selected_knot_preset():
+    index = pd.date_range("2024-01-01", periods=6, freq="1h")
+    df_train = pd.DataFrame({"pressure": np.linspace(1010.0, 1015.0, len(index))}, index=index)
+    df_test = pd.DataFrame(
+        {"pressure": np.linspace(1016.0, 1017.0, 2)},
+        index=pd.date_range("2024-01-01 06:00:00", periods=2, freq="1h"),
+    )
+    ok_train = pd.Series([True] * len(df_train), index=df_train.index)
+
+    _x_train_fit, _x_train_pred, _x_test_pred, active_regs, exog_config = build_exog_design_matrices(
+        df_train,
+        df_test,
+        ok_train,
+        ["pressure"],
+        {"pressure": (-2, 0)},
+        {"pressure": "high"},
+        1,
+    )
+
+    assert active_regs == ["pressure"]
+    assert exog_config is not None
+    assert len(exog_config) == 1
+    assert exog_config[0].n_knots == 12
+
+
+def test_build_exog_design_matrices_raises_for_missing_active_knot_preset():
+    index = pd.date_range("2024-01-01", periods=6, freq="1h")
+    df_train = pd.DataFrame({"pressure": np.linspace(1010.0, 1015.0, len(index))}, index=index)
+    df_test = pd.DataFrame(
+        {"pressure": np.linspace(1016.0, 1017.0, 2)},
+        index=pd.date_range("2024-01-01 06:00:00", periods=2, freq="1h"),
+    )
+    ok_train = pd.Series([True] * len(df_train), index=df_train.index)
+
+    with pytest.raises(ValueError, match="Missing knot preset for active regressor: pressure"):
+        build_exog_design_matrices(
+            df_train,
+            df_test,
+            ok_train,
+            ["pressure"],
+            {"pressure": (-2, 0)},
+            {},
+            1,
+        )
+
+
+def test_build_regressor_basis_inputs_uses_preset_knot_count_and_spans_regressor_range():
+    regressor = pd.Series(
+        [np.nan, -2.0, -0.5, 1.5, 3.0],
+        index=pd.date_range("2024-01-01", periods=5, freq="1h"),
+        name="pressure",
+    )
+
+    basis_inputs = build_regressor_basis_inputs(regressor, "high")
+
+    assert basis_inputs["regressor_name"] == "pressure"
+    assert len(basis_inputs["knots"]) == 12
+    assert basis_inputs["knots"][0] == pytest.approx(-2.0)
+    assert basis_inputs["knots"][-1] == pytest.approx(3.0)
+    assert basis_inputs["grid"][0] == pytest.approx(-2.0)
+    assert basis_inputs["grid"][-1] == pytest.approx(3.0)
+    assert basis_inputs["basis"].shape == (len(basis_inputs["grid"]), 11)
+
+
+def test_build_regressor_basis_inputs_rejects_constant_valued_regressors():
+    regressor = pd.Series(
+        [1012.5, 1012.5, 1012.5, 1012.5],
+        index=pd.date_range("2024-01-01", periods=4, freq="1h"),
+        name="pressure",
+    )
+
+    with pytest.raises(ValueError, match="constant"):
+        build_regressor_basis_inputs(regressor, "med")
+
+
+def test_build_regressor_basis_inputs_matches_tsgam_spline_basis():
+    regressor = pd.Series(
+        [-1.5, -0.25, 0.5, 1.75, 3.25],
+        index=pd.date_range("2024-01-01", periods=5, freq="1h"),
+        name="wind_u",
+    )
+
+    basis_inputs = build_regressor_basis_inputs(regressor, "med")
+    estimator = tidal_compact.TsgamEstimator(
+        tidal_compact.TsgamEstimatorConfig(
+            multi_periodic_config=None,
+            exog_config=None,
+        )
+    )
+
+    expected_basis = estimator._make_H(
+        basis_inputs["grid"],
+        basis_inputs["knots"],
+        include_offset=False,
+    )
+
+    np.testing.assert_allclose(basis_inputs["basis"], expected_basis)
+
+
+def test_build_model_regressor_basis_inputs_uses_processed_training_regressor_range():
+    index = pd.date_range("2024-01-01", periods=24 * 4, freq="1h")
+    water_level = np.linspace(0.0, 1.0, len(index))
+    water_level[10] = np.nan
+    pressure = np.concatenate(
+        [
+            np.linspace(1000.0, 1023.0, 24),
+            np.linspace(1100.0, 1123.0, 24),
+            np.linspace(1200.0, 1223.0, 24),
+            np.linspace(3000.0, 3023.0, 24),
+        ]
+    )
+    pressure[10] = 1500.0
+    df = pd.DataFrame(
+        {
+            "water_level": water_level,
+            "pressure": pressure,
+        },
+        index=index,
+    )
+
+    basis_inputs = tidal_compact.build_model_regressor_basis_inputs(
+        df,
+        "pressure",
+        "low",
+        date(2024, 1, 1),
+        date(2024, 1, 4),
+        date(2024, 1, 4),
+    )
+
+    split_time = pd.Timestamp("2024-01-04")
+    df_train = df[df.index < split_time]
+    df_test = df[df.index >= split_time]
+    ok_train = df_train["water_level"].notna()
+    x_train_raw, _x_test_raw, active_regs, _dropped = tidal_compact.prepare_split_regressors(
+        df_train,
+        df_test,
+        ["pressure"],
+    )
+    expected_train_regressor = x_train_raw.loc[ok_train, "pressure"]
+    expected_knots = np.linspace(
+        float(expected_train_regressor.min()),
+        float(expected_train_regressor.max()),
+        tidal_compact.build_knot_count("low"),
+    )
+
+    assert active_regs == ["pressure"]
+    np.testing.assert_allclose(basis_inputs["knots"], expected_knots)
+    assert basis_inputs["grid"][0] == pytest.approx(float(expected_train_regressor.min()))
+    assert basis_inputs["grid"][-1] == pytest.approx(float(expected_train_regressor.max()))
+    assert basis_inputs["grid"][-1] < float(df["pressure"].max())
+
+
+def test_build_regressor_basis_figure_marks_knot_locations():
+    regressor = pd.Series(
+        [-1.0, 0.0, 1.0, 2.0],
+        index=pd.date_range("2024-01-01", periods=4, freq="1h"),
+        name="wind_u",
+    )
+    basis_inputs = build_regressor_basis_inputs(regressor, "low")
+
+    figure = build_regressor_basis_figure(basis_inputs, knot_preset="low")
+
+    knot_positions = {float(knot) for knot in basis_inputs["knots"]}
+    figure_knot_positions = {
+        float(shape.x0)
+        for shape in figure.layout.shapes
+        if getattr(shape, "type", None) == "line"
+    }
+
+    assert knot_positions <= figure_knot_positions
 
 
 def test_load_station_frame_reuses_covering_cache_and_trims_requested_window(
