@@ -5,6 +5,7 @@ app = marimo.App(width="full")
 
 with app.setup:
     import os
+    from collections.abc import Mapping
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from datetime import date, timedelta
     from functools import partial
@@ -343,7 +344,7 @@ def _(station_data):
         )
         regressor_knots[name] = mo.ui.dropdown(
             options=KNOT_PRESET_OPTIONS,
-            value="med",
+            value=option_name_for_value(KNOT_PRESET_OPTIONS, "med"),
             label="Knots",
         )
         _regressor_rows.append(
@@ -385,7 +386,7 @@ def _(station_data):
 
 
 @app.cell
-def _(regressor_knots, station_data):
+def _(station_data):
     _available_regressors = available_columns(station_data["df"], MODEL_REGRESSOR_CANDIDATES)
     mo.stop(
         not _available_regressors,
@@ -394,26 +395,29 @@ def _(regressor_knots, station_data):
     _options = {
         COLUMN_LABELS.get(name, name): name for name in _available_regressors
     }
-    _default_label = COLUMN_LABELS.get(_available_regressors[0], _available_regressors[0])
     inspect_regressor = mo.ui.dropdown(
         options=_options,
-        value=_default_label,
+        value=option_name_for_value(_options, _available_regressors[0]),
         label="Inspect regressor",
     )
-    _selected_regressor = inspect_regressor.value
-    _selected_preset = regressor_knots[_selected_regressor].value
     mo.vstack(
         [
             mo.md("## Regressor inspection"),
             inspect_regressor,
-            mo.md(f"*Current knot preset for `{_selected_regressor}`: `{_selected_preset}`*"),
         ]
     )
     return (inspect_regressor,)
 
 
 @app.cell
-def _(inspect_regressor, regressor_knots, station_data, test_end, train_end, train_start):
+def _(
+    inspect_regressor,
+    regressor_knots,
+    station_data,
+    test_end,
+    train_end,
+    train_start,
+):
     _regressor_name = inspect_regressor.value
     _knot_preset = regressor_knots[_regressor_name].value
     _window_message = build_model_window_validation_message(
@@ -435,7 +439,12 @@ def _(inspect_regressor, regressor_knots, station_data, test_end, train_end, tra
         )
     except ValueError as exc:
         mo.stop(True, mo.md(f"*{exc}*"))
-    build_regressor_basis_figure(_basis_inputs, knot_preset=_knot_preset)
+    mo.vstack(
+        [
+            mo.md(f"*Current knot preset for `{_regressor_name}`: `{_knot_preset}`*"),
+            build_regressor_basis_figure(_basis_inputs, knot_preset=_knot_preset),
+        ]
+    )
     return
 
 
@@ -1020,6 +1029,14 @@ def collect_model_params(
         "train_end": str(train_end.value),
         "test_end": str(test_end.value),
     }
+
+
+@app.function
+def option_name_for_value(options: Mapping[str, str], value: str) -> str:
+    for option_name, option_value in options.items():
+        if option_value == value:
+            return option_name
+    raise ValueError(f"No option name found for value: {value!r}")
 
 
 @app.function

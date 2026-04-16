@@ -19,6 +19,7 @@ from example_tidal_compact import (  # noqa: E402
     build_diagnostic_figures,
     build_exog_design_matrices,
     build_knot_count,
+    option_name_for_value,
     build_periodogram_figure,
     build_periodogram_selector_options,
     build_shapley_figure,
@@ -213,6 +214,11 @@ def test_build_shapley_figure_uses_explicit_r2_baseline():
 )
 def test_build_knot_count_maps_named_presets(preset, expected):
     assert build_knot_count(preset) == expected
+
+
+def test_option_name_for_value_returns_dropdown_label():
+    assert option_name_for_value({"Low": "low", "Med": "med", "High": "high"}, "med") == "Med"
+    assert option_name_for_value({"Pressure (hPa)": "pressure"}, "pressure") == "Pressure (hPa)"
 
 
 def test_build_exog_design_matrices_uses_selected_knot_preset():
