@@ -320,7 +320,9 @@ examples/reports/*.md
 examples/reports/*.png
 examples/reports/*.pdf
 examples/plots/
-data/tidal/lcd_*.csv
+examples/data/tidal/lcd_*.csv
+examples/data/tidal/*_*_*_combined.csv
 
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm+all,visualstudiocode,macos
+.cursor/
 .worktrees/
