@@ -237,6 +237,31 @@ class TestMixedExog:
         assert np.all(np.isfinite(preds))
 
 
+def test_interactions_with_non_hourly_data(freq_key):
+    info = _FREQ_TABLE[freq_key]
+    X, y = _synth(freq_key, info["n_samples"], n_exog=2)
+    y = y + 0.8 * (X["x0"] * X["x1"]).to_numpy()
+
+    cfg = TsgamEstimatorConfig(
+        multi_periodic_config=info["multi"],
+        exog_config=[
+            TsgamLinearConfig(lags=[-1, 0, 1]),
+            TsgamLinearConfig(lags=[0, 1]),
+        ],
+        interaction_pairs=[(0, 1)],
+        solver_config=SOLVER,
+    )
+    est = TsgamEstimator(config=cfg)
+    est.fit(X, y)
+    preds = est.predict(X)
+
+    assert preds.shape == (len(X),)
+    assert np.all(np.isfinite(preds))
+    assert est.variables_["exog_coef_0"].value.shape == (1, 3)
+    assert est.variables_["exog_coef_1"].value.shape == (1, 2)
+    assert est.variables_["interaction_coef_0"].value.shape == (1,)
+
+
 # ── AR model + sample ───────────────────────────────────────────────────
 
 
