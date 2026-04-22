@@ -44,14 +44,6 @@ def load_file(file_path):
         return pd.read_csv(file_path, parse_dates=[0], index_col=0)
 
 
-def _is_decreasing_trend_type(trend_name: str) -> bool:
-    return trend_name in {'nonlinear', 'nonlinear_decreasing'}
-
-
-def _is_increasing_trend_type(trend_name: str) -> bool:
-    return trend_name == 'nonlinear_increasing'
-
-
 @click.command()
 @click.option(
     '--data-file',
@@ -125,23 +117,14 @@ def _is_increasing_trend_type(trend_name: str) -> bool:
 )
 @click.option(
     '--trend-type',
-    type=click.Choice(
-        ['none', 'linear', 'nonlinear', 'nonlinear_decreasing', 'nonlinear_increasing'],
-        case_sensitive=False,
-    ),
-    default='nonlinear_decreasing',
-    help=(
-        'Trend type to use. Default: nonlinear_decreasing. '
-        'Legacy nonlinear is accepted as an alias for nonlinear_decreasing.'
-    ),
+    type=click.Choice(['none', 'linear', 'nonlinear'], case_sensitive=False),
+    default='nonlinear',
+    help='Trend type to use. Default: nonlinear'
 )
 @click.option(
     '--run-comparison',
     is_flag=True,
-    help=(
-        'Run comparison across all four explicit trend types '
-        '(none, linear, nonlinear_decreasing, nonlinear_increasing)'
-    ),
+    help='Run comparison across all three trend types (none, linear, nonlinear)'
 )
 @click.option(
     '--output-dir',
@@ -340,17 +323,9 @@ def main(
 
     if run_comparison:
         print("\n" + "="*70)
-        print(
-            "Running trend comparison: none, linear, "
-            "nonlinear_decreasing, and nonlinear_increasing"
-        )
+        print("Running trend comparison: none, linear, and nonlinear")
         print("="*70)
-        trend_types_to_test = [
-            'none',
-            'linear',
-            'nonlinear_decreasing',
-            'nonlinear_increasing',
-        ]
+        trend_types_to_test = ['none', 'linear', 'nonlinear']
     else:
         trend_types_to_test = [trend_type]
 
@@ -447,13 +422,8 @@ def _fit_and_visualize_trend_model(
     if trend_type == 'none':
         trend_config = None
     else:
-        trend_type_map = {
-            'linear': TrendType.LINEAR,
-            'nonlinear': TrendType.NONLINEAR,
-            'nonlinear_decreasing': TrendType.NONLINEAR_DECREASING,
-            'nonlinear_increasing': TrendType.NONLINEAR_INCREASING,
-        }
-        trend_type_enum = trend_type_map[trend_type]
+        # Map string to TrendType enum
+        trend_type_enum = TrendType.LINEAR if trend_type == 'linear' else TrendType.NONLINEAR
         trend_config = TsgamTrendConfig(
             trend_type=trend_type_enum,
             grouping=24.0,  # Daily trend (period in hours)
@@ -618,10 +588,8 @@ def _visualize_model_results(
             est_trend_type = estimator.config.trend_config.trend_type.value if estimator.config.trend_config else 'none'
             if est_trend_type == 'linear':
                 print("  Differences (should be constant for linear):")
-            elif _is_decreasing_trend_type(est_trend_type):
-                print("  Differences (nonlinear decreasing - should be <= 0 and variable):")
-            elif _is_increasing_trend_type(est_trend_type):
-                print("  Differences (nonlinear increasing - should be >= 0 and variable):")
+            elif est_trend_type == 'nonlinear':
+                print("  Differences (nonlinear - should be <= 0 and variable):")
             else:
                 print("  Differences:")
             print(f"    Mean: {np.mean(trend_diff):.6f}")
@@ -648,10 +616,8 @@ def _visualize_model_results(
                 est_trend_type = estimator.config.trend_config.trend_type.value if estimator.config.trend_config else 'none'
                 if est_trend_type == 'linear':
                     ax1.set_title('Trend in log space (linear - should be perfectly straight)', fontsize=14, fontweight='bold')
-                elif _is_decreasing_trend_type(est_trend_type):
+                elif est_trend_type == 'nonlinear':
                     ax1.set_title('Trend in log space (nonlinear - monotonic decreasing)', fontsize=14, fontweight='bold')
-                elif _is_increasing_trend_type(est_trend_type):
-                    ax1.set_title('Trend in log space (nonlinear - monotonic increasing)', fontsize=14, fontweight='bold')
                 else:
                     ax1.set_title('Trend in log space', fontsize=14, fontweight='bold')
 
@@ -671,12 +637,9 @@ def _visualize_model_results(
                         ax1.text(0.02, 0.98, f'R² = {r2:.10f}\nSlope = {slope:.8f}',
                                 transform=ax1.transAxes, fontsize=10,
                                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-                elif _is_decreasing_trend_type(est_trend_type):
+                elif est_trend_type == 'nonlinear':
+                    # For nonlinear, show that differences should be <= 0
                     ax1.text(0.02, 0.98, f'Monotonic decreasing\nMean diff: {np.mean(np.diff(trend)):.8f}',
-                            transform=ax1.transAxes, fontsize=10,
-                            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-                elif _is_increasing_trend_type(est_trend_type):
-                    ax1.text(0.02, 0.98, f'Monotonic increasing\nMean diff: {np.mean(np.diff(trend)):.8f}',
                             transform=ax1.transAxes, fontsize=10,
                             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
@@ -725,12 +688,8 @@ def _visualize_model_results(
                     ax.text(0.02, 0.98, f'R² = {r2:.10f}\nSlope = {slope:.8f}\nStd of differences = {np.std(np.diff(trend)):.10f}',
                            transform=ax.transAxes, fontsize=11,
                            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-                elif _is_decreasing_trend_type(est_trend_type):
+                elif est_trend_type == 'nonlinear':
                     ax.text(0.02, 0.98, f'Nonlinear (monotonic decreasing)\nMean diff: {np.mean(np.diff(trend)):.8f}\nStd of differences = {np.std(np.diff(trend)):.10f}',
-                           transform=ax.transAxes, fontsize=11,
-                           verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-                elif _is_increasing_trend_type(est_trend_type):
-                    ax.text(0.02, 0.98, f'Nonlinear (monotonic increasing)\nMean diff: {np.mean(np.diff(trend)):.8f}\nStd of differences = {np.std(np.diff(trend)):.10f}',
                            transform=ax.transAxes, fontsize=11,
                            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
                 ax.set_xlabel('Period index', fontsize=12)
@@ -740,10 +699,8 @@ def _visualize_model_results(
                 est_trend_type = estimator.config.trend_config.trend_type.value if estimator.config.trend_config else 'none'
                 if est_trend_type == 'linear':
                     ax.set_title('Trend in log space - Detailed View (linear - should be perfectly straight)', fontsize=14, fontweight='bold')
-                elif _is_decreasing_trend_type(est_trend_type):
+                elif est_trend_type == 'nonlinear':
                     ax.set_title('Trend in log space - Detailed View (nonlinear - monotonic decreasing)', fontsize=14, fontweight='bold')
-                elif _is_increasing_trend_type(est_trend_type):
-                    ax.set_title('Trend in log space - Detailed View (nonlinear - monotonic increasing)', fontsize=14, fontweight='bold')
                 else:
                     ax.set_title('Trend in log space - Detailed View', fontsize=14, fontweight='bold')
 

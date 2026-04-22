@@ -7,7 +7,7 @@ Time Series Generalized Additive Model (TSGAM) Estimator.
 This package provides a GAM model for time series forecasting that combines:
 - Multi-periodic Fourier basis functions for seasonal patterns
 - Cubic spline or linear basis functions for exogenous variables with lead/lag
-- Optional trend term (constant per period, linear or monotonic nonlinear)
+- Optional trend term (constant per period, linear or nonlinear)
 - Optional outlier detector (sparse multiplicative corrections per period)
 - Optional autoregressive (AR) modeling of residuals
 """
