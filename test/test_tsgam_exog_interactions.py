@@ -227,36 +227,49 @@ def test_interaction_pairs_validate_pair_structure(interaction_pairs, message):
         est.fit(X[["x0", "x1"]], y)
 
 
-def test_linear_linear_interaction_uses_single_coefficient():
-    X, y = _make_additive_plus_interaction_data(n_samples=180)
-    est = TsgamEstimator(
-        config=TsgamEstimatorConfig(
-            multi_periodic_config=None,
-            exog_config=[
+@pytest.mark.parametrize(
+    ("exog_config", "expected_shape"),
+    [
+        pytest.param(
+            [
                 TsgamLinearConfig(lags=[0]),
                 TsgamLinearConfig(lags=[0]),
             ],
-            interaction_pairs=[(0, 1)],
-            solver_config=SOLVER,
-        )
-    )
-
-    est.fit(X[["x0", "x1"]], y)
-
-    coef = est.variables_["interaction_coef_0"].value
-    assert coef is not None
-    assert coef.shape == (1,)
-
-
-def test_spline_linear_interaction_has_q_times_r_coefficients():
-    X, y = _make_additive_plus_interaction_data(n_samples=180)
-    est = TsgamEstimator(
-        config=TsgamEstimatorConfig(
-            multi_periodic_config=None,
-            exog_config=[
+            (1,),
+            id="linear-linear",
+        ),
+        pytest.param(
+            [
+                TsgamLinearConfig(lags=[0]),
+                TsgamSplineConfig(n_knots=5, lags=[0]),
+            ],
+            (4,),
+            id="linear-spline",
+        ),
+        pytest.param(
+            [
                 TsgamSplineConfig(n_knots=5, lags=[0]),
                 TsgamLinearConfig(lags=[0]),
             ],
+            (4,),
+            id="spline-linear",
+        ),
+        pytest.param(
+            [
+                TsgamSplineConfig(n_knots=5, lags=[0]),
+                TsgamSplineConfig(n_knots=5, lags=[0]),
+            ],
+            (16,),
+            id="spline-spline",
+        ),
+    ],
+)
+def test_interaction_pairings_have_expected_coefficient_shapes(exog_config, expected_shape):
+    X, y = _make_additive_plus_interaction_data(n_samples=180)
+    est = TsgamEstimator(
+        config=TsgamEstimatorConfig(
+            multi_periodic_config=None,
+            exog_config=exog_config,
             interaction_pairs=[(0, 1)],
             solver_config=SOLVER,
         )
@@ -266,7 +279,7 @@ def test_spline_linear_interaction_has_q_times_r_coefficients():
 
     coef = est.variables_["interaction_coef_0"].value
     assert coef is not None
-    assert coef.shape == (4,)
+    assert coef.shape == expected_shape
 
 
 def test_interactions_use_only_current_index_when_main_effects_have_lags():
