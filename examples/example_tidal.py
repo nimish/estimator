@@ -7,7 +7,7 @@ Example: Tidal Water Level Prediction with TSGAM
 
 Demonstrates predicting tidal water levels at NOAA tide gauge stations using:
 - Constituent-aware multi-periodic Fourier basis for astronomical tides
-  (M2, S2, N2, K1, O1, Mf, Mm, annual)
+  (M2, S2, N2, K1, O1, P1, Q1, Mf, Msf, Mm, annual)
 - Meteorological regressors (barometric pressure, water temperature, wind)
   to capture the non-tidal residual (storm surge, inverse barometer effect)
 - Optional linear trend for long-term sea level change
@@ -75,12 +75,18 @@ PERIOD_HOURLY_O1 = 25.81934
 PERIOD_HOURLY_P1 = 24.06589
 """P1 principal solar diurnal constituent (~24 h 4 min)."""
 
+PERIOD_HOURLY_Q1 = 26.86835
+"""Q1 larger lunar elliptic diurnal constituent (~26 h 52 min)."""
+
 PERIOD_HOURLY_MF = 327.85994
 """Mf lunar fortnightly constituent (~13.66 days)."""
 
 PERIOD_HOURLY_FORTNIGHTLY = 354.37
 """MSf spring-neap cycle (~14.77 days).  Modulation of tidal range
 due to lunar-solar alignment."""
+
+PERIOD_HOURLY_MSF = PERIOD_HOURLY_FORTNIGHTLY
+"""Msf spring-neap constituent (~14.77 days)."""
 
 PERIOD_HOURLY_MM = 661.31
 """Mm lunar monthly constituent (~27.55 days)."""
@@ -92,7 +98,10 @@ TIDAL_CONSTITUENT_PERIODS_HOURS = OrderedDict(
         ('N2', PERIOD_HOURLY_N2),
         ('K1', PERIOD_HOURLY_K1),
         ('O1', PERIOD_HOURLY_O1),
+        ('P1', PERIOD_HOURLY_P1),
+        ('Q1', PERIOD_HOURLY_Q1),
         ('Mf', PERIOD_HOURLY_MF),
+        ('Msf', PERIOD_HOURLY_MSF),
         ('Mm', PERIOD_HOURLY_MM),
         ('annual', PERIOD_HOURLY_YEARLY),
     ],
@@ -106,7 +115,10 @@ TIDAL_CONSTITUENT_HARMONICS = OrderedDict(
         ('N2', 1),
         ('K1', 2),      # second harmonic reaches the K2 band
         ('O1', 1),
+        ('P1', 1),
+        ('Q1', 1),
         ('Mf', 1),
+        ('Msf', 1),
         ('Mm', 1),
         ('annual', 2),  # annual + semiannual structure
     ],

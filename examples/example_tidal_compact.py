@@ -5,10 +5,9 @@ app = marimo.App(width="full")
 
 with app.setup:
     import os
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from datetime import date, timedelta
-    from functools import partial
     from math import factorial
     from pathlib import Path
     from typing import TypedDict, cast
@@ -89,6 +88,8 @@ with app.setup:
     }
     KNOT_PRESET_TO_COUNT = {"low": 4, "med": 8, "high": 12}
     KNOT_PRESET_OPTIONS = {"Low": "low", "Med": "med", "High": "high"}
+    INTERACTION_PAIR_SEPARATOR = "|"
+    HARMONIC_SLIDER_MAX = 32
     DEFAULT_HARMONICS = {
         "M2": 4,
         "S2": 1,
@@ -105,8 +106,13 @@ with app.setup:
         "mape": ("MAPE", "%", 2),
         "r2": ("R^2", "", 3),
     }
+    MAPE_OBS_THRESHOLD = 0.01
+    FOURIER_BASE_REG_WEIGHT = 1e-4
+    FOURIER_MAX_REG_WEIGHT = 1e-2
+    FOURIER_LONG_PERIOD_THRESHOLD_HOURS = 24 * 7
+    FOURIER_SAFE_HARMONIC_ORDER = 4
     DATA_WINDOW_DEFAULT_START = pd.Timestamp("2022-01-01").date()
-    DATA_WINDOW_DEFAULT_END = pd.Timestamp("2024-03-31").date()
+    DATA_WINDOW_DEFAULT_END = pd.Timestamp("2025-01-01").date()
 
     class StationData(TypedDict):
         df: pd.DataFrame
@@ -119,11 +125,15 @@ with app.setup:
         df: pd.DataFrame
         sph: int
         harmonic_orders: dict[str, int]
+        fourier_reg_weight: float | None
         lag_ranges: dict[str, tuple[int, int]]
         knot_presets: dict[str, str]
+        interaction_pairs: list[tuple[str, str]]
         train_start: str
         train_end: str
         test_end: str
+        solver_verbose: bool
+        debug: bool
 
     class MetricDict(TypedDict):
         rmse: float
@@ -139,17 +149,38 @@ with app.setup:
         grid: np.ndarray
         basis: np.ndarray
 
+    class RegressorResponseInputs(TypedDict):
+        regressor_name: str
+        regressor_label: str
+        selected_lag: int
+        x_scatter: np.ndarray
+        y_scatter: np.ndarray
+        time_index: pd.DatetimeIndex
+        grid: np.ndarray
+        curve: np.ndarray
+
     class FitResult(TypedDict):
         metrics_train: MetricDict
         metrics_test: MetricDict
+        tr_index: pd.DatetimeIndex
+        tr_obs: np.ndarray
+        tr_pred: np.ndarray
+        tr_obs_clean: np.ndarray
+        tr_pred_clean: np.ndarray
+        tr_mape_n: int
         te_index: pd.DatetimeIndex
         te_obs: np.ndarray
         te_pred: np.ndarray
         te_obs_clean: np.ndarray
         te_pred_clean: np.ndarray
+        te_mape_n: int
         residuals: np.ndarray
         picked: dict[str, tuple[float, int]]
         active_regs: list[str]
+        active_interactions: list[str]
+        x_train_fit: pd.DataFrame
+        model: TsgamEstimator | None
+        exog_config: list[TsgamSplineConfig | TsgamLinearConfig] | None
         n_train: int
         n_test: int
         sph: int
@@ -318,7 +349,7 @@ def _(station_data):
     harmonic_inputs = {
         name: mo.ui.slider(
             start=0,
-            stop=8,
+            stop=HARMONIC_SLIDER_MAX,
             value=order,
             label=f"{name} ({PERIODS.get(name, 8766.0):.1f} h)",
             show_value=True,
@@ -350,10 +381,38 @@ def _(station_data):
         _regressor_rows.append(
             mo.hstack([regressor_toggles[name], regressor_lags[name], regressor_knots[name]], justify="start")
         )
+    _interaction_options = build_interaction_pair_options(_available_regressors)
+    interaction_pairs_select = mo.ui.multiselect(
+        options=_interaction_options,
+        value=[],
+        label="2-way interactions",
+    )
+    _interaction_controls = (
+        mo.vstack(
+            [
+                mo.md("**Interactions** (exact pairs; current index only)"),
+                interaction_pairs_select,
+                mo.md("*Interactions use each regressor's `lag=0` basis only; main-effect lags still apply.*"),
+            ]
+        )
+        if _interaction_options
+        else mo.md("*Need at least two available regressors to enable interactions.*")
+    )
 
     train_start = mo.ui.date(value=_train_start_default, label="Train start")
     train_end = mo.ui.date(value=_train_end_default, label="Train end")
     test_end = mo.ui.date(value=_test_end_default, label="Test end")
+    fourier_reg_weight = mo.ui.slider(
+        start=1e-5,
+        stop=1e-1,
+        value=FOURIER_BASE_REG_WEIGHT,
+        step=1e-5,
+        label="Fourier reg weight",
+        show_value=True,
+        full_width=True,
+    )
+    fit_verbose = mo.ui.switch(value=False, label="Verbose solver")
+    fit_debug = mo.ui.switch(value=False, label="Debug estimator")
     run_fit = mo.ui.run_button(label="Fit model")
 
     mo.vstack(
@@ -362,10 +421,22 @@ def _(station_data):
             mo.hstack(
                 [
                     mo.vstack([mo.md("**Harmonics** (0 = exclude)")] + list(harmonic_inputs.values())),
-                    mo.vstack([mo.md("**Regressors** (toggle + lag range in hours + knots)")] + _regressor_rows)
+                    mo.vstack(
+                        [mo.md("**Regressors** (toggle + lag range in hours + knots)")] + _regressor_rows + [_interaction_controls]
+                    )
                     if _available_regressors
                     else mo.md(""),
-                    mo.vstack([mo.md("**Date ranges**"), train_start, train_end, test_end]),
+                    mo.vstack(
+                        [
+                            mo.md("**Date ranges / fit options**"),
+                            train_start,
+                            train_end,
+                            test_end,
+                            fourier_reg_weight,
+                            fit_verbose,
+                            fit_debug,
+                        ]
+                    ),
                 ],
                 justify="start",
                 gap=2,
@@ -374,7 +445,11 @@ def _(station_data):
         ]
     )
     return (
+        fit_debug,
+        fit_verbose,
+        fourier_reg_weight,
         harmonic_inputs,
+        interaction_pairs_select,
         regressor_knots,
         regressor_lags,
         regressor_toggles,
@@ -386,71 +461,71 @@ def _(station_data):
 
 
 @app.cell
-def _(station_data):
-    _available_regressors = available_columns(station_data["df"], MODEL_REGRESSOR_CANDIDATES)
-    mo.stop(
-        not _available_regressors,
-        mo.md("*No model regressors are available in the loaded dataset for inspection.*"),
-    )
-    _options = {
-        COLUMN_LABELS.get(name, name): name for name in _available_regressors
-    }
-    inspect_regressor = mo.ui.dropdown(
-        options=_options,
-        value=option_name_for_value(_options, _available_regressors[0]),
-        label="Inspect regressor",
-    )
-    mo.vstack(
-        [
-            mo.md("## Regressor inspection"),
-            inspect_regressor,
-        ]
-    )
-    return (inspect_regressor,)
+def _():
+    return
 
 
 @app.cell
-def _(
-    inspect_regressor,
-    regressor_knots,
-    station_data,
-    test_end,
-    train_end,
-    train_start,
-):
-    _regressor_name = inspect_regressor.value
-    _knot_preset = regressor_knots[_regressor_name].value
-    _window_message = build_model_window_validation_message(
-        station_data["date_min"],
-        station_data["date_max"],
-        train_start.value,
-        train_end.value,
-        test_end.value,
+def _(fit_result):
+    _active_regs = fit_result["active_regs"]
+    mo.stop(
+        not _active_regs,
+        mo.md("*Fit a model with at least one active regressor to see regressor response plots.*"),
     )
-    mo.stop(_window_message is not None, mo.md(f"*{_window_message}*"))
-    try:
-        _basis_inputs = build_model_regressor_basis_inputs(
-            station_data["df"],
-            _regressor_name,
-            _knot_preset,
-            train_start.value,
-            train_end.value,
-            test_end.value,
+    mo.stop(
+        fit_result.get("model") is None or not fit_result.get("exog_config"),
+        mo.md("*Regressor response plots are only available for successful exogenous-model fits.*"),
+    )
+    regressor_response_lag_selectors = {}
+    _exog_config = fit_result["exog_config"]
+    for _reg_idx, _regressor_name in enumerate(_active_regs):
+        _reg_cfg = _exog_config[_reg_idx]
+        _lag_options = {
+            f"{lag / fit_result['sph']:+g} h": lag
+            for lag in _reg_cfg.lags
+        }
+        _default_lag = select_default_plot_lag(list(_reg_cfg.lags))
+        _default_label = next(
+            label for label, lag in _lag_options.items() if lag == _default_lag
         )
-    except ValueError as exc:
-        mo.stop(True, mo.md(f"*{exc}*"))
-    mo.vstack(
-        [
-            mo.md(f"*Current knot preset for `{_regressor_name}`: `{_knot_preset}`*"),
-            build_regressor_basis_figure(_basis_inputs, knot_preset=_knot_preset),
-        ]
-    )
+        regressor_response_lag_selectors[_regressor_name] = mo.ui.dropdown(
+            options=_lag_options,
+            value=_default_label,
+            label="Lag shown",
+        )
+    return (regressor_response_lag_selectors,)
+
+
+@app.cell
+def _(fit_result, regressor_response_lag_selectors):
+    _tabs = {}
+    for _regressor_name, _lag_selector in regressor_response_lag_selectors.items():
+        try:
+            _response_inputs = build_regressor_response_inputs(
+                fit_result,
+                _regressor_name,
+                lag=int(_lag_selector.value),
+            )
+            _tab_content = mo.vstack(
+                [
+                    _lag_selector,
+                    build_regressor_response_figure(_response_inputs, sph=fit_result["sph"]),
+                ]
+            )
+        except ValueError as exc:
+            _tab_content = mo.vstack([_lag_selector, mo.md(f"*{exc}*")])
+        _tabs[COLUMN_LABELS.get(_regressor_name, _regressor_name)] = _tab_content
+    mo.vstack([mo.md("## Regressor response"), mo.ui.tabs(_tabs, lazy=False)])
     return
 
 
 @app.cell
 def _(
+    fit_debug,
+    fit_verbose,
+    fourier_reg_weight,
     harmonic_inputs,
+    interaction_pairs_select,
     regressor_knots,
     regressor_lags,
     regressor_toggles,
@@ -474,11 +549,15 @@ def _(
         regressor_lags,
         regressor_toggles,
         regressor_knots,
+        interaction_pairs_select,
         df=station_data["df"],
         sph=station_data["sph"],
         train_start=train_start,
         train_end=train_end,
         test_end=test_end,
+        fourier_reg_weight=fourier_reg_weight,
+        fit_verbose=fit_verbose,
+        fit_debug=fit_debug,
     )
     mo.stop(not any(_component_mask.values()), mo.md("*Set at least one constituent to harmonics > 0.*"))
 
@@ -490,12 +569,24 @@ def _(
 @app.cell
 def _(fit_result):
     mo.Html(build_metrics_table_html(fit_result))
+
+    # 1. verbose fitting
+    # 2. debug
+    # 3. plot on train
+    # 4. higher regularization for higher harmonic orders
+    # 5. MAPE: investigate reference point
     return
 
 
 @app.cell
 def _(fit_label, fit_result):
-    build_fit_timeseries_figure(fit_label, fit_result)
+    mo.ui.tabs(
+        {
+            "Test": build_fit_timeseries_figure(fit_label, fit_result),
+            "Train": build_train_fit_timeseries_figure(fit_label, fit_result),
+        },
+        lazy=False,
+    )
     return
 
 
@@ -514,7 +605,11 @@ def _():
 
 @app.cell
 def _(
+    fit_debug,
+    fit_verbose,
+    fourier_reg_weight,
     harmonic_inputs,
+    interaction_pairs_select,
     regressor_knots,
     regressor_lags,
     regressor_toggles,
@@ -538,72 +633,60 @@ def _(
         regressor_lags,
         regressor_toggles,
         regressor_knots,
+        interaction_pairs_select,
         df=station_data["df"],
         sph=station_data["sph"],
         train_start=train_start,
         train_end=train_end,
         test_end=test_end,
+        fourier_reg_weight=fourier_reg_weight,
+        fit_verbose=fit_verbose,
+        fit_debug=fit_debug,
     )
-    _components = [name for name, active in _component_mask.items() if active]
+    _df_train, _df_test, _ok_train, _ok_test = split_model_window(
+        station_data["df"],
+        _model_kwargs["train_start"],
+        _model_kwargs["train_end"],
+        _model_kwargs["test_end"],
+    )
+    _reg_names = [name for name, active in _component_mask.items() if active and name not in PERIODS]
+    _x_train_fit, _x_train_pred, _x_test_pred, _active_regs, _exog_config = build_exog_design_matrices(
+        _df_train,
+        _df_test,
+        _ok_train,
+        _reg_names,
+        _model_kwargs["lag_ranges"],
+        _model_kwargs["knot_presets"],
+        _model_kwargs["sph"],
+    )
+    _components, _interaction_lookup = build_shapley_component_list(
+        _component_mask,
+        _active_regs,
+        _model_kwargs["interaction_pairs"],
+        _model_kwargs["lag_ranges"],
+    )
     _num_components = len(_components)
 
     mo.stop(_num_components < 2, mo.md("*Need at least 2 active components for Shapley analysis.*"))
     mo.stop(
         _num_components > 12,
-        mo.md(f"*{_num_components} components -> {2**_num_components:,} model runs - cap at 12.*"),
+        mo.md(f"*{_num_components} components -> {2**_num_components:,} raw coalitions - cap at 12.*"),
     )
-
-    _run_model = partial(run_tidal_model, **_model_kwargs)
-    _total_coalitions = 2**_num_components
-    _failed_runs = 0
-    _baseline_metrics = _run_model({component: False for component in _components})["metrics_test"]
-    _coalition_metrics: dict[int, dict[str, float]] = {0: _baseline_metrics}
-    _max_workers = min(os.cpu_count() or 4, _total_coalitions, 8)
-
-    with mo.status.progress_bar(total=_total_coalitions) as _progress:
-        _progress.update()
-        _coalition_masks = {
-            bits: {component: bool(bits & (1 << idx)) for idx, component in enumerate(_components)}
-            for bits in range(1, 2**_num_components)
-        }
-        with ThreadPoolExecutor(max_workers=_max_workers) as _pool:
-            _futures = {
-                _pool.submit(_run_model, coalition_mask): bits
-                for bits, coalition_mask in _coalition_masks.items()
-            }
-            for _future in as_completed(_futures):
-                _bits = _futures[_future]
-                _metrics = _future.result()["metrics_test"]
-                if np.isnan(_metrics.get("r2", 0.0)):
-                    _failed_runs += 1
-                _coalition_metrics[_bits] = _metrics
-                _progress.update()
-
-    _baseline_r2 = _baseline_metrics.get("r2", 0.0)
-    if not np.isfinite(_baseline_r2):
-        _baseline_r2 = 0.0
-    _baseline_rmse = _baseline_metrics.get("rmse", np.nan)
-    if not np.isfinite(_baseline_rmse):
-        _baseline_rmse = np.nan
-    _full_mask = 2**_num_components - 1
-    shapley_result: ShapleyResult = {
-        "components": _components,
-        "coalitions": _total_coalitions,
-        "failed": _failed_runs,
-        "baseline_r2": _baseline_r2,
-        "baseline_rmse": _baseline_rmse,
-        "full_r2": _coalition_metrics[_full_mask].get("r2", 0.0)
-        if np.isfinite(_coalition_metrics[_full_mask].get("r2", 0.0))
-        else 0.0,
-        "full_rmse": _coalition_metrics[_full_mask].get("rmse", _baseline_rmse),
-        "shap_r2": compute_shapley(_coalition_metrics, _components, "r2", _baseline_r2),
-        "shap_rmse": compute_shapley(_coalition_metrics, _components, "rmse", _baseline_rmse),
-    }
+    _raw_to_canonical = build_shapley_coalition_plan(_components, _interaction_lookup)
+    with mo.status.progress_bar(total=len(set(_raw_to_canonical.values()))) as _progress:
+        shapley_result = build_shapley_result(
+            _component_mask,
+            components=_components,
+            interaction_lookup=_interaction_lookup,
+            raw_to_canonical=_raw_to_canonical,
+            **_model_kwargs,
+            progress_callback=_progress.update,
+        )
     return (shapley_result,)
 
 
 @app.cell
-def _(shapley_result: ShapleyResult):
+def _(shapley_result):
     build_shapley_figure(shapley_result)
     return
 
@@ -1010,12 +1093,16 @@ def collect_model_params(
     regressor_lags,
     regressor_toggles,
     regressor_knots,
+    interaction_pairs_select,
     *,
     df: pd.DataFrame,
     sph: int,
     train_start,
     train_end,
     test_end,
+    fourier_reg_weight=None,
+    fit_verbose=None,
+    fit_debug=None,
 ) -> tuple[dict[str, bool], ModelKwargs]:
     mask = {name: int(widget.value) > 0 for name, widget in harmonic_inputs.items()}
     mask.update({name: widget.value for name, widget in regressor_toggles.items()})
@@ -1023,11 +1110,15 @@ def collect_model_params(
         "df": df,
         "sph": sph,
         "harmonic_orders": {name: int(widget.value) for name, widget in harmonic_inputs.items()},
+        "fourier_reg_weight": float(getattr(fourier_reg_weight, "value", FOURIER_BASE_REG_WEIGHT)),
         "lag_ranges": {name: widget.value for name, widget in regressor_lags.items()},
         "knot_presets": {name: widget.value for name, widget in regressor_knots.items()},
+        "interaction_pairs": decode_interaction_pair_values(list(interaction_pairs_select.value)),
         "train_start": str(train_start.value),
         "train_end": str(train_end.value),
         "test_end": str(test_end.value),
+        "solver_verbose": bool(getattr(fit_verbose, "value", False)),
+        "debug": bool(getattr(fit_debug, "value", False)),
     }
 
 
@@ -1045,6 +1136,142 @@ def build_knot_count(preset: str) -> int:
         return KNOT_PRESET_TO_COUNT[preset]
     except KeyError as exc:
         raise ValueError(f"Unknown knot preset: {preset}") from exc
+
+
+@app.function
+def format_interaction_pair_label(left_name: str, right_name: str) -> str:
+    left_label = COLUMN_LABELS.get(left_name, left_name)
+    right_label = COLUMN_LABELS.get(right_name, right_name)
+    return f"{left_label} × {right_label}"
+
+
+@app.function
+def build_interaction_pair_options(reg_names: list[str]) -> dict[str, str]:
+    unique_names = list(dict.fromkeys(reg_names))
+    options: dict[str, str] = {}
+    for left_ix, left_name in enumerate(unique_names):
+        for right_name in unique_names[left_ix + 1 :]:
+            options[format_interaction_pair_label(left_name, right_name)] = (
+                f"{left_name}{INTERACTION_PAIR_SEPARATOR}{right_name}"
+            )
+    return options
+
+
+@app.function
+def decode_interaction_pair_values(pair_values: list[str]) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for pair_value in pair_values:
+        try:
+            left_name, right_name = pair_value.split(INTERACTION_PAIR_SEPARATOR, maxsplit=1)
+        except ValueError as exc:
+            raise ValueError(f"Invalid interaction pair value: {pair_value!r}") from exc
+        pairs.append((left_name, right_name))
+    return pairs
+
+
+@app.function
+def build_interaction_index_pairs(
+    active_regs: list[str],
+    interaction_pairs: list[tuple[str, str]],
+) -> list[tuple[int, int]]:
+    reg_index = {name: idx for idx, name in enumerate(active_regs)}
+    return [
+        (reg_index[left_name], reg_index[right_name])
+        for left_name, right_name in interaction_pairs
+        if left_name in reg_index and right_name in reg_index
+    ]
+
+
+@app.function
+def build_active_interaction_labels(
+    active_regs: list[str],
+    interaction_pairs: list[tuple[str, str]],
+) -> list[str]:
+    active_reg_set = set(active_regs)
+    return [
+        format_interaction_pair_label(left_name, right_name)
+        for left_name, right_name in interaction_pairs
+        if left_name in active_reg_set and right_name in active_reg_set
+    ]
+
+
+@app.function
+def build_shapley_component_list(
+    component_mask: dict[str, bool],
+    active_regs: list[str],
+    interaction_pairs: list[tuple[str, str]],
+    lag_ranges: dict[str, tuple[int, int]],
+) -> tuple[list[str], dict[str, tuple[str, str]]]:
+    harmonic_components = [name for name, active in component_mask.items() if active and name in PERIODS]
+    regressor_components = [name for name in active_regs if component_mask.get(name, False)]
+    active_reg_set = set(regressor_components)
+    interaction_lookup: dict[str, tuple[str, str]] = {}
+    for left_name, right_name in interaction_pairs:
+        if left_name not in active_reg_set or right_name not in active_reg_set:
+            continue
+        left_lag_start, left_lag_end = lag_ranges[left_name]
+        right_lag_start, right_lag_end = lag_ranges[right_name]
+        if not (left_lag_start <= 0 <= left_lag_end and right_lag_start <= 0 <= right_lag_end):
+            continue
+        interaction_lookup[format_interaction_pair_label(left_name, right_name)] = (left_name, right_name)
+    return harmonic_components + regressor_components + list(interaction_lookup), interaction_lookup
+
+
+@app.function
+def canonicalize_shapley_coalition(
+    raw_bits: int,
+    components: list[str],
+    interaction_lookup: dict[str, tuple[str, str]],
+) -> int:
+    active_components = {
+        component
+        for idx, component in enumerate(components)
+        if raw_bits & (1 << idx)
+    }
+    canonical_components = set(active_components)
+    for label, (left_name, right_name) in interaction_lookup.items():
+        if label in canonical_components and (left_name not in canonical_components or right_name not in canonical_components):
+            canonical_components.remove(label)
+    canonical_bits = 0
+    for idx, component in enumerate(components):
+        if component in canonical_components:
+            canonical_bits |= 1 << idx
+    return canonical_bits
+
+
+@app.function
+def build_shapley_coalition_plan(
+    components: list[str],
+    interaction_lookup: dict[str, tuple[str, str]],
+) -> dict[int, int]:
+    return {
+        raw_bits: canonicalize_shapley_coalition(raw_bits, components, interaction_lookup)
+        for raw_bits in range(2 ** len(components))
+    }
+
+
+@app.function
+def build_shapley_model_inputs(
+    canonical_bits: int,
+    components: list[str],
+    base_component_mask: dict[str, bool],
+    interaction_lookup: dict[str, tuple[str, str]],
+) -> tuple[dict[str, bool], list[tuple[str, str]]]:
+    active_components = {
+        component
+        for idx, component in enumerate(components)
+        if canonical_bits & (1 << idx)
+    }
+    coalition_mask = {name: False for name in base_component_mask}
+    for component in active_components:
+        if component in coalition_mask:
+            coalition_mask[component] = True
+    coalition_interactions = [
+        interaction_lookup[component]
+        for component in components
+        if component in interaction_lookup and component in active_components
+    ]
+    return coalition_mask, coalition_interactions
 
 
 @app.function
@@ -1229,10 +1456,157 @@ def build_regressor_basis_figure(
 
 
 @app.function
+def select_default_plot_lag(active_lags: list[int]) -> int:
+    if not active_lags:
+        raise ValueError("Need at least one active lag to choose a default plot lag.")
+    if 0 in active_lags:
+        return 0
+    return min(active_lags, key=lambda lag: (abs(lag), lag > 0, lag))
+
+
+@app.function
+def build_typical_cycle_frame(
+    *,
+    index: pd.DatetimeIndex,
+    observed: np.ndarray,
+    predicted: np.ndarray,
+    cycle_length_samples: int,
+) -> pd.DataFrame:
+    if cycle_length_samples <= 0:
+        raise ValueError("cycle_length_samples must be positive.")
+    frame = pd.DataFrame(
+        {
+            "observed": np.asarray(observed, dtype=float),
+            "predicted": np.asarray(predicted, dtype=float),
+        },
+        index=pd.DatetimeIndex(index),
+    )
+    if frame.empty:
+        return pd.DataFrame({"phase": [], "observed": [], "predicted": []})
+    frame["phase"] = np.arange(len(frame), dtype=int) % cycle_length_samples
+    frame = frame[np.isfinite(frame["observed"]) & np.isfinite(frame["predicted"])].copy()
+    grouped = frame.groupby("phase", sort=True)[["observed", "predicted"]].mean().reset_index()
+    return grouped
+
+
+@app.function
+def build_regressor_response_inputs(
+    fit_result: FitResult,
+    regressor_name: str,
+    *,
+    lag: int,
+    grid_size: int = 200,
+) -> RegressorResponseInputs:
+    model = fit_result.get("model")
+    exog_config = fit_result.get("exog_config")
+    x_train_fit = fit_result.get("x_train_fit")
+    if model is None or exog_config is None or x_train_fit is None:
+        raise ValueError("Need a successful fitted exogenous model to build regressor response inputs.")
+    active_regs = fit_result["active_regs"]
+    if regressor_name not in active_regs or regressor_name not in x_train_fit:
+        raise ValueError(f"{regressor_name} is not available in the fitted regressor response inputs.")
+    reg_idx = active_regs.index(regressor_name)
+    reg_config = exog_config[reg_idx]
+    if lag not in reg_config.lags:
+        raise ValueError(f"Lag {lag} is unavailable for {regressor_name}.")
+    coef = model.variables_[f"exog_coef_{reg_idx}"].value
+    if coef is None:
+        raise ValueError(f"No fitted exogenous coefficients are available for {regressor_name}.")
+
+    raw_x = x_train_fit[regressor_name].to_numpy(dtype=float)
+    aligned_x = model._make_offset_H(raw_x.reshape(-1, 1), lag).reshape(-1)
+    y_scatter_raw = np.asarray(fit_result["tr_obs_clean"], dtype=float)
+    valid = np.isfinite(aligned_x) & np.isfinite(y_scatter_raw)
+    if not np.any(valid):
+        raise ValueError(f"No valid training samples remain for `{regressor_name}` at lag {lag}.")
+    x_scatter = aligned_x[valid]
+    y_scatter = y_scatter_raw[valid]
+    time_index = pd.DatetimeIndex(x_train_fit.index[valid])
+    grid = np.linspace(float(np.min(x_scatter)), float(np.max(x_scatter)), grid_size)
+    lag_idx = reg_config.lags.index(lag)
+    coef_matrix = np.asarray(coef, dtype=float)
+    if isinstance(reg_config, TsgamSplineConfig):
+        knots = model.exog_knots_[reg_idx]
+        H_grid = model._make_H(grid, knots, include_offset=False)
+        response = H_grid @ coef_matrix[:, lag_idx]
+    else:
+        response = grid * float(coef_matrix[0, lag_idx])
+    curve = response - float(np.mean(response)) + float(np.mean(y_scatter))
+    return {
+        "regressor_name": regressor_name,
+        "regressor_label": COLUMN_LABELS.get(regressor_name, regressor_name),
+        "selected_lag": lag,
+        "x_scatter": x_scatter,
+        "y_scatter": y_scatter,
+        "time_index": time_index,
+        "grid": grid,
+        "curve": curve,
+    }
+
+
+@app.function
+def build_regressor_response_figure(
+    response_inputs: RegressorResponseInputs,
+    *,
+    sph: int,
+) -> go.Figure:
+    lag_hours = response_inputs["selected_lag"] / sph
+    color_values = np.linspace(0.0, 1.0, len(response_inputs["x_scatter"]))
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scattergl(
+            x=response_inputs["x_scatter"],
+            y=response_inputs["y_scatter"],
+            mode="markers",
+            marker=dict(
+                size=3,
+                opacity=0.28,
+                color=color_values,
+                colorscale="Viridis",
+                showscale=False,
+            ),
+            name="observed",
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=response_inputs["grid"],
+            y=response_inputs["curve"],
+            mode="lines",
+            line=dict(width=2.0, color="black"),
+            name="fitted response",
+        )
+    )
+    figure.update_layout(
+        title=f"{response_inputs['regressor_label']} response (lag {lag_hours:+g} h)",
+        xaxis_title=response_inputs["regressor_label"],
+        yaxis_title="Water level (m)",
+        height=420,
+        margin=dict(l=60, r=20, t=50, b=50),
+    )
+    return figure
+
+
+@app.function
+def build_fourier_reg_weight(picked: dict[str, tuple[float, int]]) -> float:
+    max_long_order = max(
+        (
+            order
+            for period, order in picked.values()
+            if period >= FOURIER_LONG_PERIOD_THRESHOLD_HOURS
+        ),
+        default=FOURIER_SAFE_HARMONIC_ORDER,
+    )
+    scale = max(1.0, (max_long_order / FOURIER_SAFE_HARMONIC_ORDER) ** 2)
+    return min(FOURIER_BASE_REG_WEIGHT * scale, FOURIER_MAX_REG_WEIGHT)
+
+
+@app.function
 def build_periodic_config(
     component_mask: dict[str, bool],
     harmonic_orders: dict[str, int],
     sph: int,
+    fourier_reg_weight: float | None = None,
 ) -> tuple[dict[str, tuple[float, int]], TsgamMultiPeriodicConfig | None]:
     picked: dict[str, tuple[float, int]] = {}
     for name, active in component_mask.items():
@@ -1244,10 +1618,15 @@ def build_periodic_config(
 
     config = None
     if picked:
+        resolved_reg_weight = (
+            build_fourier_reg_weight(picked)
+            if fourier_reg_weight is None
+            else float(fourier_reg_weight)
+        )
         config = TsgamMultiPeriodicConfig(
             periods=[period * sph for period, _ in picked.values()],
             num_harmonics=[order for _, order in picked.values()],
-            reg_weight=1e-4,
+            reg_weight=resolved_reg_weight,
         )
     return picked, config
 
@@ -1300,6 +1679,7 @@ def build_exog_design_matrices(
 
 @app.function
 def pack_model_result(
+    df_train: pd.DataFrame,
     df_test: pd.DataFrame,
     y_train: np.ndarray,
     ok_train: pd.Series,
@@ -1308,10 +1688,17 @@ def pack_model_result(
     yhat_test: np.ndarray,
     picked: dict[str, tuple[float, int]],
     active_regs: list[str],
+    active_interactions: list[str],
     sph: int,
+    x_train_fit: pd.DataFrame | None = None,
+    exog_config: list[TsgamSplineConfig | TsgamLinearConfig] | None = None,
+    model: TsgamEstimator | None = None,
 ) -> FitResult:
     ok_train_np = ok_train.to_numpy(dtype=bool)
     ok_test_np = ok_test.to_numpy(dtype=bool)
+    tr_index = pd.DatetimeIndex(df_train.index)
+    train_obs = df_train["water_level"].to_numpy(dtype=float)
+    train_obs_clean = df_train.loc[ok_train, "water_level"].to_numpy(dtype=float)
     te_index = pd.DatetimeIndex(df_test.index)
     test_obs = df_test["water_level"].to_numpy(dtype=float)
     test_obs_clean = df_test.loc[ok_test, "water_level"].to_numpy(dtype=float)
@@ -1320,14 +1707,25 @@ def pack_model_result(
     return cast(FitResult, {
         "metrics_train": train_metrics,
         "metrics_test": test_metrics,
+        "tr_index": tr_index,
+        "tr_obs": train_obs,
+        "tr_pred": yhat_train,
+        "tr_obs_clean": train_obs_clean,
+        "tr_pred_clean": yhat_train[ok_train_np],
+        "tr_mape_n": int(np.sum(np.abs(train_obs_clean) > MAPE_OBS_THRESHOLD)),
         "te_index": te_index,
         "te_obs": test_obs,
         "te_pred": yhat_test,
         "te_obs_clean": test_obs_clean,
         "te_pred_clean": yhat_test[ok_test_np],
+        "te_mape_n": int(np.sum(np.abs(test_obs_clean) > MAPE_OBS_THRESHOLD)),
         "residuals": test_obs - yhat_test,
         "picked": picked,
         "active_regs": active_regs,
+        "active_interactions": active_interactions,
+        "x_train_fit": x_train_fit if x_train_fit is not None else pd.DataFrame(index=df_train.index[ok_train]),
+        "model": model,
+        "exog_config": exog_config,
         "n_train": len(y_train),
         "n_test": int(ok_test.sum()),
         "sph": sph,
@@ -1341,11 +1739,15 @@ def run_tidal_model(
     df: pd.DataFrame,
     sph: int,
     harmonic_orders: dict[str, int],
+    fourier_reg_weight: float | None = None,
     lag_ranges: dict[str, tuple[int, int]],
     knot_presets: dict[str, str],
+    interaction_pairs: list[tuple[str, str]],
     train_start: str,
     train_end: str,
     test_end: str,
+    solver_verbose: bool = False,
+    debug: bool = False,
 ) -> FitResult:
     df_train, df_test, ok_train, ok_test = split_model_window(
         df,
@@ -1355,7 +1757,12 @@ def run_tidal_model(
     )
     y_train = df_train.loc[ok_train, "water_level"].to_numpy(dtype=float)
 
-    picked, periodic_config = build_periodic_config(component_mask, harmonic_orders, sph)
+    picked, periodic_config = build_periodic_config(
+        component_mask,
+        harmonic_orders,
+        sph,
+        fourier_reg_weight=fourier_reg_weight,
+    )
     reg_names = [name for name, active in component_mask.items() if active and name not in PERIODS]
     x_train_fit, x_train_pred, x_test_pred, active_regs, exog_config = build_exog_design_matrices(
         df_train,
@@ -1366,10 +1773,13 @@ def run_tidal_model(
         knot_presets,
         sph,
     )
+    active_interactions = build_active_interaction_labels(active_regs, interaction_pairs)
+    interaction_index_pairs = build_interaction_index_pairs(active_regs, interaction_pairs)
 
     if periodic_config is None and exog_config is None:
         baseline = float(np.nanmean(y_train))
         return pack_model_result(
+            df_train,
             df_test,
             y_train,
             ok_train,
@@ -1378,7 +1788,10 @@ def run_tidal_model(
             np.full(len(df_test), baseline),
             picked,
             active_regs,
+            active_interactions,
             sph,
+            x_train_fit=x_train_fit,
+            exog_config=exog_config,
         )
 
     try:
@@ -1386,11 +1799,14 @@ def run_tidal_model(
             TsgamEstimatorConfig(
                 multi_periodic_config=periodic_config,
                 exog_config=exog_config,
-                solver_config=TsgamSolverConfig(solver="SCS", verbose=False),
+                interaction_pairs=interaction_index_pairs or None,
+                solver_config=TsgamSolverConfig(solver="SCS", verbose=solver_verbose),
+                debug=debug,
             )
         )
         model.fit(x_train_fit, y_train)
         return pack_model_result(
+            df_train,
             df_test,
             y_train,
             ok_train,
@@ -1399,10 +1815,15 @@ def run_tidal_model(
             model.predict(x_test_pred),
             picked,
             active_regs,
+            active_interactions,
             sph,
+            x_train_fit=x_train_fit,
+            exog_config=exog_config,
+            model=model,
         )
     except Exception:
         return pack_model_result(
+            df_train,
             df_test,
             y_train,
             ok_train,
@@ -1411,7 +1832,10 @@ def run_tidal_model(
             np.full(len(df_test), np.nan),
             picked,
             active_regs,
+            active_interactions,
             sph,
+            x_train_fit=x_train_fit,
+            exog_config=exog_config,
         )
 
 
@@ -1420,10 +1844,13 @@ def build_fit_label(fit_result: FitResult) -> str:
     parts = []
     picked = list(fit_result["picked"])
     active_regs = fit_result["active_regs"]
+    active_interactions = fit_result.get("active_interactions", [])
     if picked:
         parts.append(", ".join(picked))
     if active_regs:
         parts.append(f"+ {', '.join(active_regs)}")
+    if active_interactions:
+        parts.append(f"+ interactions: {', '.join(active_interactions)}")
     summary = " ".join(parts) if parts else "Mean baseline"
     return f"{summary} - {fit_result['n_train']:,} train / {fit_result['n_test']:,} test"
 
@@ -1448,17 +1875,35 @@ def build_metrics_table_html(fit_result: FitResult) -> str:
                 "Test": format_metric_value(metric_name, fit_result["metrics_test"].get(metric_name, np.nan)),
             }
         )
-    return pd.DataFrame(rows).to_html(index=False)
+    table_html = pd.DataFrame(rows).to_html(index=False)
+    return (
+        table_html
+        + (
+            "<p><strong>MAPE reference:</strong> "
+            "mean(abs(pred - obs) / abs(obs)) * 100 over samples with "
+            f"|obs| &gt; {MAPE_OBS_THRESHOLD:.2f} m. "
+            f"Train MAPE n = {fit_result.get('tr_mape_n', 0)}, "
+            f"Test MAPE n = {fit_result.get('te_mape_n', 0)}."
+            "</p>"
+        )
+    )
 
 
 @app.function
-def build_fit_timeseries_figure(fit_label: str, fit_result: FitResult) -> go.Figure:
-    time_index = fit_result["te_index"]
+def build_fit_timeseries_figure_from_arrays(
+    fit_label: str,
+    *,
+    time_index: pd.DatetimeIndex,
+    observed: np.ndarray,
+    predicted: np.ndarray,
+    title: str,
+) -> go.Figure:
+    residuals = np.asarray(observed, dtype=float) - np.asarray(predicted, dtype=float)
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06, row_heights=[0.7, 0.3])
     fig.add_trace(
         go.Scattergl(
             x=time_index,
-            y=fit_result["te_obs"],
+            y=observed,
             mode="lines",
             line=dict(width=0.8, color="steelblue"),
             name="observed",
@@ -1470,7 +1915,7 @@ def build_fit_timeseries_figure(fit_label: str, fit_result: FitResult) -> go.Fig
     fig.add_trace(
         go.Scattergl(
             x=time_index,
-            y=fit_result["te_pred"],
+            y=predicted,
             mode="lines",
             line=dict(width=0.8, color="coral"),
             name="predicted",
@@ -1482,7 +1927,7 @@ def build_fit_timeseries_figure(fit_label: str, fit_result: FitResult) -> go.Fig
     fig.add_trace(
         go.Scattergl(
             x=time_index,
-            y=fit_result["residuals"],
+            y=residuals,
             mode="lines",
             line=dict(width=0.6, color="seagreen"),
             name="residual",
@@ -1496,7 +1941,7 @@ def build_fit_timeseries_figure(fit_label: str, fit_result: FitResult) -> go.Fig
     fig.update_yaxes(title_text="Residual (m)", row=2, col=1)
     fig.update_layout(
         height=500,
-        title=fit_label,
+        title=f"{fit_label} - {title}",
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
         margin=dict(l=60, r=20, t=60, b=30),
     )
@@ -1504,9 +1949,47 @@ def build_fit_timeseries_figure(fit_label: str, fit_result: FitResult) -> go.Fig
 
 
 @app.function
-def build_pred_vs_obs_figure(fit_result: FitResult) -> go.Figure:
-    observed = fit_result["te_obs_clean"]
-    predicted = fit_result["te_pred_clean"]
+def build_fit_timeseries_figure(fit_label: str, fit_result: FitResult) -> go.Figure:
+    return build_fit_timeseries_figure_from_arrays(
+        fit_label,
+        time_index=fit_result["te_index"],
+        observed=fit_result["te_obs"],
+        predicted=fit_result["te_pred"],
+        title="Test window",
+    )
+
+
+@app.function
+def build_train_fit_timeseries_figure(fit_label: str, fit_result: FitResult) -> go.Figure:
+    return build_fit_timeseries_figure_from_arrays(
+        fit_label,
+        time_index=fit_result["tr_index"],
+        observed=fit_result["tr_obs"],
+        predicted=fit_result["tr_pred"],
+        title="Train window",
+    )
+
+
+@app.function
+def build_pred_vs_obs_figure_from_arrays(
+    observed: np.ndarray,
+    predicted: np.ndarray,
+    *,
+    title: str,
+) -> go.Figure:
+    observed = np.asarray(observed, dtype=float)
+    predicted = np.asarray(predicted, dtype=float)
+    if len(observed) == 0 or len(predicted) == 0:
+        fig = go.Figure()
+        fig.update_layout(
+            width=450,
+            height=450,
+            title=title,
+            xaxis=dict(title="Predicted (m)"),
+            yaxis=dict(title="Observed (m)"),
+            margin=dict(l=60, r=20, t=40, b=50),
+        )
+        return fig
     lo = min(predicted.min(), observed.min())
     hi = max(predicted.max(), observed.max())
     fig = go.Figure()
@@ -1531,12 +2014,30 @@ def build_pred_vs_obs_figure(fit_result: FitResult) -> go.Figure:
     fig.update_layout(
         width=450,
         height=450,
-        title="Predicted vs Observed",
+        title=title,
         xaxis=dict(title="Predicted (m)", scaleanchor="y", range=[lo, hi]),
         yaxis=dict(title="Observed (m)", range=[lo, hi]),
         margin=dict(l=60, r=20, t=40, b=50),
     )
     return fig
+
+
+@app.function
+def build_pred_vs_obs_figure(fit_result: FitResult) -> go.Figure:
+    return build_pred_vs_obs_figure_from_arrays(
+        fit_result["te_obs_clean"],
+        fit_result["te_pred_clean"],
+        title="Predicted vs Observed",
+    )
+
+
+@app.function
+def build_train_pred_vs_obs_figure(fit_result: FitResult) -> go.Figure:
+    return build_pred_vs_obs_figure_from_arrays(
+        fit_result["tr_obs_clean"],
+        fit_result["tr_pred_clean"],
+        title="Predicted vs Observed (Train)",
+    )
 
 
 @app.function
@@ -1692,6 +2193,51 @@ def build_residual_regressor_xcorr_figure(
 
 
 @app.function
+def build_typical_cycle_figure(
+    fit_result: FitResult,
+    *,
+    cycle_length_samples: int,
+    title: str,
+) -> go.Figure:
+    full_index = fit_result["tr_index"].append(fit_result["te_index"])
+    full_observed = np.concatenate([fit_result["tr_obs"], fit_result["te_obs"]])
+    full_predicted = np.concatenate([fit_result["tr_pred"], fit_result["te_pred"]])
+    typical_frame = build_typical_cycle_frame(
+        index=full_index,
+        observed=full_observed,
+        predicted=full_predicted,
+        cycle_length_samples=cycle_length_samples,
+    )
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=typical_frame["phase"],
+            y=typical_frame["observed"],
+            mode="lines",
+            line=dict(width=1.2, color="steelblue"),
+            name="observed",
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=typical_frame["phase"],
+            y=typical_frame["predicted"],
+            mode="lines",
+            line=dict(width=1.2, color="coral"),
+            name="predicted",
+        )
+    )
+    figure.update_layout(
+        title=title,
+        xaxis_title="Cycle phase",
+        yaxis_title="Water level (m)",
+        height=350,
+        margin=dict(l=60, r=20, t=40, b=50),
+    )
+    return figure
+
+
+@app.function
 def build_diagnostic_figures(
     df: pd.DataFrame,
     fit_result: FitResult,
@@ -1708,10 +2254,113 @@ def build_diagnostic_figures(
             min_period_hours=2.0,
         ),
     }
+    if {"tr_index", "tr_obs", "tr_pred", "tr_obs_clean", "tr_pred_clean"} <= fit_result.keys():
+        figures["Pred vs Obs (Train)"] = build_train_pred_vs_obs_figure(fit_result)
+        figures["Typical day"] = build_typical_cycle_figure(
+            fit_result,
+            cycle_length_samples=24 * fit_result["sph"],
+            title="Typical day",
+        )
+        figures["Typical week"] = build_typical_cycle_figure(
+            fit_result,
+            cycle_length_samples=24 * 7 * fit_result["sph"],
+            title="Typical week",
+        )
+        figures["Typical month"] = build_typical_cycle_figure(
+            fit_result,
+            cycle_length_samples=24 * 30 * fit_result["sph"],
+            title="Typical month",
+        )
     xcorr_figure = build_residual_regressor_xcorr_figure(df, fit_result)
     if xcorr_figure is not None:
         figures["Resid x regressor"] = xcorr_figure
     return figures
+
+
+@app.function
+def build_shapley_result(
+    component_mask: dict[str, bool],
+    *,
+    components: list[str],
+    interaction_lookup: dict[str, tuple[str, str]],
+    raw_to_canonical: dict[int, int],
+    df: pd.DataFrame,
+    sph: int,
+    harmonic_orders: dict[str, int],
+    fourier_reg_weight: float | None = None,
+    lag_ranges: dict[str, tuple[int, int]],
+    knot_presets: dict[str, str],
+    interaction_pairs: list[tuple[str, str]],
+    train_start: str,
+    train_end: str,
+    test_end: str,
+    progress_callback: Callable[[], None] | None = None,
+) -> ShapleyResult:
+    unique_canonical_bits = sorted(set(raw_to_canonical.values()))
+    canonical_metrics: dict[int, dict[str, float]] = {}
+    failed_runs = 0
+    max_workers = min(os.cpu_count() or 4, len(unique_canonical_bits), 8)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {}
+        for canonical_bits in unique_canonical_bits:
+            coalition_mask, coalition_interactions = build_shapley_model_inputs(
+                canonical_bits,
+                components,
+                component_mask,
+                interaction_lookup,
+            )
+            futures[
+                pool.submit(
+                    run_tidal_model,
+                    coalition_mask,
+                    df=df,
+                    sph=sph,
+                    harmonic_orders=harmonic_orders,
+                    fourier_reg_weight=fourier_reg_weight,
+                    lag_ranges=lag_ranges,
+                    knot_presets=knot_presets,
+                    interaction_pairs=coalition_interactions,
+                    train_start=train_start,
+                    train_end=train_end,
+                    test_end=test_end,
+                )
+            ] = canonical_bits
+        for future in as_completed(futures):
+            canonical_bits = futures[future]
+            fit_result = future.result()
+            metrics = fit_result["metrics_test"]
+            if np.isnan(metrics.get("r2", 0.0)):
+                failed_runs += 1
+            canonical_metrics[canonical_bits] = metrics
+            if progress_callback is not None:
+                progress_callback()
+
+    coalition_metrics = {
+        raw_bits: canonical_metrics[canonical_bits]
+        for raw_bits, canonical_bits in raw_to_canonical.items()
+    }
+    baseline_metrics = coalition_metrics[0]
+    baseline_r2 = baseline_metrics.get("r2", 0.0)
+    if not np.isfinite(baseline_r2):
+        baseline_r2 = 0.0
+    baseline_rmse = baseline_metrics.get("rmse", np.nan)
+    if not np.isfinite(baseline_rmse):
+        baseline_rmse = np.nan
+    full_bits = 2 ** len(components) - 1
+    return {
+        "components": components,
+        "coalitions": len(unique_canonical_bits),
+        "failed": failed_runs,
+        "baseline_r2": baseline_r2,
+        "baseline_rmse": baseline_rmse,
+        "full_r2": coalition_metrics[full_bits].get("r2", 0.0)
+        if np.isfinite(coalition_metrics[full_bits].get("r2", 0.0))
+        else 0.0,
+        "full_rmse": coalition_metrics[full_bits].get("rmse", baseline_rmse),
+        "shap_r2": compute_shapley(coalition_metrics, components, "r2", baseline_r2),
+        "shap_rmse": compute_shapley(coalition_metrics, components, "rmse", baseline_rmse),
+    }
 
 
 @app.function

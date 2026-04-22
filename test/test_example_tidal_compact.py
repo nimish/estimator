@@ -1,6 +1,10 @@
+from dataclasses import dataclass
 from datetime import date
+import inspect
 from pathlib import Path
 import sys
+from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -10,8 +14,15 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 
 import example_tidal_compact as tidal_compact  # noqa: E402
-from example_tidal import TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS  # noqa: E402
+from example_tidal import (  # noqa: E402
+    TIDAL_COMPONENT_LABELS,
+    TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS,
+    make_constituent_multi_periodic,
+)
 from example_tidal_compact import (  # noqa: E402
+    build_fit_label,
+    build_interaction_index_pairs,
+    build_interaction_pair_options,
     build_regressor_basis_figure,
     build_regressor_basis_inputs,
     build_model_date_defaults,
@@ -19,12 +30,22 @@ from example_tidal_compact import (  # noqa: E402
     build_diagnostic_figures,
     build_exog_design_matrices,
     build_knot_count,
+    build_shapley_coalition_plan,
+    build_shapley_component_list,
+    build_shapley_model_inputs,
+    build_shapley_result,
+    collect_model_params,
     option_name_for_value,
     build_periodogram_figure,
     build_periodogram_selector_options,
     build_shapley_figure,
     load_station_frame,
 )
+
+
+@dataclass
+class _Widget:
+    value: Any
 
 
 def test_build_model_date_defaults_keeps_example_split_when_available():
@@ -145,6 +166,22 @@ def test_build_periodogram_figure_marks_named_constituents():
     assert any(abs(shape.x0 - PERIODS["M2"]) < 1.0e-6 for shape in figure.layout.shapes)
 
 
+def test_make_constituent_multi_periodic_includes_p1_q1_and_msf_candidates():
+    config = make_constituent_multi_periodic(1.0)
+
+    assert {"P1", "Q1", "Msf"} <= set(PERIODS)
+
+    periods_by_label = dict(zip(TIDAL_COMPONENT_LABELS, config.periods, strict=True))
+    harmonics_by_label = dict(zip(TIDAL_COMPONENT_LABELS, config.num_harmonics, strict=True))
+
+    assert periods_by_label["P1"] == pytest.approx(PERIODS["P1"])
+    assert periods_by_label["Q1"] == pytest.approx(PERIODS["Q1"])
+    assert periods_by_label["Msf"] == pytest.approx(PERIODS["Msf"])
+    assert harmonics_by_label["P1"] == 1
+    assert harmonics_by_label["Q1"] == 1
+    assert harmonics_by_label["Msf"] == 1
+
+
 def test_build_diagnostic_figures_includes_residual_spectrum():
     index = pd.date_range("2024-01-01", periods=24 * 14, freq="1h")
     time_steps = np.arange(len(index))
@@ -175,6 +212,114 @@ def test_build_diagnostic_figures_includes_residual_spectrum():
     assert isinstance(figures["Residual spectrum"], go.Figure)
 
 
+def test_build_diagnostic_figures_adds_train_pred_vs_obs_and_typical_cycles():
+    index = pd.date_range("2024-01-01", periods=24 * 14, freq="1h")
+    time_steps = np.arange(len(index))
+    observed = np.sin(2 * np.pi * time_steps / 12.42)
+    predicted = observed - 0.1 * np.sin(2 * np.pi * time_steps / 24.0)
+    residuals = observed - predicted
+
+    fit_result = {
+        "metrics_train": {"rmse": 0.1, "mae": 0.1, "mape": 1.0, "r2": 0.9},
+        "metrics_test": {"rmse": 0.1, "mae": 0.1, "mape": 1.0, "r2": 0.9},
+        "tr_index": index,
+        "tr_obs": observed,
+        "tr_pred": predicted,
+        "tr_obs_clean": observed,
+        "tr_pred_clean": predicted,
+        "tr_mape_n": len(index),
+        "te_index": index,
+        "te_obs": observed,
+        "te_pred": predicted,
+        "te_obs_clean": observed,
+        "te_pred_clean": predicted,
+        "te_mape_n": len(index),
+        "residuals": residuals,
+        "picked": {"M2": (PERIODS["M2"], 1)},
+        "active_regs": [],
+        "n_train": len(index),
+        "n_test": len(index),
+        "sph": 1,
+    }
+    df = pd.DataFrame({"water_level": observed}, index=index)
+
+    figures = build_diagnostic_figures(df, fit_result)
+
+    assert "Pred vs Obs (Train)" in figures
+    assert "Typical day" in figures
+    assert "Typical week" in figures
+    assert "Typical month" in figures
+
+
+def test_build_metrics_table_html_mentions_mape_reference_and_counts():
+    fit_result = {
+        "metrics_train": {"rmse": 0.1, "mae": 0.1, "mape": 1.5, "r2": 0.9},
+        "metrics_test": {"rmse": 0.2, "mae": 0.2, "mape": 2.5, "r2": 0.8},
+        "tr_index": pd.date_range("2024-01-01", periods=3, freq="1h"),
+        "tr_obs": np.array([0.0, 0.5, 1.0]),
+        "tr_pred": np.array([0.0, 0.4, 0.9]),
+        "tr_obs_clean": np.array([0.0, 0.5, 1.0]),
+        "tr_pred_clean": np.array([0.0, 0.4, 0.9]),
+        "tr_mape_n": 2,
+        "te_index": pd.date_range("2024-01-02", periods=3, freq="1h"),
+        "te_obs": np.array([0.0, 0.5, 1.0]),
+        "te_pred": np.array([0.0, 0.4, 0.9]),
+        "te_obs_clean": np.array([0.0, 0.5, 1.0]),
+        "te_pred_clean": np.array([0.0, 0.4, 0.9]),
+        "te_mape_n": 2,
+        "residuals": np.array([0.0, 0.1, 0.1]),
+        "picked": {},
+        "active_regs": [],
+        "n_train": 3,
+        "n_test": 3,
+        "sph": 1,
+    }
+
+    html = tidal_compact.build_metrics_table_html(fit_result)
+
+    assert "|obs| &gt; 0.01 m" in html
+    assert "Train MAPE n" in html
+    assert "Test MAPE n" in html
+
+
+def test_build_train_fit_timeseries_figure_uses_training_window():
+    builder = getattr(tidal_compact, "build_train_fit_timeseries_figure", None)
+
+    assert callable(builder)
+
+    fit_result = {
+        "metrics_train": {"rmse": 0.1, "mae": 0.1, "mape": 1.0, "r2": 0.9},
+        "metrics_test": {"rmse": 0.2, "mae": 0.2, "mape": 2.0, "r2": 0.8},
+        "tr_index": pd.date_range("2024-01-01", periods=3, freq="1h"),
+        "tr_obs": np.array([0.0, 0.5, 1.0]),
+        "tr_pred": np.array([0.1, 0.4, 0.9]),
+        "tr_obs_clean": np.array([0.0, 0.5, 1.0]),
+        "tr_pred_clean": np.array([0.1, 0.4, 0.9]),
+        "tr_mape_n": 2,
+        "te_index": pd.date_range("2024-01-02", periods=3, freq="1h"),
+        "te_obs": np.array([1.0, 1.5, 2.0]),
+        "te_pred": np.array([1.1, 1.4, 1.9]),
+        "te_obs_clean": np.array([1.0, 1.5, 2.0]),
+        "te_pred_clean": np.array([1.1, 1.4, 1.9]),
+        "te_mape_n": 3,
+        "residuals": np.array([-0.1, 0.1, 0.1]),
+        "picked": {},
+        "active_regs": [],
+        "active_interactions": [],
+        "x_train_fit": pd.DataFrame(index=pd.date_range("2024-01-01", periods=3, freq="1h")),
+        "model": None,
+        "exog_config": None,
+        "n_train": 3,
+        "n_test": 3,
+        "sph": 1,
+    }
+
+    figure = builder("demo", fit_result)
+
+    np.testing.assert_allclose(figure.data[0]["y"], fit_result["tr_obs"])
+    np.testing.assert_allclose(figure.data[1]["y"], fit_result["tr_pred"])
+
+
 def test_build_periodogram_selector_options_returns_valid_default_name():
     df = pd.DataFrame(
         {
@@ -188,6 +333,17 @@ def test_build_periodogram_selector_options_returns_valid_default_name():
 
     assert default_name in options
     assert options[default_name] == "water_level"
+
+
+def test_harmonic_slider_max_is_32():
+    assert tidal_compact.HARMONIC_SLIDER_MAX == 32
+
+
+def test_regressor_response_uses_separate_selector_creation_and_render_cells():
+    source = inspect.getsource(tidal_compact)
+
+    assert "return (regressor_response_lag_selectors,)" in source
+    assert "def _(fit_result, regressor_response_lag_selectors):" in source
 
 
 def test_build_shapley_figure_uses_explicit_r2_baseline():
@@ -208,6 +364,125 @@ def test_build_shapley_figure_uses_explicit_r2_baseline():
     assert figure.data[0]["y"][0] == -0.25
 
 
+def test_build_shapley_component_list_appends_surviving_interactions():
+    component_mask = {"M2": True, "S2": False, "pressure": True, "wind_u": True, "air_temp": True}
+
+    components, interaction_lookup = build_shapley_component_list(
+        component_mask,
+        ["pressure", "wind_u"],
+        [("pressure", "wind_u"), ("pressure", "air_temp")],
+        {"pressure": (-2, 0), "wind_u": (-1, 0), "air_temp": (0, 0)},
+    )
+
+    assert components == ["M2", "pressure", "wind_u", "Pressure (hPa) × Wind U (m/s)"]
+    assert interaction_lookup == {"Pressure (hPa) × Wind U (m/s)": ("pressure", "wind_u")}
+
+
+def test_build_shapley_component_list_drops_interactions_without_zero_lag():
+    component_mask = {"pressure": True, "wind_u": True}
+
+    components, interaction_lookup = build_shapley_component_list(
+        component_mask,
+        ["pressure", "wind_u"],
+        [("pressure", "wind_u")],
+        {"pressure": (-2, -1), "wind_u": (-1, 0)},
+    )
+
+    assert components == ["pressure", "wind_u"]
+    assert interaction_lookup == {}
+
+
+def test_build_shapley_coalition_plan_drops_invalid_interaction_bits():
+    components = ["pressure", "wind_u", "Pressure (hPa) × Wind U (m/s)"]
+    interaction_lookup = {"Pressure (hPa) × Wind U (m/s)": ("pressure", "wind_u")}
+
+    raw_to_canonical = build_shapley_coalition_plan(components, interaction_lookup)
+
+    assert raw_to_canonical[0b100] == 0b000
+    assert raw_to_canonical[0b101] == 0b001
+    assert raw_to_canonical[0b110] == 0b010
+    assert raw_to_canonical[0b111] == 0b111
+    assert len(set(raw_to_canonical.values())) == 5
+
+
+def test_build_shapley_model_inputs_activates_only_selected_interactions():
+    components = ["M2", "pressure", "wind_u", "Pressure (hPa) × Wind U (m/s)"]
+    interaction_lookup = {"Pressure (hPa) × Wind U (m/s)": ("pressure", "wind_u")}
+
+    component_mask, interaction_pairs = build_shapley_model_inputs(
+        0b1111,
+        components,
+        {"M2": True, "S2": False, "pressure": True, "wind_u": True, "air_temp": False},
+        interaction_lookup,
+    )
+
+    assert component_mask == {"M2": True, "S2": False, "pressure": True, "wind_u": True, "air_temp": False}
+    assert interaction_pairs == [("pressure", "wind_u")]
+
+
+def test_build_shapley_result_deduplicates_invalid_interaction_runs(monkeypatch):
+    calls: list[tuple[dict[str, bool], tuple[tuple[str, str], ...]]] = []
+    progress_ticks: list[str] = []
+
+    def fake_run_tidal_model(component_mask, **model_kwargs):
+        interaction_pairs = tuple(model_kwargs["interaction_pairs"])
+        calls.append((component_mask.copy(), interaction_pairs))
+        reg_score = int(component_mask.get("pressure", False)) + int(component_mask.get("wind_u", False))
+        interaction_score = len(interaction_pairs)
+        return {
+            "metrics_test": {"r2": float(reg_score + interaction_score), "rmse": float(10 - reg_score - interaction_score)},
+            "picked": {},
+            "active_regs": [name for name in ["pressure", "wind_u"] if component_mask.get(name, False)],
+            "active_interactions": ["Pressure (hPa) × Wind U (m/s)"] if interaction_pairs else [],
+        }
+
+    monkeypatch.setattr(tidal_compact, "run_tidal_model", fake_run_tidal_model)
+
+    components = ["pressure", "wind_u", "Pressure (hPa) × Wind U (m/s)"]
+    interaction_lookup = {"Pressure (hPa) × Wind U (m/s)": ("pressure", "wind_u")}
+    raw_to_canonical = tidal_compact.build_shapley_coalition_plan(components, interaction_lookup)
+
+    shapley_result = build_shapley_result(
+        {"pressure": True, "wind_u": True},
+        components=components,
+        interaction_lookup=interaction_lookup,
+        raw_to_canonical=raw_to_canonical,
+        df=pd.DataFrame({"water_level": [0.0]}, index=pd.date_range("2024-01-01", periods=1, freq="1h")),
+        sph=1,
+        harmonic_orders={},
+        lag_ranges={},
+        knot_presets={},
+        interaction_pairs=[("pressure", "wind_u")],
+        train_start="2024-01-01",
+        train_end="2024-01-01",
+        test_end="2024-01-01",
+        progress_callback=lambda: progress_ticks.append("tick"),
+    )
+
+    assert shapley_result["components"] == ["pressure", "wind_u", "Pressure (hPa) × Wind U (m/s)"]
+    assert shapley_result["coalitions"] == 5
+    assert len(calls) == 5
+    assert len(progress_ticks) == 5
+    assert shapley_result["shap_r2"] == pytest.approx(
+        {
+            "pressure": 4.0 / 3.0,
+            "wind_u": 4.0 / 3.0,
+            "Pressure (hPa) × Wind U (m/s)": 1.0 / 3.0,
+        }
+    )
+    assert shapley_result["shap_rmse"] == pytest.approx(
+        {
+            "pressure": -4.0 / 3.0,
+            "wind_u": -4.0 / 3.0,
+            "Pressure (hPa) × Wind U (m/s)": -1.0 / 3.0,
+        }
+    )
+    assert all(
+        not interaction_pairs or (component_mask["pressure"] and component_mask["wind_u"])
+        for component_mask, interaction_pairs in calls
+    )
+
+
 @pytest.mark.parametrize(
     ("preset", "expected"),
     [("low", 4), ("med", 8), ("high", 12)],
@@ -219,6 +494,241 @@ def test_build_knot_count_maps_named_presets(preset, expected):
 def test_option_name_for_value_returns_dropdown_label():
     assert option_name_for_value({"Low": "low", "Med": "med", "High": "high"}, "med") == "Med"
     assert option_name_for_value({"Pressure (hPa)": "pressure"}, "pressure") == "Pressure (hPa)"
+
+
+def test_build_interaction_pair_options_returns_human_readable_labels():
+    options = build_interaction_pair_options(["pressure", "wind_u", "air_temp"])
+
+    assert options == {
+        "Pressure (hPa) × Wind U (m/s)": "pressure|wind_u",
+        "Pressure (hPa) × Air temp (degC)": "pressure|air_temp",
+        "Wind U (m/s) × Air temp (degC)": "wind_u|air_temp",
+    }
+
+
+def test_build_interaction_index_pairs_filters_to_active_regressors():
+    interaction_pairs = [("pressure", "wind_u"), ("pressure", "air_temp")]
+
+    assert build_interaction_index_pairs(["pressure", "wind_u"], interaction_pairs) == [(0, 1)]
+
+
+def test_collect_model_params_includes_selected_interaction_pairs_and_fourier_reg_weight():
+    harmonic_inputs = {"M2": _Widget(2), "S2": _Widget(0)}
+    regressor_toggles = {"pressure": _Widget(True), "wind_u": _Widget(True)}
+    regressor_lags = {"pressure": _Widget((-2, 0)), "wind_u": _Widget((-1, 0))}
+    regressor_knots = {"pressure": _Widget("high"), "wind_u": _Widget("med")}
+    interaction_pairs_select = _Widget(["pressure|wind_u"])
+    fourier_reg_weight = _Widget(0.02)
+    df = pd.DataFrame(
+        {
+            "water_level": np.linspace(0.0, 1.0, 6),
+            "pressure": np.linspace(1010.0, 1015.0, 6),
+            "wind_u": np.linspace(-1.0, 1.0, 6),
+        },
+        index=pd.date_range("2024-01-01", periods=6, freq="1h"),
+    )
+
+    component_mask, model_kwargs = collect_model_params(
+        harmonic_inputs,
+        regressor_lags,
+        regressor_toggles,
+        regressor_knots,
+        interaction_pairs_select,
+        df=df,
+        sph=1,
+        train_start=_Widget(date(2024, 1, 1)),
+        train_end=_Widget(date(2024, 1, 2)),
+        test_end=_Widget(date(2024, 1, 3)),
+        fourier_reg_weight=fourier_reg_weight,
+    )
+
+    assert component_mask == {"M2": True, "S2": False, "pressure": True, "wind_u": True}
+    assert model_kwargs["interaction_pairs"] == [("pressure", "wind_u")]
+    assert model_kwargs["fourier_reg_weight"] == pytest.approx(0.02)
+
+
+def test_build_fit_label_includes_active_interactions():
+    fit_result = {
+        "metrics_train": {"rmse": 0.1, "mae": 0.1, "mape": 1.0, "r2": 0.9},
+        "metrics_test": {"rmse": 0.1, "mae": 0.1, "mape": 1.0, "r2": 0.9},
+        "te_index": pd.date_range("2024-01-01", periods=2, freq="1h"),
+        "te_obs": np.array([0.0, 1.0]),
+        "te_pred": np.array([0.0, 1.0]),
+        "te_obs_clean": np.array([0.0, 1.0]),
+        "te_pred_clean": np.array([0.0, 1.0]),
+        "residuals": np.array([0.0, 0.0]),
+        "picked": {},
+        "active_regs": ["pressure", "wind_u"],
+        "active_interactions": ["Pressure (hPa) × Wind U (m/s)"],
+        "n_train": 10,
+        "n_test": 2,
+        "sph": 1,
+    }
+
+    label = build_fit_label(fit_result)
+
+    assert "pressure, wind_u" in label
+    assert "Pressure (hPa) × Wind U (m/s)" in label
+
+
+def test_select_default_plot_lag_prefers_zero_then_nearest():
+    selector = getattr(tidal_compact, "select_default_plot_lag", None)
+
+    assert callable(selector)
+    assert selector([-3, 0, 2]) == 0
+    assert selector([-4, -1, 3]) == -1
+
+
+def test_build_typical_cycle_frame_collapses_to_phase_average():
+    builder = getattr(tidal_compact, "build_typical_cycle_frame", None)
+
+    assert callable(builder)
+
+    index = pd.date_range("2024-01-01", periods=8, freq="1h")
+    frame = builder(
+        index=index,
+        observed=np.array([0.0, 1.0, 2.0, 3.0, 10.0, 11.0, 12.0, 13.0]),
+        predicted=np.array([1.0, 2.0, 3.0, 4.0, 11.0, 12.0, 13.0, 14.0]),
+        cycle_length_samples=4,
+    )
+
+    assert list(frame["phase"]) == [0, 1, 2, 3]
+    np.testing.assert_allclose(frame["observed"], [5.0, 6.0, 7.0, 8.0])
+    np.testing.assert_allclose(frame["predicted"], [6.0, 7.0, 8.0, 9.0])
+
+
+def test_build_regressor_response_inputs_aligns_selected_lag():
+    builder = getattr(tidal_compact, "build_regressor_response_inputs", None)
+
+    assert callable(builder)
+
+    estimator = tidal_compact.TsgamEstimator(
+        tidal_compact.TsgamEstimatorConfig(
+            multi_periodic_config=None,
+            exog_config=None,
+        )
+    )
+    estimator.variables_ = {
+        "exog_coef_0": SimpleNamespace(value=np.array([[1.5, 2.5]])),
+    }
+
+    fit_result = {
+        "tr_obs_clean": np.array([1.0, 2.0, 3.0, 4.0]),
+        "x_train_fit": pd.DataFrame(
+            {"pressure": [10.0, 20.0, 30.0, 40.0]},
+            index=pd.date_range("2024-01-01", periods=4, freq="1h"),
+        ),
+        "active_regs": ["pressure"],
+        "model": estimator,
+        "exog_config": [tidal_compact.TsgamLinearConfig(lags=[-1, 0], reg_weight=1e-5)],
+    }
+
+    response_inputs = builder(fit_result, "pressure", lag=0)
+
+    assert response_inputs["selected_lag"] == 0
+    np.testing.assert_allclose(response_inputs["x_scatter"], [10.0, 20.0, 30.0, 40.0])
+    np.testing.assert_allclose(response_inputs["y_scatter"], [1.0, 2.0, 3.0, 4.0])
+    assert response_inputs["grid"].shape == (200,)
+    assert response_inputs["curve"].shape == (200,)
+
+
+def test_run_tidal_model_passes_active_interaction_pairs_to_estimator(monkeypatch):
+    index = pd.date_range("2024-01-01", periods=48, freq="1h")
+    df = pd.DataFrame(
+        {
+            "water_level": np.sin(np.linspace(0.0, 4.0 * np.pi, len(index))),
+            "pressure": np.linspace(1010.0, 1018.0, len(index)),
+            "wind_u": np.linspace(-2.0, 2.0, len(index)),
+            "air_temp": np.linspace(5.0, 9.0, len(index)),
+        },
+        index=index,
+    )
+    captured: dict[str, object] = {}
+
+    def fake_build_periodic_config(component_mask, harmonic_orders, sph, fourier_reg_weight=None):
+        captured["fourier_reg_weight"] = fourier_reg_weight
+        return {}, None
+
+    def fake_build_exog_design_matrices(df_train, df_test, ok_train, reg_names, lag_ranges, knot_presets, sph):
+        assert reg_names == ["pressure", "wind_u"]
+        x_train_fit = df_train.loc[ok_train, ["pressure", "wind_u"]].copy()
+        x_train_pred = df_train[["pressure", "wind_u"]].copy()
+        x_test_pred = df_test[["pressure", "wind_u"]].copy()
+        exog_config = [
+            tidal_compact.TsgamLinearConfig(lags=[0], reg_weight=1e-5),
+            tidal_compact.TsgamLinearConfig(lags=[0], reg_weight=1e-5),
+        ]
+        return x_train_fit, x_train_pred, x_test_pred, ["pressure", "wind_u"], exog_config
+
+    class FakeEstimator:
+        def __init__(self, config):
+            captured["config"] = config
+
+        def fit(self, x, y):
+            captured["fit_shape"] = x.shape
+            captured["y_len"] = len(y)
+
+        def predict(self, x):
+            return np.zeros(len(x), dtype=float)
+
+    monkeypatch.setattr(tidal_compact, "build_periodic_config", fake_build_periodic_config)
+    monkeypatch.setattr(tidal_compact, "build_exog_design_matrices", fake_build_exog_design_matrices)
+    monkeypatch.setattr(tidal_compact, "TsgamEstimator", FakeEstimator)
+
+    parameters = inspect.signature(tidal_compact.run_tidal_model).parameters
+
+    assert "solver_verbose" in parameters
+    assert "debug" in parameters
+
+    result = tidal_compact.run_tidal_model(
+        component_mask={"pressure": True, "wind_u": True},
+        df=df,
+        sph=1,
+        harmonic_orders={},
+        lag_ranges={"pressure": (-2, 0), "wind_u": (-1, 0)},
+        knot_presets={"pressure": "med", "wind_u": "med"},
+        interaction_pairs=[("pressure", "wind_u"), ("pressure", "air_temp")],
+        train_start="2024-01-01",
+        train_end="2024-01-02",
+        test_end="2024-01-02",
+        fourier_reg_weight=0.02,
+        solver_verbose=True,
+        debug=True,
+    )
+
+    config = captured["config"]
+
+    assert config.interaction_pairs == [(0, 1)]
+    assert config.solver_config.verbose is True
+    assert config.debug is True
+    assert captured["fourier_reg_weight"] == pytest.approx(0.02)
+    assert result["active_regs"] == ["pressure", "wind_u"]
+    assert result["active_interactions"] == ["Pressure (hPa) × Wind U (m/s)"]
+
+
+def test_build_periodic_config_increases_weight_for_high_order_long_periods():
+    picked, config = tidal_compact.build_periodic_config(
+        component_mask={"Mf": True, "M2": True},
+        harmonic_orders={"Mf": 16, "M2": 4},
+        sph=1,
+    )
+
+    assert picked == {"Mf": (PERIODS["Mf"], 16), "M2": (PERIODS["M2"], 4)}
+    assert config is not None
+    assert config.reg_weight > 1e-4
+
+
+def test_build_periodic_config_applies_manual_reg_weight():
+    picked, config = tidal_compact.build_periodic_config(
+        component_mask={"annual": True},
+        harmonic_orders={"annual": 8},
+        sph=1,
+        fourier_reg_weight=0.02,
+    )
+
+    assert picked == {"annual": (PERIODS["annual"], 8)}
+    assert config is not None
+    assert config.reg_weight == pytest.approx(0.02)
 
 
 def test_build_exog_design_matrices_uses_selected_knot_preset():

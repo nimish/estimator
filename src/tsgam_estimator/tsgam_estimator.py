@@ -385,6 +385,12 @@ class TsgamEstimatorConfig:
         List of configurations for exogenous variables. Each element corresponds
         to one exogenous variable in X. Order must match column order in X.
         If None, no exogenous variables are used.
+    interaction_pairs : list[tuple[int, int]] or None, default=None
+        Exact 2-way interaction pairs between exogenous terms. Each tuple refers
+        to positions in ``exog_config`` and the matching X column order. When
+        interactions are enabled, they use only each factor's current-index
+        response block (``lag=0``), even if the corresponding main effect also
+        includes additional lagged terms.
     ar_config : TsgamArConfig or None, default=None
         Configuration for AR residual modeling. If None, no AR model is fitted.
     trend_config : TsgamTrendConfig or None, default=None
@@ -433,6 +439,7 @@ class TsgamEstimatorConfig:
     """
     multi_periodic_config: TsgamMultiPeriodicConfig | None
     exog_config: list[TsgamSplineConfig | TsgamLinearConfig] | None
+    interaction_pairs: list[tuple[int, int]] | None = None # ensure this works with linear and splines
     ar_config: TsgamArConfig | None = None
     trend_config: TsgamTrendConfig | None = None
     outlier_config: TsgamOutlierConfig | None = None
@@ -1323,6 +1330,94 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         return valid_mask, Hs
 
+    def _get_zero_lag_H(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, Hs: list[ndarray]) -> ndarray:
+        """Return the current-index basis block for an exogenous term."""
+        try:
+            zero_lag_ix = exog_cfg.lags.index(0)
+        except ValueError as exc:
+            raise ValueError(
+                "Interaction pairs require each referenced exogenous factor to include lag=0."
+            ) from exc
+        return Hs[zero_lag_ix]
+
+    def _outer_column_product(self, arr1: ndarray, arr2: ndarray) -> ndarray:
+        """Build a q*r interaction design block from two response matrices."""
+        return (arr1[:, :, None] * arr2[:, None, :]).reshape(arr1.shape[0], -1)
+
+    def _interaction_contribution_from_blocks(
+        self,
+        arr1: ndarray,
+        arr2: ndarray,
+        interaction_coef: ndarray,
+        *,
+        nan_to_zero: bool = False,
+    ) -> ndarray:
+        """Contract two response matrices against flattened interaction coefficients."""
+        if nan_to_zero:
+            arr1 = np.nan_to_num(arr1, nan=0.0)
+            arr2 = np.nan_to_num(arr2, nan=0.0)
+        coef_matrix = interaction_coef.reshape(arr1.shape[1], arr2.shape[1])
+        return np.sum((arr1 @ coef_matrix) * arr2, axis=1)
+
+    def _normalize_interaction_pairs(self) -> list[tuple[int, int]]:
+        """Validate and normalize configured exogenous interaction pairs."""
+        if not self.config.interaction_pairs:
+            return []
+        if not self.config.exog_config:
+            raise ValueError(
+                "interaction_pairs requires a non-empty exog_config."
+            )
+
+        normalized_pairs: list[tuple[int, int]] = []
+        seen_pairs: set[tuple[int, int]] = set()
+        n_exog = len(self.config.exog_config)
+        for pair in self.config.interaction_pairs:
+            try:
+                left_ix, right_ix = pair
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "Each interaction pair must contain exactly two exogenous indices."
+                ) from exc
+            left_is_integer_index = (
+                isinstance(left_ix, (int, np.integer))
+                and not isinstance(left_ix, bool)
+            )
+            right_is_integer_index = (
+                isinstance(right_ix, (int, np.integer))
+                and not isinstance(right_ix, bool)
+            )
+            if not left_is_integer_index or not right_is_integer_index:
+                raise ValueError(
+                    "Each interaction pair index must be an integer exogenous index."
+                )
+            if left_ix == right_ix:
+                raise ValueError("interaction_pairs cannot contain self-pairs.")
+            if not 0 <= left_ix < n_exog or not 0 <= right_ix < n_exog:
+                raise ValueError(
+                    f"interaction pair {(left_ix, right_ix)} is out of range for "
+                    f"{n_exog} exogenous terms."
+                )
+
+            normalized_pair = (left_ix, right_ix)
+            if right_ix < left_ix:
+                normalized_pair = (right_ix, left_ix)
+            if normalized_pair in seen_pairs:
+                raise ValueError(
+                    f"Duplicate interaction pair detected: {normalized_pair}."
+                )
+
+            for exog_ix in normalized_pair:
+                if 0 not in self.config.exog_config[exog_ix].lags:
+                    raise ValueError(
+                        "Interaction pairs require each referenced exogenous factor "
+                        "to include lag=0."
+                    )
+
+            seen_pairs.add(normalized_pair)
+            normalized_pairs.append(normalized_pair)
+
+        return normalized_pairs
+
     def _get_min_samples_required(self) -> int:
         """
         Calculate minimum number of samples required based on lags.
@@ -1459,14 +1554,19 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             'constant': cvxpy.Variable(),
         }
         self.exog_knots_ = []  # Store knots only when auto-computed from training data
+        self.interaction_pairs_ = []
         model_term = self.variables_['constant']
         regularization_term = 0
         # Start with mask excluding NaN's in y (defensive programming - check_X_y should have rejected them)
         self.combined_valid_mask_ = ~np.isnan(y)
+        exog_fit_data: list[tuple[ndarray, list[ndarray]]] = []
+        interaction_Hs: list[ndarray] = []
+        self.interaction_pairs_ = self._normalize_interaction_pairs()
 
         if self.config.exog_config:
             for ix, exog_cfg in enumerate(self.config.exog_config):
                 valid_mask, Hs = self._process_exog_config(exog_cfg, X_array[:, ix])
+                exog_fit_data.append((valid_mask, Hs))
 
                 # Store knots only if auto-computed (not provided in config)
                 if isinstance(exog_cfg, TsgamSplineConfig):
@@ -1494,11 +1594,28 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                     regularization_term += cvxpy.sum_squares(cvxpy.diff(exog_coef, axis=1)) * exog_cfg.diff_reg_weight
                 self.combined_valid_mask_ &= valid_mask
 
-            for ix, exog_cfg in enumerate(self.config.exog_config):
-                # Rebuild Hs to build model term (Hs are only needed during fit)
-                valid_mask, Hs = self._process_exog_config(exog_cfg, X_array[:, ix])
+            for pair_ix, (left_ix, right_ix) in enumerate(self.interaction_pairs_):
+                left_cfg = self.config.exog_config[left_ix]
+                right_cfg = self.config.exog_config[right_ix]
+                left_H = self._get_zero_lag_H(left_cfg, exog_fit_data[left_ix][1])
+                right_H = self._get_zero_lag_H(right_cfg, exog_fit_data[right_ix][1])
+                interaction_H = self._outer_column_product(left_H, right_H)
+                self.combined_valid_mask_ &= np.all(~np.isnan(interaction_H), axis=1)
+
+                interaction_coef = cvxpy.Variable(interaction_H.shape[1])
+                self.variables_[f'interaction_coef_{pair_ix}'] = interaction_coef
+                interaction_weight = float(
+                    np.sqrt(left_cfg.reg_weight * right_cfg.reg_weight)
+                )
+                regularization_term += interaction_weight * cvxpy.sum_squares(interaction_coef)
+                interaction_Hs.append(interaction_H)
+
+            for ix, (_, Hs) in enumerate(exog_fit_data):
                 # Sum over lags: H @ exog_coef[:, lag_ix] for each lag
                 model_term += cvxpy.sum(expr=[H[self.combined_valid_mask_] @ self.variables_[f'exog_coef_{ix}'][:, lag_ix] for lag_ix, H in enumerate(Hs)])
+
+            for pair_ix, interaction_H in enumerate(interaction_Hs):
+                model_term += interaction_H[self.combined_valid_mask_] @ self.variables_[f'interaction_coef_{pair_ix}']
 
 
 
@@ -1654,15 +1771,32 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         baseline_pred = np.full(len(y), self.variables_['constant'].value)
 
         # Add exogenous terms if present
+        zero_lag_Hs: dict[int, ndarray] = {}
+        interaction_parent_indices = {
+            exog_ix
+            for pair in getattr(self, 'interaction_pairs_', [])
+            for exog_ix in pair
+        }
         if self.config.exog_config:
             for ix, exog_cfg in enumerate(self.config.exog_config):
                 exog_var = X_array[:, ix]
                 stored_knots = self.exog_knots_[ix] if isinstance(exog_cfg, TsgamSplineConfig) else None
                 _, Hs = self._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
+                if ix in interaction_parent_indices:
+                    zero_lag_Hs[ix] = self._get_zero_lag_H(exog_cfg, Hs)
                 exog_coef = self.variables_[f'exog_coef_{ix}'].value
                 if exog_coef is not None:
                     exog_pred = np.sum([H @ exog_coef[:, lag_ix] for lag_ix, H in enumerate(Hs)], axis=0)
                     baseline_pred += exog_pred
+
+        for pair_ix, (left_ix, right_ix) in enumerate(getattr(self, 'interaction_pairs_', [])):
+            interaction_coef = self.variables_[f'interaction_coef_{pair_ix}'].value
+            if interaction_coef is not None:
+                baseline_pred += self._interaction_contribution_from_blocks(
+                    zero_lag_Hs[left_ix],
+                    zero_lag_Hs[right_ix],
+                    interaction_coef,
+                )
 
         # Add Fourier terms if present
         if self.config.multi_periodic_config:
@@ -1806,6 +1940,12 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         predictions = np.full(len(X_array), constant_value)
 
         # Add exogenous terms if present
+        zero_lag_Hs: dict[int, ndarray] = {}
+        interaction_parent_indices = {
+            exog_ix
+            for pair in getattr(self, 'interaction_pairs_', [])
+            for exog_ix in pair
+        }
         if self.config.exog_config:
             for ix, exog_cfg in enumerate(self.config.exog_config):
                 exog_var = X_array[:, ix]
@@ -1815,6 +1955,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
                 # Use _process_exog_config with stored knots (will use config knots if stored_knots is None)
                 valid_mask_pred, Hs_pred = self._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
+                if ix in interaction_parent_indices:
+                    zero_lag_Hs[ix] = self._get_zero_lag_H(exog_cfg, Hs_pred)
 
                 # Check for NaN in input variable (this is a real problem, not just boundary effects)
                 if np.any(np.isnan(exog_var)):
@@ -1848,6 +1990,33 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                         f"valid_mask has {np.sum(valid_mask_pred)} valid samples out of {len(exog_var)}"
                     )
                 predictions += exog_pred
+
+        for pair_ix, (left_ix, right_ix) in enumerate(getattr(self, 'interaction_pairs_', [])):
+            interaction_coef = self.variables_[f'interaction_coef_{pair_ix}'].value
+            if interaction_coef is None:
+                raise ValueError(
+                    f"Interaction coefficients for pair {pair_ix} are None. "
+                    "Model may not have converged."
+                )
+            if np.any(np.isnan(interaction_coef)):
+                raise ValueError(
+                    f"Interaction coefficients for pair {pair_ix} contain NaN."
+                )
+
+            interaction_pred = self._interaction_contribution_from_blocks(
+                zero_lag_Hs[left_ix],
+                zero_lag_Hs[right_ix],
+                interaction_coef,
+                nan_to_zero=True,
+            )
+            if np.any(np.isnan(interaction_pred)):
+                raise ValueError(
+                    f"Interaction prediction for pair {pair_ix} contains NaN. "
+                    f"left_H shape: {zero_lag_Hs[left_ix].shape}, "
+                    f"right_H shape: {zero_lag_Hs[right_ix].shape}, "
+                    f"interaction_coef shape: {interaction_coef.shape}"
+                )
+            predictions += interaction_pred
 
         # Add Fourier terms if present
         if self.config.multi_periodic_config:
