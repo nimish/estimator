@@ -319,6 +319,8 @@ examples/reports/*.csv
 examples/reports/*.md
 examples/reports/*.png
 examples/reports/*.pdf
+examples/reports/tidal_multi_station/
+examples/reports/tidal_station_reports/
 examples/plots/
 examples/data/tidal/lcd_*.csv
 examples/data/tidal/*_*_*_combined.csv
