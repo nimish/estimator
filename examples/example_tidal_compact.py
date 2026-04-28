@@ -2294,6 +2294,8 @@ def build_shapley_result(
     train_start: str,
     train_end: str,
     test_end: str,
+    solver_verbose: bool = False,
+    debug: bool = False,
     progress_callback: Callable[[], None] | None = None,
 ) -> ShapleyResult:
     unique_canonical_bits = sorted(set(raw_to_canonical.values()))
@@ -2324,6 +2326,8 @@ def build_shapley_result(
                     train_start=train_start,
                     train_end=train_end,
                     test_end=test_end,
+                    solver_verbose=solver_verbose,
+                    debug=debug,
                 )
             ] = canonical_bits
         for future in as_completed(futures):
