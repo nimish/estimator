@@ -483,6 +483,52 @@ def test_build_shapley_result_deduplicates_invalid_interaction_runs(monkeypatch)
     )
 
 
+def test_build_shapley_result_accepts_model_solver_keywords(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    def fake_run_tidal_model(component_mask, **model_kwargs):
+        calls.append(
+            {
+                "component_mask": component_mask.copy(),
+                "solver_verbose": model_kwargs["solver_verbose"],
+                "debug": model_kwargs["debug"],
+            }
+        )
+        score = int(component_mask.get("M2", False)) + int(component_mask.get("pressure", False))
+        return {
+            "metrics_test": {"r2": float(score), "rmse": float(10 - score)},
+            "picked": {},
+            "active_regs": ["pressure"] if component_mask.get("pressure", False) else [],
+            "active_interactions": [],
+        }
+
+    monkeypatch.setattr(tidal_compact, "run_tidal_model", fake_run_tidal_model)
+
+    components = ["M2", "pressure"]
+    shapley_result = build_shapley_result(
+        {"M2": True, "pressure": True},
+        components=components,
+        interaction_lookup={},
+        raw_to_canonical={bits: bits for bits in range(2 ** len(components))},
+        df=pd.DataFrame({"water_level": [0.0]}, index=pd.date_range("2024-01-01", periods=1, freq="1h")),
+        sph=1,
+        harmonic_orders={"M2": 1},
+        lag_ranges={"pressure": (-2, 0)},
+        knot_presets={"pressure": "med"},
+        interaction_pairs=[],
+        train_start="2024-01-01",
+        train_end="2024-01-01",
+        test_end="2024-01-01",
+        solver_verbose=True,
+        debug=True,
+    )
+
+    assert shapley_result["components"] == components
+    assert calls
+    assert all(call["solver_verbose"] is True for call in calls)
+    assert all(call["debug"] is True for call in calls)
+
+
 @pytest.mark.parametrize(
     ("preset", "expected"),
     [("low", 4), ("med", 8), ("high", 12)],
