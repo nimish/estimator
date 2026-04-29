@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.1"
+__generated_with = "0.23.3"
 app = marimo.App(width="full")
 
 with app.setup:
@@ -323,6 +323,7 @@ def _(explore_end, explore_periodogram_series, explore_start, station_data):
         series.notna().sum() < 4,
         mo.md("*Need at least a few non-null samples in the selected window to compute a periodogram.*"),
     )
+    # todo: log(X), log(Y) for this
     build_periodogram_figure(
         window.index,
         series.to_numpy(dtype=float),

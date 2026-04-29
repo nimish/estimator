@@ -165,6 +165,8 @@ class TrendType(StrEnum):
     NONE = 'none'
     LINEAR = 'linear'
     NONLINEAR = 'nonlinear'
+    NONLINEAR_DECREASING = 'nonlinear_decreasing'
+    NONLINEAR_INCREASING = 'nonlinear_increasing'
 
 @dataclass
 class TsgamTrendConfig:
@@ -181,7 +183,9 @@ class TsgamTrendConfig:
         Type of trend to fit:
         - 'none': No trend (trend = 0)
         - 'linear': Linear trend with constant slope
-        - 'nonlinear': Non-linear monotonic decreasing trend
+        - 'nonlinear': Legacy alias for non-linear monotonic decreasing trend
+        - 'nonlinear_decreasing': Non-linear monotonic decreasing trend
+        - 'nonlinear_increasing': Non-linear monotonic increasing trend
     period_hours : float or None, default=None
         Period length in hours. If None, will be inferred from data frequency
         (defaults to daily: 24 hours for hourly data, 1 day for daily data, etc.).
@@ -198,8 +202,11 @@ class TsgamTrendConfig:
     >>> # Daily trend for hourly data (default)
     >>> config = TsgamTrendConfig(trend_type='linear')
     >>>
-    >>> # Weekly trend for hourly data
-    >>> config = TsgamTrendConfig(trend_type='nonlinear', period_hours=168.0)
+    >>> # Weekly monotonic decreasing trend for hourly data
+    >>> config = TsgamTrendConfig(trend_type='nonlinear_decreasing', period_hours=168.0)
+    >>>
+    >>> # Weekly monotonic increasing trend for hourly data
+    >>> config = TsgamTrendConfig(trend_type='nonlinear_increasing', period_hours=168.0)
     >>>
     >>> # No trend
     >>> config = TsgamTrendConfig(trend_type='none')
@@ -1684,9 +1691,15 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 slope = cvxpy.Variable()
                 self.variables_['trend_slope'] = slope
                 constraints.append(cvxpy.diff(trend) == slope)
-            elif trend_config.trend_type == TrendType.NONLINEAR:
-                # Nonlinear monotonic decreasing trend
+            elif trend_config.trend_type in (
+                TrendType.NONLINEAR,
+                TrendType.NONLINEAR_DECREASING,
+            ):
+                # Nonlinear monotonic decreasing trend (including legacy alias)
                 constraints.append(cvxpy.diff(trend) <= 0)
+            elif trend_config.trend_type == TrendType.NONLINEAR_INCREASING:
+                # Nonlinear monotonic increasing trend
+                constraints.append(cvxpy.diff(trend) >= 0)
             # For 'none', trend_term is None so it won't be added
 
         # Add outlier detector term if configured
