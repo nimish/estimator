@@ -501,7 +501,7 @@ def _(
 
             # Trend config
             _trend_config_pv = TsgamTrendConfig(
-                trend_type=TrendType.NONLINEAR,
+                trend_type=TrendType.NONLINEAR_DECREASING,
                 grouping=24.0,
                 reg_weight=10.0
             )
