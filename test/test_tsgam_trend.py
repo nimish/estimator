@@ -65,12 +65,11 @@ def test_predict_subset_before_end(fitted):
 
 
 def test_predict_gapped_subset(fitted):
-    """Predict on every 5th timestamp within training range."""
+    """Predict requires strictly regular timestamps without gaps."""
     est, X = fitted
-    full_preds = est.predict(X)
     every_5th = np.arange(0, len(X), 5)
-    gapped_preds = est.predict(X.iloc[every_5th])
-    np.testing.assert_allclose(gapped_preds, full_preds[every_5th])
+    with pytest.raises(ValueError, match="does not match expected frequency"):
+        est.predict(X.iloc[every_5th])
 
 
 def test_predict_beyond_training(fitted):
@@ -81,3 +80,20 @@ def test_predict_beyond_training(fitted):
     preds = est.predict(X_future)
     assert preds.shape == (48,)
     assert np.all(np.isfinite(preds))
+
+
+def test_nonlinear_increasing_trend_enforces_increasing_shape():
+    X, y = _make_trend_data()
+    config = TsgamEstimatorConfig(
+        multi_periodic_config=None,
+        exog_config=None,
+        trend_config=TsgamTrendConfig(trend_type=TrendType.NONLINEAR_INC),
+        solver_config=SOLVER,
+    )
+    est = TsgamEstimator(config=config)
+
+    est.fit(X, y)
+
+    trend = est.variables_["trend"].value
+    assert trend is not None
+    assert np.all(np.diff(trend) >= -1e-7)
