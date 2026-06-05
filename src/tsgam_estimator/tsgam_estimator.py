@@ -53,6 +53,27 @@ class TsgamMultiPeriodicConfig:
     periods: list[float]
     reg_weight: float = 1.0e-4
 
+    def __post_init__(self) -> None:
+        if len(self.num_harmonics) != len(self.periods):
+            raise ValueError("num_harmonics and periods must have the same length.")
+        for ix, (harmonics, period) in enumerate(zip(self.num_harmonics, self.periods, strict=True)):
+            if (
+                not isinstance(harmonics, (int, np.integer))
+                or isinstance(harmonics, bool)
+                or harmonics < 0
+            ):
+                raise ValueError(
+                    f"num_harmonics[{ix}] must be a non-negative integer, got {harmonics!r}."
+                )
+            if not np.isfinite(period) or period <= 0:
+                raise ValueError(f"periods[{ix}] must be positive and finite, got {period!r}.")
+            max_harmonics = int(np.floor(float(period) / 2.0))
+            if harmonics > max_harmonics:
+                raise ValueError(
+                    f"num_harmonics[{ix}]={harmonics} exceeds the Nyquist limit "
+                    f"{max_harmonics} for period {float(period):.6g} samples."
+                )
+
 @dataclass
 class TsgamSplineConfig:
     """
@@ -165,6 +186,8 @@ class TrendType(StrEnum):
     NONE = 'none'
     LINEAR = 'linear'
     NONLINEAR = 'nonlinear'
+    NONLINEAR_INC = 'nonlinear_inc'
+    NONLINEAR_DEC = 'nonlinear_dec'
 
 @dataclass
 class TsgamTrendConfig:
@@ -1684,9 +1707,14 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 slope = cvxpy.Variable()
                 self.variables_['trend_slope'] = slope
                 constraints.append(cvxpy.diff(trend) == slope)
-            elif trend_config.trend_type == TrendType.NONLINEAR:
+            elif trend_config.trend_type in (
+                TrendType.NONLINEAR,
+                TrendType.NONLINEAR_DEC,
+            ):
                 # Nonlinear monotonic decreasing trend
                 constraints.append(cvxpy.diff(trend) <= 0)
+            elif trend_config.trend_type == TrendType.NONLINEAR_INC:
+                constraints.append(cvxpy.diff(trend) >= 0)
             # For 'none', trend_term is None so it won't be added
 
         # Add outlier detector term if configured
@@ -2127,6 +2155,8 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                     trend_extended[n_periods_fit:] = trend[-1]
 
                 trend = trend_extended
+            else:
+                trend = trend[:n_periods_pred]
 
             # Add trend term to predictions
             predictions += T_pred @ trend
