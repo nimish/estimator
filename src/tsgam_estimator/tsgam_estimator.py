@@ -1570,7 +1570,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         interaction_Hs: list[ndarray] = []
         self.interaction_pairs_ = self._normalize_interaction_pairs()
 
-        if self.config.exog_config:
+        if self.config.exog_config and not remove_exogenous:
             for ix, exog_cfg in enumerate(self.config.exog_config):
                 valid_mask, Hs = self._process_exog_config(exog_cfg, X_array[:, ix])
                 exog_fit_data.append((valid_mask, Hs))
@@ -1802,7 +1802,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                     exog_pred = np.sum([H @ exog_coef[:, lag_ix] for lag_ix, H in enumerate(Hs)], axis=0)
                     baseline_pred += exog_pred
 
-        for pair_ix, (left_ix, right_ix) in enumerate(getattr(self, 'interaction_pairs_', [])):
+        for pair_ix, (left_ix, right_ix) in enumerate(
+            getattr(self, 'interaction_pairs_', []) if not remove_exogenous else []
+        ):
             interaction_coef = self.variables_[f'interaction_coef_{pair_ix}'].value
             if interaction_coef is not None:
                 baseline_pred += self._interaction_contribution_from_blocks(
@@ -1887,7 +1889,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             self.ar_noise_loc_ = None
             self.ar_noise_scale_ = None
 
-    def predict(self, X: pd.DataFrame) -> ndarray:
+    def predict(self, X: pd.DataFrame,
+                remove_periodic : bool = False, remove_exogenous : bool = False, 
+                remove_trend : bool = False) -> ndarray:
         """
         Predict target values for new data.
 
@@ -1938,7 +1942,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         timestamps, X_array = self._ensure_timestamp_index(X)
 
         # Prediction data must be regularly spaced with no gaps
-        self._validate_frequency(timestamps, self.freq_)
+        self._validate_frequency(timestamps, self.freq_, allow_gaps=True)
 
         # Convert timestamps to indices using stored reference
         time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
@@ -2032,7 +2036,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             predictions += interaction_pred
 
         # Add Fourier terms if present
-        if self.config.multi_periodic_config:
+        if self.config.multi_periodic_config and not remove_periodic:
             # Check for NaN in time_indices
             if np.any(np.isnan(time_indices)):
                 raise ValueError("Time indices contain NaN. Check timestamp conversion.")
