@@ -1010,7 +1010,24 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 f"Timestamps must be regularly spaced with frequency '{expected_freq}'."
             )
 
-        if self._ensure_numeric_prefix(inferred_freq).lower() != self._ensure_numeric_prefix(expected_freq).lower():
+        normalized_inferred = self._ensure_numeric_prefix(inferred_freq).lower()
+        normalized_expected = self._ensure_numeric_prefix(expected_freq).lower()
+        if normalized_inferred != normalized_expected:
+            if allow_gaps:
+                try:
+                    inferred_step = pd.Timedelta(pd.tseries.frequencies.to_offset(inferred_freq)).total_seconds()
+                    expected_step = pd.Timedelta(pd.tseries.frequencies.to_offset(expected_freq)).total_seconds()
+                except ValueError:
+                    inferred_step = expected_step = None
+
+                if (
+                    inferred_step is not None
+                    and expected_step is not None
+                    and inferred_step >= expected_step
+                    and np.isclose(inferred_step % expected_step, 0.0)
+                ):
+                    return
+
             raise ValueError(
                 f"Timestamps frequency '{inferred_freq}' does not match "
                 f"expected frequency '{expected_freq}'."
@@ -1588,7 +1605,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         interaction_Hs: list[ndarray] = []
         self.interaction_pairs_ = self._normalize_interaction_pairs()
 
-        if self.config.exog_config and not remove_exogenous:
+        if self.config.exog_config:
             for ix, exog_cfg in enumerate(self.config.exog_config):
                 valid_mask, Hs = self._process_exog_config(exog_cfg, X_array[:, ix])
                 exog_fit_data.append((valid_mask, Hs))
@@ -1819,9 +1836,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                     exog_pred = np.sum([H @ exog_coef[:, lag_ix] for lag_ix, H in enumerate(Hs)], axis=0)
                     baseline_pred += exog_pred
 
-        for pair_ix, (left_ix, right_ix) in enumerate(
-            getattr(self, 'interaction_pairs_', []) if not remove_exogenous else []
-        ):
+        for pair_ix, (left_ix, right_ix) in enumerate(getattr(self, 'interaction_pairs_', [])):
             interaction_coef = self.variables_[f'interaction_coef_{pair_ix}'].value
             if interaction_coef is not None:
                 baseline_pred += self._interaction_contribution_from_blocks(
@@ -1980,7 +1995,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             for pair in getattr(self, 'interaction_pairs_', [])
             for exog_ix in pair
         }
-        if self.config.exog_config:
+        if self.config.exog_config and not remove_exogenous:
             for ix, exog_cfg in enumerate(self.config.exog_config):
                 exog_var = X_array[:, ix]
 
@@ -2025,7 +2040,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                     )
                 predictions += exog_pred
 
-        for pair_ix, (left_ix, right_ix) in enumerate(getattr(self, 'interaction_pairs_', [])):
+        for pair_ix, (left_ix, right_ix) in enumerate(
+            getattr(self, 'interaction_pairs_', []) if not remove_exogenous else []
+        ):
             interaction_coef = self.variables_[f'interaction_coef_{pair_ix}'].value
             if interaction_coef is None:
                 raise ValueError(
