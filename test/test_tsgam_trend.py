@@ -5,8 +5,8 @@
 Regression tests for trend term in predict.
 
 Covers the dimension mismatch when predicting on a time window that spans
-fewer periods than the training data (n_periods_pred < n_periods_fit), and
-the allow_gaps validation for gapped prediction timestamps.
+fewer periods than the training data (n_periods_pred < n_periods_fit), gapped
+prediction timestamps, and explicit monotonic trend directions.
 """
 
 import numpy as np
@@ -22,6 +22,10 @@ from tsgam_estimator import (
 )
 
 
+SOLVER = TsgamSolverConfig(solver="CLARABEL", verbose=False)
+TREND_TOL = 1.0e-6
+
+
 def _make_trend_data(n_samples=720, seed=42):
     rng = np.random.default_rng(seed)
     timestamps = pd.date_range("2020-01-01", periods=n_samples, freq="1h")
@@ -29,9 +33,6 @@ def _make_trend_data(n_samples=720, seed=42):
     hours = np.arange(n_samples, dtype=float)
     y = 5.0 + 0.01 * hours + 0.3 * X["x0"].values + rng.standard_normal(n_samples) * 0.1
     return X, y
-
-
-SOLVER = TsgamSolverConfig(solver="CLARABEL", verbose=False)
 
 
 @pytest.fixture(params=[TrendType.LINEAR, TrendType.NONLINEAR], ids=["linear", "nonlinear"])
@@ -65,11 +66,12 @@ def test_predict_subset_before_end(fitted):
 
 
 def test_predict_gapped_subset(fitted):
-    """Predict requires strictly regular timestamps without gaps."""
+    """Predict on every 5th timestamp within training range."""
     est, X = fitted
+    full_preds = est.predict(X)
     every_5th = np.arange(0, len(X), 5)
-    with pytest.raises(ValueError, match="does not match expected frequency"):
-        est.predict(X.iloc[every_5th])
+    gapped_preds = est.predict(X.iloc[every_5th])
+    np.testing.assert_allclose(gapped_preds, full_preds[every_5th])
 
 
 def test_predict_beyond_training(fitted):
@@ -82,18 +84,60 @@ def test_predict_beyond_training(fitted):
     assert np.all(np.isfinite(preds))
 
 
-def test_nonlinear_increasing_trend_enforces_increasing_shape():
-    X, y = _make_trend_data()
+def _make_monotonic_trend_data(
+    direction: str,
+    n_periods: int = 30,
+    samples_per_period: int = 24,
+) -> tuple[pd.DataFrame, np.ndarray]:
+    n_samples = n_periods * samples_per_period
+    timestamps = pd.date_range("2020-01-01", periods=n_samples, freq="1h")
+    X = pd.DataFrame({"x0": np.zeros(n_samples)}, index=timestamps)
+
+    if direction == "increasing":
+        period_values = np.linspace(0.0, 3.0, n_periods)
+    elif direction == "decreasing":
+        period_values = np.linspace(0.0, -3.0, n_periods)
+    else:
+        raise ValueError(f"Unsupported direction: {direction}")
+
+    y = 10.0 + np.repeat(period_values, samples_per_period)
+    return X, y
+
+
+def _fit_constrained_trend(trend_type: TrendType, direction: str) -> np.ndarray:
+    X, y = _make_monotonic_trend_data(direction)
     config = TsgamEstimatorConfig(
         multi_periodic_config=None,
         exog_config=None,
-        trend_config=TsgamTrendConfig(trend_type=TrendType.NONLINEAR_INC),
+        trend_config=TsgamTrendConfig(
+            trend_type=trend_type,
+            grouping=24.0,
+            reg_weight=1.0,
+        ),
         solver_config=SOLVER,
     )
-    est = TsgamEstimator(config=config)
-
-    est.fit(X, y)
-
-    trend = est.variables_["trend"].value
+    estimator = TsgamEstimator(config=config)
+    estimator.fit(X, y)
+    trend = estimator.variables_["trend"].value
     assert trend is not None
-    assert np.all(np.diff(trend) >= -1e-7)
+    return np.asarray(trend, dtype=float)
+
+
+def test_legacy_nonlinear_alias_remains_nonincreasing():
+    trend = _fit_constrained_trend(TrendType.NONLINEAR, "decreasing")
+    assert np.all(np.diff(trend) <= TREND_TOL)
+
+
+def test_explicit_nonlinear_decreasing_is_nonincreasing():
+    trend = _fit_constrained_trend(TrendType.NONLINEAR_DECREASING, "decreasing")
+    assert np.all(np.diff(trend) <= TREND_TOL)
+
+
+def test_explicit_nonlinear_increasing_is_nondecreasing():
+    trend = _fit_constrained_trend(TrendType.NONLINEAR_INCREASING, "increasing")
+    assert np.all(np.diff(trend) >= -TREND_TOL)
+
+
+def test_short_nonlinear_increasing_alias_is_nondecreasing():
+    trend = _fit_constrained_trend(TrendType.NONLINEAR_INC, "increasing")
+    assert np.all(np.diff(trend) >= -TREND_TOL)

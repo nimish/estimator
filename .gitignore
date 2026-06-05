@@ -325,6 +325,10 @@ examples/plots/
 examples/data/tidal/lcd_*.csv
 examples/data/tidal/*_*_*_combined.csv
 
+# Local agent / IDE workspace state
+.worktrees/
+.cursor/
+
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm+all,visualstudiocode,macos
 .cursor/
 .worktrees/
