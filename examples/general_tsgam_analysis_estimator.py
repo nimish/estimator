@@ -214,7 +214,11 @@ def _(dh, mo):
     target_filter = mo.ui.slider(start=0, stop=1, step=0.01, value=0, label='target min value filter')
     fit_model = mo.ui.run_button(label='fit model')
     solver_slct = mo.ui.switch(label='solver: CLARABEL <-> MOSEK')
-    trend_slct = mo.ui.dropdown(['linear', 'nonlinear', 'none'], value='nonlinear', label='trend term')
+    trend_slct = mo.ui.dropdown(
+        ['linear', 'nonlinear_decreasing', 'nonlinear_increasing', 'none'],
+        value='nonlinear_decreasing',
+        label='trend term',
+    )
     return (
         data_end,
         data_start,
@@ -459,7 +463,9 @@ def _(
     trend_type_map = {
         'linear': TrendType.LINEAR,
         'nonlinear': TrendType.NONLINEAR,
-        'none': TrendType.NONE
+        'nonlinear_decreasing': TrendType.NONLINEAR_DECREASING,
+        'nonlinear_increasing': TrendType.NONLINEAR_INCREASING,
+        'none': TrendType.NONE,
     }
     trend_config = TsgamTrendConfig(
         trend_type=trend_type_map[trend_slct.value],

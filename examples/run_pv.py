@@ -167,11 +167,16 @@ def _build_pv_configs(
 
     shared = dict(X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test, y_max=y_max)
     configs: list[dict] = []
-    for trend_name in ('none', 'linear', 'nonlinear'):
+    trend_type_map = {
+        'linear': TrendType.LINEAR,
+        'nonlinear_decreasing': TrendType.NONLINEAR_DECREASING,
+        'nonlinear_increasing': TrendType.NONLINEAR_INCREASING,
+    }
+    for trend_name in ('none', 'linear', 'nonlinear_decreasing', 'nonlinear_increasing'):
         trend_config = None
         if trend_name != 'none':
             trend_config = TsgamTrendConfig(
-                trend_type=TrendType.LINEAR if trend_name == 'linear' else TrendType.NONLINEAR,
+                trend_type=trend_type_map[trend_name],
                 grouping=24.0,
                 reg_weight=10.0,
             )
