@@ -330,5 +330,44 @@ examples/data/tidal/*_*_*_combined.csv
 .cursor/
 
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm+all,visualstudiocode,macos
-.cursor/
-.worktrees/
+
+
+# START Ruler Generated Files
+/.agent/
+/.aiassistant/
+/.aider.conf.yml
+/.aider.conf.yml.bak
+/.amazonq/
+/.augment/
+/.clinerules
+/.clinerules.bak
+/.codex/config.toml
+/.codex/config.toml.bak
+/.crush.json
+/.crush.json.bak
+/.gemini/settings.json
+/.gemini/settings.json.bak
+/.goosehints
+/.goosehints.bak
+/.idx/
+/.junie/
+/.kiro/
+/.openhands/
+/.qwen/settings.json
+/.qwen/settings.json.bak
+/.roo/
+/.trae/
+/.vibe/
+/AGENTS.md
+/AGENTS.md.bak
+/CLAUDE.md
+/CLAUDE.md.bak
+/CRUSH.md
+/CRUSH.md.bak
+/WARP.md
+/WARP.md.bak
+/firebender.json
+/firebender.json.bak
+/opencode.json
+/opencode.json.bak
+# END Ruler Generated Files
