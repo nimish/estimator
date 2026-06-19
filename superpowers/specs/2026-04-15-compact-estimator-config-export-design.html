@@ -1,0 +1,233 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compact Estimator Config Export Design &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Compact Estimator Config Export Design</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/specs/2026-04-15-compact-estimator-config-export-design.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="compact-estimator-config-export-design">
+<h1>Compact Estimator Config Export Design<a class="headerlink" href="#compact-estimator-config-export-design" title="Link to this heading"></a></h1>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code> currently builds a <code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig</span></code>
+implicitly from notebook controls, but the selected model configuration is not
+visible in a shareable form. The goal is to surface the exact estimator config
+for the selected model as a YAML document so users can copy it into scripts,
+notebooks, or shared notes.</p>
+</section>
+<section id="goals">
+<h2>Goals<a class="headerlink" href="#goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Show the selected model’s exact <code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig</span></code> in the compact notebook.</p></li>
+<li><p>Make the export human-readable and easy to copy/share.</p></li>
+<li><p>Guarantee that the displayed config matches the config actually used for the
+fitted model by deriving both from the same helper.</p></li>
+<li><p>Keep the export scoped to the estimator config only, not broader notebook run
+context like station choice or train/test window.</p></li>
+</ul>
+</section>
+<section id="non-goals">
+<h2>Non-Goals<a class="headerlink" href="#non-goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Do not export station metadata, selected date window, or other notebook UI
+state that is not part of <code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig</span></code>.</p></li>
+<li><p>Do not add full run replay or file-save workflow in this change.</p></li>
+<li><p>Do not introduce a second parallel config-construction path that could drift
+from the fitted model.</p></li>
+</ul>
+</section>
+<section id="proposed-changes">
+<h2>Proposed Changes<a class="headerlink" href="#proposed-changes" title="Link to this heading"></a></h2>
+<section id="config-construction">
+<h3>Config Construction<a class="headerlink" href="#config-construction" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Extract the inline <code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig(...)</span></code> creation in
+<code class="docutils literal notranslate"><span class="pre">run_tidal_model()</span></code> into a reusable helper that returns either:</p>
+<ul>
+<li><p>a real <code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig</span></code>, or</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> when the notebook is using the mean-baseline fallback instead of a
+TSGAM model.</p></li>
+</ul>
+</li>
+<li><p>Reuse that helper in both:</p>
+<ul>
+<li><p>the model-fit path, and</p></li>
+<li><p>the config-export display path.</p></li>
+</ul>
+</li>
+</ul>
+<p>This keeps one source of truth for estimator assembly.</p>
+</section>
+<section id="serialization">
+<h3>Serialization<a class="headerlink" href="#serialization" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">PyYAML</span></code> as a direct dependency.</p></li>
+<li><p>Convert the selected <code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig</span></code> into plain Python structures
+(dicts, lists, scalars, <code class="docutils literal notranslate"><span class="pre">None</span></code>) and serialize it with <code class="docutils literal notranslate"><span class="pre">yaml.safe_dump(...)</span></code>.</p></li>
+<li><p>Prefer stable, readable output:</p>
+<ul>
+<li><p>preserve key order;</p></li>
+<li><p>use block-style YAML;</p></li>
+<li><p>avoid Python object tags or repr-style formatting.</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="notebook-ui">
+<h3>Notebook UI<a class="headerlink" href="#notebook-ui" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Add a new section near the fitted-model outputs, labeled for example
+<code class="docutils literal notranslate"><span class="pre">Estimator</span> <span class="pre">config</span></code>.</p></li>
+<li><p>Display the YAML in a code-friendly block so it is easy to copy.</p></li>
+<li><p>Only render the YAML when a real estimator config exists.</p></li>
+<li><p>When the selected model collapses to the mean-baseline case, show a short note
+such as <code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">TSGAM</span> <span class="pre">estimator</span> <span class="pre">config</span> <span class="pre">for</span> <span class="pre">mean-baseline</span> <span class="pre">model.</span></code></p></li>
+</ul>
+</section>
+</section>
+<section id="data-included">
+<h2>Data Included<a class="headerlink" href="#data-included" title="Link to this heading"></a></h2>
+<p>The export should include only estimator config fields, such as:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">multi_periodic_config</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">exog_config</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">solver_config</span></code></p></li>
+<li><p>any explicit <code class="docutils literal notranslate"><span class="pre">None</span></code> component fields that are part of the estimator config</p></li>
+</ul>
+<p>The export should not include:</p>
+<ul class="simple">
+<li><p>station selection</p></li>
+<li><p>train/test date selections</p></li>
+<li><p>Shapley settings</p></li>
+<li><p>derived diagnostics or fitted coefficients</p></li>
+</ul>
+</section>
+<section id="error-handling">
+<h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>If YAML serialization fails unexpectedly, show a notebook-visible message
+instead of breaking the rest of the notebook output.</p></li>
+<li><p>If no estimator config exists, render the baseline note rather than an empty
+or misleading YAML document.</p></li>
+</ul>
+</section>
+<section id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Add a focused regression test for the serialization/helper path so the
+exported YAML reflects the selected estimator config structure.</p></li>
+<li><p>Cover both:</p>
+<ul>
+<li><p>a real TSGAM config with periodic and/or exogenous components;</p></li>
+<li><p>the no-components mean-baseline path that should not emit a config.</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="acceptance-criteria">
+<h2>Acceptance Criteria<a class="headerlink" href="#acceptance-criteria" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The compact notebook shows a shareable YAML document for the selected
+<code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig</span></code>.</p></li>
+<li><p>The YAML is derived from the same config object used to fit the estimator.</p></li>
+<li><p>The mean-baseline path is handled explicitly and does not pretend to have a
+TSGAM config.</p></li>
+<li><p>Users can copy the displayed config without needing to reconstruct it from the
+notebook UI manually.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

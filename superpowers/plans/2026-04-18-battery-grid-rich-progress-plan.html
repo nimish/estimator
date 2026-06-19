@@ -1,0 +1,646 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Battery Grid Rich Progress Implementation Plan &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Battery Grid Rich Progress Implementation Plan</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/plans/2026-04-18-battery-grid-rich-progress-plan.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="battery-grid-rich-progress-implementation-plan">
+<h1>Battery Grid Rich Progress Implementation Plan<a class="headerlink" href="#battery-grid-rich-progress-implementation-plan" title="Link to this heading"></a></h1>
+<blockquote>
+<div><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code class="docutils literal notranslate"><span class="pre">-</span> <span class="pre">[</span> <span class="pre">]</span></code>) syntax for tracking.</p>
+</div></blockquote>
+<p><strong>Goal:</strong> Upgrade <code class="docutils literal notranslate"><span class="pre">examples/run_tidal_battery_grid.py</span></code> to show a Rich live progress UI during interactive runs while preserving file logging, partial CSV updates, and plain-text fallback behavior.</p>
+<p><strong>Architecture:</strong> Keep all search logic in <code class="docutils literal notranslate"><span class="pre">examples/run_tidal_battery_grid.py</span></code>, but add a thin presentation layer of pure helper functions for UI-mode detection, stage counts, recent-results trimming, and Rich renderable construction. Replace the current thread-based parallel loop with an interruptible worker backend so <code class="docutils literal notranslate"><span class="pre">Ctrl-C</span></code> can stop the run promptly, then thread UI updates through a reporter callback on the main thread as results arrive.</p>
+<p><strong>Tech Stack:</strong> Python 3.13, click, rich, pandas, numpy, pytest</p>
+<hr class="docutils" />
+<section id="file-map">
+<h2>File Map<a class="headerlink" href="#file-map" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/run_tidal_battery_grid.py</span></code></p>
+<ul>
+<li><p>Add Rich imports, live-mode helpers, render-state helpers, renderable builders, and reporter-driven live updates around an interruptible run loop</p></li>
+<li><p>Replace the current <code class="docutils literal notranslate"><span class="pre">ThreadPoolExecutor</span></code> flow with a killable worker backend plus explicit <code class="docutils literal notranslate"><span class="pre">KeyboardInterrupt</span></code> handling</p></li>
+<li><p>Split file-only logging from terminal printing so live mode can update widgets without spamming plain log lines</p></li>
+</ul>
+</li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_tidal_battery_grid.py</span></code></p>
+<ul>
+<li><p>Add helper-level tests for live-mode detection, stage counts, recent-results trimming, Rich table/panel builders, and the reporter callback seam in <code class="docutils literal notranslate"><span class="pre">run_candidates(...)</span></code></p></li>
+</ul>
+</li>
+</ul>
+<section id="task-1-add-pure-ui-state-helpers">
+<h3>Task 1: Add Pure UI State Helpers<a class="headerlink" href="#task-1-add-pure-ui-state-helpers" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/run_tidal_battery_grid.py</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_tidal_battery_grid.py</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_tidal_battery_grid.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing helper tests</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_should_use_live_display_requires_terminal_and_not_dumb</span><span class="p">():</span>
+    <span class="k">assert</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">should_use_live_display</span><span class="p">(</span>
+        <span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">is_terminal</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_dumb_terminal</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+    <span class="k">assert</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">should_use_live_display</span><span class="p">(</span>
+        <span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">is_terminal</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">is_dumb_terminal</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span>
+    <span class="k">assert</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">should_use_live_display</span><span class="p">(</span>
+        <span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">is_terminal</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_dumb_terminal</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_stage_counts_counts_ok_non_finite_and_exception</span><span class="p">():</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">&quot;validation_fit_status&quot;</span><span class="p">:</span> <span class="s2">&quot;ok&quot;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s2">&quot;validation_fit_status&quot;</span><span class="p">:</span> <span class="s2">&quot;ok&quot;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s2">&quot;validation_fit_status&quot;</span><span class="p">:</span> <span class="s2">&quot;non_finite_metrics&quot;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s2">&quot;validation_fit_status&quot;</span><span class="p">:</span> <span class="s2">&quot;exception&quot;</span><span class="p">},</span>
+    <span class="p">]</span>
+
+    <span class="k">assert</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">build_stage_counts</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="s2">&quot;validation&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="p">{</span>
+        <span class="s2">&quot;ok&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="s2">&quot;non_finite&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;exception&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_trim_recent_rows_keeps_latest_rows</span><span class="p">():</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;candidate_label&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;row-</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">)]</span>
+
+    <span class="n">trimmed</span> <span class="o">=</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">trim_recent_rows</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;candidate_label&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">trimmed</span><span class="p">]</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;row-3&quot;</span><span class="p">,</span> <span class="s2">&quot;row-4&quot;</span><span class="p">,</span> <span class="s2">&quot;row-5&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the targeted tests to verify they fail</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_tidal_battery_grid.py</span> <span class="pre">-k</span> <span class="pre">&quot;should_use_live_display</span> <span class="pre">or</span> <span class="pre">build_stage_counts</span> <span class="pre">or</span> <span class="pre">trim_recent_rows&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with missing helpers such as <code class="docutils literal notranslate"><span class="pre">AttributeError:</span> <span class="pre">module</span> <span class="pre">'run_tidal_battery_grid'</span> <span class="pre">has</span> <span class="pre">no</span> <span class="pre">attribute</span> <span class="pre">'should_use_live_display'</span></code>, <code class="docutils literal notranslate"><span class="pre">build_stage_counts</span></code>, or <code class="docutils literal notranslate"><span class="pre">trim_recent_rows</span></code>.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Implement the pure UI helpers</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">should_use_live_display</span><span class="p">(</span><span class="n">console_obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span>
+        <span class="nb">getattr</span><span class="p">(</span><span class="n">console_obj</span><span class="p">,</span> <span class="s2">&quot;is_terminal&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">console_obj</span><span class="p">,</span> <span class="s2">&quot;is_dumb_terminal&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build_stage_counts</span><span class="p">(</span><span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">stage_prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+    <span class="n">status_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">stage_prefix</span><span class="si">}</span><span class="s2">_fit_status&quot;</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;ok&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;non_finite&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;exception&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">status_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="s2">&quot;ok&quot;</span><span class="p">:</span>
+            <span class="n">counts</span><span class="p">[</span><span class="s2">&quot;ok&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="n">status</span> <span class="o">==</span> <span class="s2">&quot;non_finite_metrics&quot;</span><span class="p">:</span>
+            <span class="n">counts</span><span class="p">[</span><span class="s2">&quot;non_finite&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">counts</span><span class="p">[</span><span class="s2">&quot;exception&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">counts</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">trim_recent_rows</span><span class="p">(</span><span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">rows</span><span class="p">[</span><span class="o">-</span><span class="n">limit</span><span class="p">:])</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the targeted tests to verify they pass</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_tidal_battery_grid.py</span> <span class="pre">-k</span> <span class="pre">&quot;should_use_live_display</span> <span class="pre">or</span> <span class="pre">build_stage_counts</span> <span class="pre">or</span> <span class="pre">trim_recent_rows&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: PASS for all three new helper tests.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 5: Commit the helper layer</strong></p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>examples/run_tidal_battery_grid.py<span class="w"> </span>test/test_tidal_battery_grid.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add battery grid ui state helpers&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="task-2-add-rich-renderable-builders">
+<h3>Task 2: Add Rich Renderable Builders<a class="headerlink" href="#task-2-add-rich-renderable-builders" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/run_tidal_battery_grid.py</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_tidal_battery_grid.py</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_tidal_battery_grid.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing Rich render-helper tests</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">rich.panel</span><span class="w"> </span><span class="kn">import</span> <span class="n">Panel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_recent_results_table_uses_latest_rows</span><span class="p">():</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;candidate_label&quot;</span><span class="p">:</span> <span class="s2">&quot;row-0&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;validation_fit_status&quot;</span><span class="p">:</span> <span class="s2">&quot;ok&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;validation_mape&quot;</span><span class="p">:</span> <span class="mf">12.0</span><span class="p">,</span>
+            <span class="s2">&quot;validation_rmse&quot;</span><span class="p">:</span> <span class="mf">0.12</span><span class="p">,</span>
+            <span class="s2">&quot;validation_r2&quot;</span><span class="p">:</span> <span class="mf">0.81</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;candidate_label&quot;</span><span class="p">:</span> <span class="s2">&quot;row-1&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;validation_fit_status&quot;</span><span class="p">:</span> <span class="s2">&quot;exception&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;validation_mape&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;validation_rmse&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;validation_r2&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">),</span>
+        <span class="p">},</span>
+    <span class="p">]</span>
+
+    <span class="n">table</span> <span class="o">=</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">build_recent_results_table</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="s2">&quot;validation&quot;</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">Table</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">title</span> <span class="o">==</span> <span class="s2">&quot;Recent results&quot;</span>
+    <span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">row_count</span> <span class="o">==</span> <span class="mi">2</span>
+    <span class="k">assert</span> <span class="p">[</span><span class="n">column</span><span class="o">.</span><span class="n">header</span> <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span> <span class="o">==</span> <span class="p">[</span>
+        <span class="s2">&quot;Stage&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Candidate&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Status&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;MAPE&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;RMSE&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;R^2&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_best_validation_panel_handles_missing_and_present_best_row</span><span class="p">():</span>
+    <span class="n">empty_panel</span> <span class="o">=</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">build_best_validation_panel</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">full_panel</span> <span class="o">=</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">build_best_validation_panel</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;candidate_label&quot;</span><span class="p">:</span> <span class="s2">&quot;regs=pressure+wind_u knots=med Mf/Mm=8 annual=16 reg=0.003&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;validation_mape&quot;</span><span class="p">:</span> <span class="mf">9.5</span><span class="p">,</span>
+            <span class="s2">&quot;validation_rmse&quot;</span><span class="p">:</span> <span class="mf">0.11</span><span class="p">,</span>
+            <span class="s2">&quot;validation_r2&quot;</span><span class="p">:</span> <span class="mf">0.87</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">empty_panel</span><span class="p">,</span> <span class="n">Panel</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">full_panel</span><span class="p">,</span> <span class="n">Panel</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">empty_panel</span><span class="o">.</span><span class="n">title</span> <span class="o">==</span> <span class="s2">&quot;Best validation so far&quot;</span>
+    <span class="k">assert</span> <span class="n">full_panel</span><span class="o">.</span><span class="n">title</span> <span class="o">==</span> <span class="s2">&quot;Best validation so far&quot;</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the targeted tests to verify they fail</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_tidal_battery_grid.py</span> <span class="pre">-k</span> <span class="pre">&quot;recent_results_table</span> <span class="pre">or</span> <span class="pre">best_validation_panel&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with missing helpers such as <code class="docutils literal notranslate"><span class="pre">AttributeError:</span> <span class="pre">module</span> <span class="pre">'run_tidal_battery_grid'</span> <span class="pre">has</span> <span class="pre">no</span> <span class="pre">attribute</span> <span class="pre">'build_recent_results_table'</span></code> or <code class="docutils literal notranslate"><span class="pre">build_best_validation_panel</span></code>.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Implement the Rich renderable builders</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">rich.console</span><span class="w"> </span><span class="kn">import</span> <span class="n">Group</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.panel</span><span class="w"> </span><span class="kn">import</span> <span class="n">Panel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build_recent_results_table</span><span class="p">(</span>
+    <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+    <span class="n">stage_prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Table</span><span class="p">:</span>
+    <span class="n">metric_prefix</span> <span class="o">=</span> <span class="s2">&quot;validation&quot;</span> <span class="k">if</span> <span class="n">stage_prefix</span> <span class="o">==</span> <span class="s2">&quot;validation&quot;</span> <span class="k">else</span> <span class="s2">&quot;test&quot;</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Recent results&quot;</span><span class="p">)</span>
+    <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;Stage&quot;</span><span class="p">)</span>
+    <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;Candidate&quot;</span><span class="p">)</span>
+    <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;Status&quot;</span><span class="p">)</span>
+    <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;MAPE&quot;</span><span class="p">,</span> <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">)</span>
+    <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;RMSE&quot;</span><span class="p">,</span> <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">)</span>
+    <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;R^2&quot;</span><span class="p">,</span> <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">trim_recent_rows</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">):</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">add_row</span><span class="p">(</span>
+            <span class="n">stage_prefix</span><span class="p">,</span>
+            <span class="n">row</span><span class="p">[</span><span class="s2">&quot;candidate_label&quot;</span><span class="p">],</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">stage_prefix</span><span class="si">}</span><span class="s2">_fit_status&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)),</span>
+            <span class="n">format_metric</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">metric_prefix</span><span class="si">}</span><span class="s2">_mape&quot;</span><span class="p">)),</span>
+            <span class="n">format_metric</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">metric_prefix</span><span class="si">}</span><span class="s2">_rmse&quot;</span><span class="p">)),</span>
+            <span class="n">format_metric</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">metric_prefix</span><span class="si">}</span><span class="s2">_r2&quot;</span><span class="p">)),</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">table</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build_best_validation_panel</span><span class="p">(</span><span class="n">best_validation_row</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Panel</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">best_validation_row</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">body</span> <span class="o">=</span> <span class="s2">&quot;No finite validation result yet.&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">body</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">best_validation_row</span><span class="p">[</span><span class="s1">&#39;candidate_label&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;MAPE=</span><span class="si">{</span><span class="n">format_metric</span><span class="p">(</span><span class="n">best_validation_row</span><span class="p">[</span><span class="s1">&#39;validation_mape&#39;</span><span class="p">])</span><span class="si">}</span><span class="s2">  &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;RMSE=</span><span class="si">{</span><span class="n">format_metric</span><span class="p">(</span><span class="n">best_validation_row</span><span class="p">[</span><span class="s1">&#39;validation_rmse&#39;</span><span class="p">])</span><span class="si">}</span><span class="s2">  &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;R^2=</span><span class="si">{</span><span class="n">format_metric</span><span class="p">(</span><span class="n">best_validation_row</span><span class="p">[</span><span class="s1">&#39;validation_r2&#39;</span><span class="p">])</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Panel</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Best validation so far&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build_metadata_panel</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">station</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">stage_prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">completed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">total</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">n_jobs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">counts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Panel</span><span class="p">:</span>
+    <span class="n">body</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;station=</span><span class="si">{</span><span class="n">station</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;stage=</span><span class="si">{</span><span class="n">stage_prefix</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;progress=</span><span class="si">{</span><span class="n">completed</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;workers=</span><span class="si">{</span><span class="n">n_jobs</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;ok=</span><span class="si">{</span><span class="n">counts</span><span class="p">[</span><span class="s1">&#39;ok&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> non_finite=</span><span class="si">{</span><span class="n">counts</span><span class="p">[</span><span class="s1">&#39;non_finite&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> exception=</span><span class="si">{</span><span class="n">counts</span><span class="p">[</span><span class="s1">&#39;exception&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;output_dir=</span><span class="si">{</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Panel</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Run status&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build_live_renderable</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">metadata_panel</span><span class="p">:</span> <span class="n">Panel</span><span class="p">,</span>
+    <span class="n">progress_renderable</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">best_validation_panel</span><span class="p">:</span> <span class="n">Panel</span><span class="p">,</span>
+    <span class="n">recent_results_table</span><span class="p">:</span> <span class="n">Table</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Group</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">Group</span><span class="p">(</span><span class="n">metadata_panel</span><span class="p">,</span> <span class="n">progress_renderable</span><span class="p">,</span> <span class="n">best_validation_panel</span><span class="p">,</span> <span class="n">recent_results_table</span><span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the targeted tests to verify they pass</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_tidal_battery_grid.py</span> <span class="pre">-k</span> <span class="pre">&quot;recent_results_table</span> <span class="pre">or</span> <span class="pre">best_validation_panel&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: PASS for the new Rich render-helper tests.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 5: Commit the renderable builders</strong></p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>examples/run_tidal_battery_grid.py<span class="w"> </span>test/test_tidal_battery_grid.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add battery grid rich render helpers&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="task-3-adopt-interruptible-workers-and-wire-live-progress">
+<h3>Task 3: Adopt Interruptible Workers And Wire Live Progress<a class="headerlink" href="#task-3-adopt-interruptible-workers-and-wire-live-progress" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/run_tidal_battery_grid.py</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_tidal_battery_grid.py</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_tidal_battery_grid.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing reporter-callback and interrupt regressions</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_run_candidates_notifies_reporter_for_each_completed_row</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="n">candidate</span> <span class="o">=</span> <span class="n">battery_grid</span><span class="o">.</span><span class="n">SearchCandidate</span><span class="p">(</span>
+        <span class="n">regressors</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;pressure&quot;</span><span class="p">,</span> <span class="s2">&quot;wind_u&quot;</span><span class="p">),</span>
+        <span class="n">knot_preset</span><span class="o">=</span><span class="s2">&quot;med&quot;</span><span class="p">,</span>
+        <span class="n">mf_mm_order</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">annual_order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">fourier_reg_weight</span><span class="o">=</span><span class="mf">3.0e-4</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">reported</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">fake_evaluate_candidate</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;candidate_label&quot;</span><span class="p">:</span> <span class="s2">&quot;demo&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;validation_fit_status&quot;</span><span class="p">:</span> <span class="s2">&quot;ok&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;validation_mape&quot;</span><span class="p">:</span> <span class="mf">8.0</span><span class="p">,</span>
+            <span class="s2">&quot;validation_rmse&quot;</span><span class="p">:</span> <span class="mf">0.2</span><span class="p">,</span>
+            <span class="s2">&quot;validation_r2&quot;</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="n">battery_grid</span><span class="p">,</span> <span class="s2">&quot;evaluate_candidate&quot;</span><span class="p">,</span> <span class="n">fake_evaluate_candidate</span><span class="p">)</span>
+
+    <span class="n">battery_grid</span><span class="o">.</span><span class="n">run_candidates</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">candidate</span><span class="p">,</span> <span class="n">candidate</span><span class="p">],</span>
+        <span class="n">df</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;water_level&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2022-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;1h&quot;</span><span class="p">)),</span>
+        <span class="n">sph</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">train_start</span><span class="o">=</span><span class="s2">&quot;2022-01-01&quot;</span><span class="p">,</span>
+        <span class="n">train_end</span><span class="o">=</span><span class="s2">&quot;2023-01-01&quot;</span><span class="p">,</span>
+        <span class="n">test_end</span><span class="o">=</span><span class="s2">&quot;2023-12-31&quot;</span><span class="p">,</span>
+        <span class="n">stage_prefix</span><span class="o">=</span><span class="s2">&quot;validation&quot;</span><span class="p">,</span>
+        <span class="n">n_jobs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">log</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_message</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reporter</span><span class="o">=</span><span class="k">lambda</span> <span class="o">*</span><span class="p">,</span> <span class="n">completed</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">stage_prefix</span><span class="p">,</span> <span class="n">row</span><span class="p">,</span> <span class="n">best_so_far</span><span class="p">:</span> <span class="n">reported</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">completed</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">stage_prefix</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">reported</span> <span class="o">==</span> <span class="p">[(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;validation&quot;</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;validation&quot;</span><span class="p">)]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_handle_interrupt_cancels_workers_and_preserves_interrupt_exit</span><span class="p">():</span>
+    <span class="n">shutdown_events</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">class</span><span class="w"> </span><span class="nc">FakePool</span><span class="p">:</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">terminate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="n">shutdown_events</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;terminate&quot;</span><span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">join</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="n">shutdown_events</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;join&quot;</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">KeyboardInterrupt</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyboardInterrupt</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+            <span class="n">battery_grid</span><span class="o">.</span><span class="n">handle_interrupt</span><span class="p">(</span><span class="n">FakePool</span><span class="p">())</span>
+            <span class="k">raise</span>
+
+    <span class="k">assert</span> <span class="n">shutdown_events</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;terminate&quot;</span><span class="p">,</span> <span class="s2">&quot;join&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the targeted regression to verify it fails</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_tidal_battery_grid.py</span> <span class="pre">-k</span> <span class="pre">&quot;notifies_reporter_for_each_completed_row</span> <span class="pre">or</span> <span class="pre">handle_interrupt&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with <code class="docutils literal notranslate"><span class="pre">TypeError:</span> <span class="pre">run_candidates()</span> <span class="pre">got</span> <span class="pre">an</span> <span class="pre">unexpected</span> <span class="pre">keyword</span> <span class="pre">argument</span> <span class="pre">'reporter'</span></code>.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Add file-only logging plus a live reporter callback</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">common_cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">console</span><span class="p">,</span> <span class="n">default_output_dir</span><span class="p">,</span> <span class="n">error</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">section</span><span class="p">,</span> <span class="n">success</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.live</span><span class="w"> </span><span class="kn">import</span> <span class="n">Live</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.progress</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BarColumn</span><span class="p">,</span>
+    <span class="n">MofNCompleteColumn</span><span class="p">,</span>
+    <span class="n">Progress</span><span class="p">,</span>
+    <span class="n">SpinnerColumn</span><span class="p">,</span>
+    <span class="n">TextColumn</span><span class="p">,</span>
+    <span class="n">TimeElapsedColumn</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_file_logger</span><span class="p">(</span><span class="n">log_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">):</span>
+    <span class="n">log_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">log</span><span class="p">(</span><span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">timestamp</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">tz</span><span class="o">=</span><span class="s2">&quot;UTC&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%Y-%m-</span><span class="si">%d</span><span class="s2">T%H:%M:%SZ&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">log_path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+            <span class="n">handle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">timestamp</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">log</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_plain_logger</span><span class="p">(</span><span class="n">log_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">):</span>
+    <span class="n">file_log</span> <span class="o">=</span> <span class="n">make_file_logger</span><span class="p">(</span><span class="n">log_path</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">log</span><span class="p">(</span><span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">info</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+        <span class="n">file_log</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">log</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_stage_progress</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Progress</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">Progress</span><span class="p">(</span>
+        <span class="n">SpinnerColumn</span><span class="p">(),</span>
+        <span class="n">TextColumn</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{task.description}</span><span class="s2">&quot;</span><span class="p">),</span>
+        <span class="n">BarColumn</span><span class="p">(),</span>
+        <span class="n">MofNCompleteColumn</span><span class="p">(),</span>
+        <span class="n">TimeElapsedColumn</span><span class="p">(),</span>
+        <span class="n">console</span><span class="o">=</span><span class="n">console</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">handle_interrupt</span><span class="p">(</span><span class="n">pool</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">pool</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+    <span class="n">pool</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run_candidates</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">reporter</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="o">...</span>
+    <span class="k">if</span> <span class="n">workers</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">completed</span><span class="p">,</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">candidates</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">row</span> <span class="o">=</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+            <span class="n">best_so_far</span> <span class="o">=</span> <span class="n">log_completed_row</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">reporter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">reporter</span><span class="p">(</span>
+                    <span class="n">completed</span><span class="o">=</span><span class="n">completed</span><span class="p">,</span>
+                    <span class="n">total</span><span class="o">=</span><span class="n">total</span><span class="p">,</span>
+                    <span class="n">stage_prefix</span><span class="o">=</span><span class="n">stage_prefix</span><span class="p">,</span>
+                    <span class="n">row</span><span class="o">=</span><span class="n">row</span><span class="p">,</span>
+                    <span class="n">best_so_far</span><span class="o">=</span><span class="n">best_so_far</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="o">...</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">pool</span> <span class="o">=</span> <span class="n">make_candidate_pool</span><span class="p">(</span>
+            <span class="n">workers</span><span class="o">=</span><span class="n">workers</span><span class="p">,</span>
+            <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+            <span class="n">sph</span><span class="o">=</span><span class="n">sph</span><span class="p">,</span>
+            <span class="n">train_start</span><span class="o">=</span><span class="n">train_start</span><span class="p">,</span>
+            <span class="n">train_end</span><span class="o">=</span><span class="n">train_end</span><span class="p">,</span>
+            <span class="n">test_end</span><span class="o">=</span><span class="n">test_end</span><span class="p">,</span>
+            <span class="n">stage_prefix</span><span class="o">=</span><span class="n">stage_prefix</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">completed</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span><span class="n">run_candidate_job</span><span class="p">,</span> <span class="n">candidates</span><span class="p">),</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+                <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+                <span class="n">best_so_far</span> <span class="o">=</span> <span class="n">log_completed_row</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">reporter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">reporter</span><span class="p">(</span>
+                        <span class="n">completed</span><span class="o">=</span><span class="n">completed</span><span class="p">,</span>
+                        <span class="n">total</span><span class="o">=</span><span class="n">total</span><span class="p">,</span>
+                        <span class="n">stage_prefix</span><span class="o">=</span><span class="n">stage_prefix</span><span class="p">,</span>
+                        <span class="n">row</span><span class="o">=</span><span class="n">row</span><span class="p">,</span>
+                        <span class="n">best_so_far</span><span class="o">=</span><span class="n">best_so_far</span><span class="p">,</span>
+                    <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+            <span class="n">handle_interrupt</span><span class="p">(</span><span class="n">pool</span><span class="p">)</span>
+            <span class="k">raise</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="o">...</span><span class="p">):</span>
+    <span class="o">...</span>
+    <span class="n">log</span> <span class="o">=</span> <span class="n">make_plain_logger</span><span class="p">(</span><span class="n">log_path</span><span class="p">)</span>
+    <span class="n">live_enabled</span> <span class="o">=</span> <span class="n">should_use_live_display</span><span class="p">(</span><span class="n">console</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">live_enabled</span><span class="p">:</span>
+        <span class="n">file_log</span> <span class="o">=</span> <span class="n">make_file_logger</span><span class="p">(</span><span class="n">log_path</span><span class="p">)</span>
+        <span class="n">progress</span> <span class="o">=</span> <span class="n">make_stage_progress</span><span class="p">()</span>
+        <span class="n">stage_task</span> <span class="o">=</span> <span class="n">progress</span><span class="o">.</span><span class="n">add_task</span><span class="p">(</span><span class="s2">&quot;validation&quot;</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">stage_rows</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;test&quot;</span><span class="p">:</span> <span class="p">[]}</span>
+        <span class="n">best_validation_row</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">reporter</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">completed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">stage_prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">row</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">best_so_far</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">nonlocal</span> <span class="n">best_validation_row</span>
+            <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">stage_task</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="n">stage_prefix</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="n">total</span><span class="p">,</span> <span class="n">completed</span><span class="o">=</span><span class="n">completed</span><span class="p">)</span>
+            <span class="n">stage_rows</span><span class="p">[</span><span class="n">stage_prefix</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+            <span class="n">recent_rows</span> <span class="o">=</span> <span class="n">trim_recent_rows</span><span class="p">(</span><span class="n">stage_rows</span><span class="p">[</span><span class="n">stage_prefix</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">stage_prefix</span> <span class="o">==</span> <span class="s2">&quot;validation&quot;</span><span class="p">:</span>
+                <span class="n">best_validation_row</span> <span class="o">=</span> <span class="n">best_so_far</span>
+            <span class="n">live</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">build_live_renderable</span><span class="p">(</span>
+                    <span class="n">metadata_panel</span><span class="o">=</span><span class="n">build_metadata_panel</span><span class="p">(</span>
+                        <span class="n">station</span><span class="o">=</span><span class="n">station</span><span class="p">,</span>
+                        <span class="n">stage_prefix</span><span class="o">=</span><span class="n">stage_prefix</span><span class="p">,</span>
+                        <span class="n">completed</span><span class="o">=</span><span class="n">completed</span><span class="p">,</span>
+                        <span class="n">total</span><span class="o">=</span><span class="n">total</span><span class="p">,</span>
+                        <span class="n">n_jobs</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">,</span>
+                        <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">,</span>
+                        <span class="n">counts</span><span class="o">=</span><span class="n">build_stage_counts</span><span class="p">(</span><span class="n">stage_rows</span><span class="p">[</span><span class="n">stage_prefix</span><span class="p">],</span> <span class="n">stage_prefix</span><span class="p">),</span>
+                    <span class="p">),</span>
+                    <span class="n">progress_renderable</span><span class="o">=</span><span class="n">progress</span><span class="p">,</span>
+                    <span class="n">best_validation_panel</span><span class="o">=</span><span class="n">build_best_validation_panel</span><span class="p">(</span><span class="n">best_validation_row</span><span class="p">),</span>
+                    <span class="n">recent_results_table</span><span class="o">=</span><span class="n">build_recent_results_table</span><span class="p">(</span><span class="n">recent_rows</span><span class="p">,</span> <span class="n">stage_prefix</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">file_log</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">stage_prefix</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">completed</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;candidate_label&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">stage_prefix</span><span class="si">}</span><span class="s2">_mape=</span><span class="si">{</span><span class="n">format_metric</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">stage_prefix</span><span class="si">}</span><span class="s1">_mape&#39;</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">Live</span><span class="p">(</span><span class="n">console</span><span class="o">=</span><span class="n">console</span><span class="p">,</span> <span class="n">refresh_per_second</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">transient</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">as</span> <span class="n">live</span><span class="p">:</span>
+            <span class="o">...</span>
+            <span class="n">validation_rows</span> <span class="o">=</span> <span class="n">run_candidates</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">log</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_message</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="n">reporter</span><span class="o">=</span><span class="n">reporter</span><span class="p">)</span>
+            <span class="o">...</span>
+            <span class="n">test_rows</span> <span class="o">=</span> <span class="n">run_candidates</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">log</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_message</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="n">reporter</span><span class="o">=</span><span class="n">reporter</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">validation_rows</span> <span class="o">=</span> <span class="n">run_candidates</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">log</span><span class="o">=</span><span class="n">log</span><span class="p">)</span>
+        <span class="o">...</span>
+        <span class="n">test_rows</span> <span class="o">=</span> <span class="n">run_candidates</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">log</span><span class="o">=</span><span class="n">log</span><span class="p">,</span> <span class="n">validation_rows</span><span class="o">=</span><span class="n">validation_rows</span><span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the targeted reporter regression and the full script tests</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_tidal_battery_grid.py</span> <span class="pre">-k</span> <span class="pre">&quot;notifies_reporter_for_each_completed_row</span> <span class="pre">or</span> <span class="pre">handle_interrupt&quot;</span> <span class="pre">-v</span> <span class="pre">&amp;&amp;</span> <span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_tidal_battery_grid.py</span> <span class="pre">-q</span> <span class="pre">&amp;&amp;</span> <span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">test/test_tidal_battery_grid.py</span> <span class="pre">-q</span></code></p>
+<p>Expected:</p>
+<ul class="simple">
+<li><p>PASS for the reporter regression;</p></li>
+<li><p>PASS for the focused battery-grid test file;</p></li>
+<li><p>PASS for the combined compact + battery-grid suite.</p></li>
+<li><p>[ ] <strong>Step 5: Verify the CLI still boots and commit the integration</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">python</span> <span class="pre">examples/run_tidal_battery_grid.py</span> <span class="pre">--help</span></code></p>
+<p>Expected: exit <code class="docutils literal notranslate"><span class="pre">0</span></code> with the existing CLI options still listed.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>examples/run_tidal_battery_grid.py<span class="w"> </span>test/test_tidal_battery_grid.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add rich live progress to battery grid search&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="self-review-checklist">
+<h2>Self-Review Checklist<a class="headerlink" href="#self-review-checklist" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Spec coverage:</p>
+<ul>
+<li><p>UI mode detection -&gt; Task 1 + Task 3</p></li>
+<li><p>live Rich layout -&gt; Task 2 + Task 3</p></li>
+<li><p>file logging + partial CSV preservation -&gt; Task 3</p></li>
+<li><p>main-thread-only live updates around the current executor loop -&gt; Task 3</p></li>
+<li><p>plain-text fallback -&gt; Task 3</p></li>
+</ul>
+</li>
+<li><p>Placeholder scan:</p>
+<ul>
+<li><p>No <code class="docutils literal notranslate"><span class="pre">TODO</span></code>/<code class="docutils literal notranslate"><span class="pre">TBD</span></code> placeholders remain</p></li>
+<li><p>Every test step includes concrete code and commands</p></li>
+</ul>
+</li>
+<li><p>Type/shape consistency:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">stage_prefix</span></code> stays <code class="docutils literal notranslate"><span class="pre">validation</span></code> / <code class="docutils literal notranslate"><span class="pre">test</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">non_finite_metrics</span></code> from production rows maps to <code class="docutils literal notranslate"><span class="pre">non_finite</span></code> in the UI counters</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">best_so_far</span></code> remains validation-only and is threaded through the reporter callback consistently</p></li>
+</ul>
+</li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

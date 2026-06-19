@@ -1,0 +1,555 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compact Data Window Implementation Plan &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Compact Data Window Implementation Plan</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/plans/2026-04-15-compact-data-window-plan.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="compact-data-window-implementation-plan">
+<h1>Compact Data Window Implementation Plan<a class="headerlink" href="#compact-data-window-implementation-plan" title="Link to this heading"></a></h1>
+<blockquote>
+<div><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code class="docutils literal notranslate"><span class="pre">-</span> <span class="pre">[</span> <span class="pre">]</span></code>) syntax for tracking.</p>
+</div></blockquote>
+<p><strong>Goal:</strong> Make <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code> load an explicit top-level station/date window on demand, reuse/download the needed data range, and derive later exploration/model datepickers from the loaded dataset.</p>
+<p><strong>Architecture:</strong> Keep the existing data backends in <code class="docutils literal notranslate"><span class="pre">examples/example_tidal.py</span></code> as the source of truth. Extend <code class="docutils literal notranslate"><span class="pre">load_station_frame(...)</span></code> in the compact notebook so it accepts the requested date window, resolves a covering tidal cache or downloads the requested range, trims the loaded frame to that window, and then merges LCD weather for the same span. Rewire the marimo UI so data loading is gated behind a top-level <code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">data</span></code> button, while downstream datepickers use a small pure helper to derive valid defaults from the loaded frame.</p>
+<p><strong>Tech Stack:</strong> Python 3.12, marimo, pandas, NumPy, pytest, <code class="docutils literal notranslate"><span class="pre">unittest.mock</span></code></p>
+<hr class="docutils" />
+<section id="file-map">
+<h2>File Map<a class="headerlink" href="#file-map" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code></p>
+<ul>
+<li><p>Import <code class="docutils literal notranslate"><span class="pre">resolve_tidal_cache_path(...)</span></code> and date utilities.</p></li>
+<li><p>Extend <code class="docutils literal notranslate"><span class="pre">load_station_frame(...)</span></code> with requested window, cache/download handling, trimming, and clearer status/error messages.</p></li>
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">DATA_WINDOW_DEFAULT_START</span></code>, <code class="docutils literal notranslate"><span class="pre">DATA_WINDOW_DEFAULT_END</span></code>, and <code class="docutils literal notranslate"><span class="pre">build_model_date_defaults(...)</span></code>.</p></li>
+<li><p>Rewire the top-level notebook controls around an explicit <code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">data</span></code> button.</p></li>
+<li><p>Rebuild model datepickers from the loaded frame bounds instead of assuming the full cached dataset.</p></li>
+</ul>
+</li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p>
+<ul>
+<li><p>Add focused regressions for range-aware loading, cache-miss errors, and downstream model date defaults.</p></li>
+</ul>
+</li>
+</ul>
+<section id="task-1-range-aware-data-loading">
+<h3>Task 1: Range-Aware Data Loading<a class="headerlink" href="#task-1-range-aware-data-loading" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py:20-32</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py:103-109</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py:470-530</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py:1-92</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing tests</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest.mock</span><span class="w"> </span><span class="kn">import</span> <span class="n">patch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">plotly.graph_objects</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">go</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;examples&quot;</span><span class="p">))</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">example_tidal</span><span class="w"> </span><span class="kn">import</span> <span class="n">TIDAL_CONSTITUENT_PERIODS_HOURS</span> <span class="k">as</span> <span class="n">PERIODS</span>  <span class="c1"># noqa: E402</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">example_tidal_compact</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: E402</span>
+    <span class="n">build_diagnostic_figures</span><span class="p">,</span>
+    <span class="n">build_periodogram_selector_options</span><span class="p">,</span>
+    <span class="n">build_periodogram_figure</span><span class="p">,</span>
+    <span class="n">build_shapley_figure</span><span class="p">,</span>
+    <span class="n">load_station_frame</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_load_station_frame_uses_covering_cache_and_trims_requested_window</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+    <span class="n">cache_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;8518750_20231201_20240131_combined.csv&quot;</span>
+    <span class="n">cache_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">&quot;datetime,water_level</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">full_index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2023-12-31 00:00&quot;</span><span class="p">,</span> <span class="s2">&quot;2024-01-03 23:00&quot;</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;1h&quot;</span><span class="p">)</span>
+    <span class="n">full_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;water_level&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">full_index</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)},</span>
+        <span class="n">index</span><span class="o">=</span><span class="n">full_index</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">with</span> <span class="p">(</span>
+        <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;example_tidal_compact.find_station&quot;</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="s2">&quot;8518750&quot;</span><span class="p">),</span>
+        <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;example_tidal_compact.resolve_tidal_cache_path&quot;</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="n">cache_file</span><span class="p">),</span>
+        <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;example_tidal_compact.load_tidal_data&quot;</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="n">full_df</span><span class="p">),</span>
+    <span class="p">):</span>
+        <span class="n">station_data</span> <span class="o">=</span> <span class="n">load_station_frame</span><span class="p">(</span>
+            <span class="s2">&quot;The Battery, NY&quot;</span><span class="p">,</span>
+            <span class="n">data_start</span><span class="o">=</span><span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">data_end</span><span class="o">=</span><span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+            <span class="n">use_weather</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">download_tidal</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">download_weather</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;date_min&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;date_max&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">==</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2024-01-01 00:00:00&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">==</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2024-01-02 23:00:00&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="s2">&quot;cache&quot;</span> <span class="ow">in</span> <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;status_message&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="s2">&quot;loaded window: 2024-01-01 to 2024-01-02&quot;</span> <span class="ow">in</span> <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;status_message&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_load_station_frame_requires_cached_window_when_download_disabled</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+    <span class="n">missing_cache</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;8518750_20240101_20250101_combined.csv&quot;</span>
+
+    <span class="k">with</span> <span class="p">(</span>
+        <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;example_tidal_compact.find_station&quot;</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="s2">&quot;8518750&quot;</span><span class="p">),</span>
+        <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;example_tidal_compact.resolve_tidal_cache_path&quot;</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="n">missing_cache</span><span class="p">),</span>
+    <span class="p">):</span>
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span>
+            <span class="ne">FileNotFoundError</span><span class="p">,</span>
+            <span class="n">match</span><span class="o">=</span><span class="s2">&quot;Requested tidal window 2024-01-01 to 2025-01-01 is not cached&quot;</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">load_station_frame</span><span class="p">(</span>
+                <span class="s2">&quot;The Battery, NY&quot;</span><span class="p">,</span>
+                <span class="n">data_start</span><span class="o">=</span><span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                <span class="n">data_end</span><span class="o">=</span><span class="n">date</span><span class="p">(</span><span class="mi">2025</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                <span class="n">use_weather</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">download_tidal</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">download_weather</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the targeted tests to verify they fail</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-k</span> <span class="pre">&quot;load_station_frame&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with <code class="docutils literal notranslate"><span class="pre">TypeError:</span> <span class="pre">load_station_frame()</span> <span class="pre">got</span> <span class="pre">an</span> <span class="pre">unexpected</span> <span class="pre">keyword</span> <span class="pre">argument</span> <span class="pre">'data_start'</span></code>.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Implement range-aware loading in the compact notebook</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span><span class="p">,</span> <span class="n">timedelta</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">example_tidal</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_DATA_DIR</span><span class="p">,</span>
+    <span class="n">STATION_CATALOG</span><span class="p">,</span>
+    <span class="n">TIDE_TO_WEATHER</span><span class="p">,</span>
+    <span class="n">download_lcd_weather</span><span class="p">,</span>
+    <span class="n">download_tidal_data</span><span class="p">,</span>
+    <span class="n">find_station</span><span class="p">,</span>
+    <span class="n">load_lcd_weather</span><span class="p">,</span>
+    <span class="n">load_tidal_data</span><span class="p">,</span>
+    <span class="n">merge_tidal_weather</span><span class="p">,</span>
+    <span class="n">resolve_tidal_cache_path</span><span class="p">,</span>
+    <span class="n">TIDAL_CONSTITUENT_PERIODS_HOURS</span> <span class="k">as</span> <span class="n">PERIODS</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">StationData</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+    <span class="n">sph</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">date_min</span><span class="p">:</span> <span class="n">date</span>
+    <span class="n">date_max</span><span class="p">:</span> <span class="n">date</span>
+    <span class="n">status_message</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_station_frame</span><span class="p">(</span>
+    <span class="n">station_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">data_start</span><span class="p">:</span> <span class="n">date</span><span class="p">,</span>
+    <span class="n">data_end</span><span class="p">:</span> <span class="n">date</span><span class="p">,</span>
+    <span class="n">use_weather</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">download_tidal</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">download_weather</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StationData</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">data_start</span> <span class="o">&gt;</span> <span class="n">data_end</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Data start must be on or before data end.&quot;</span><span class="p">)</span>
+
+    <span class="n">station_id</span> <span class="o">=</span> <span class="n">find_station</span><span class="p">(</span><span class="n">station_name</span><span class="p">)</span>
+    <span class="n">request_begin</span> <span class="o">=</span> <span class="n">data_start</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">request_end</span> <span class="o">=</span> <span class="n">data_end</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">status_messages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">tidal_path</span> <span class="o">=</span> <span class="n">resolve_tidal_cache_path</span><span class="p">(</span><span class="n">DEFAULT_DATA_DIR</span><span class="p">,</span> <span class="n">station_id</span><span class="p">,</span> <span class="n">request_begin</span><span class="p">,</span> <span class="n">request_end</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">tidal_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">load_tidal_data</span><span class="p">(</span><span class="n">tidal_path</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">status_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Tidal data: cache </span><span class="si">{</span><span class="n">tidal_path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="n">download_tidal</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Requested tidal window </span><span class="si">{</span><span class="n">data_start</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">data_end</span><span class="si">}</span><span class="s2"> is not cached for </span><span class="si">{</span><span class="n">STATION_CATALOG</span><span class="p">[</span><span class="n">station_id</span><span class="p">][</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tidal_path</span> <span class="o">=</span> <span class="n">download_tidal_data</span><span class="p">(</span>
+            <span class="n">DEFAULT_DATA_DIR</span><span class="p">,</span>
+            <span class="n">station</span><span class="o">=</span><span class="n">station_id</span><span class="p">,</span>
+            <span class="n">begin_date</span><span class="o">=</span><span class="n">request_begin</span><span class="p">,</span>
+            <span class="n">end_date</span><span class="o">=</span><span class="n">request_end</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">load_tidal_data</span><span class="p">(</span><span class="n">tidal_path</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">status_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Tidal data: downloaded </span><span class="si">{</span><span class="n">tidal_path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">time_index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">time_index</span><span class="o">.</span><span class="n">tz</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">time_index</span> <span class="o">=</span> <span class="n">time_index</span><span class="o">.</span><span class="n">tz_convert</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">time_index</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">data_start</span><span class="p">)</span> <span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">data_end</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;No tidal samples available between </span><span class="si">{</span><span class="n">data_start</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">data_end</span><span class="si">}</span><span class="s2"> for </span><span class="si">{</span><span class="n">STATION_CATALOG</span><span class="p">[</span><span class="n">station_id</span><span class="p">][</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">weather_station</span> <span class="o">=</span> <span class="n">TIDE_TO_WEATHER</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">station_id</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">use_weather</span> <span class="ow">and</span> <span class="n">weather_station</span><span class="p">:</span>
+        <span class="n">weather_station_id</span><span class="p">,</span> <span class="n">station_label</span> <span class="o">=</span> <span class="n">weather_station</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">weather_df</span> <span class="o">=</span> <span class="n">load_lcd_weather</span><span class="p">(</span>
+                <span class="n">DEFAULT_DATA_DIR</span><span class="p">,</span>
+                <span class="n">station_id</span><span class="o">=</span><span class="n">weather_station_id</span><span class="p">,</span>
+                <span class="n">begin_date</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">data_start</span><span class="p">),</span>
+                <span class="n">end_date</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">data_end</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">download_weather</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Requested LCD weather window </span><span class="si">{</span><span class="n">data_start</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">data_end</span><span class="si">}</span><span class="s2"> is not cached for </span><span class="si">{</span><span class="n">station_label</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+            <span class="n">download_lcd_weather</span><span class="p">(</span>
+                <span class="n">DEFAULT_DATA_DIR</span><span class="p">,</span>
+                <span class="n">station_id</span><span class="o">=</span><span class="n">weather_station_id</span><span class="p">,</span>
+                <span class="n">begin_year</span><span class="o">=</span><span class="n">data_start</span><span class="o">.</span><span class="n">year</span><span class="p">,</span>
+                <span class="n">end_year</span><span class="o">=</span><span class="n">data_end</span><span class="o">.</span><span class="n">year</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">weather_df</span> <span class="o">=</span> <span class="n">load_lcd_weather</span><span class="p">(</span>
+                <span class="n">DEFAULT_DATA_DIR</span><span class="p">,</span>
+                <span class="n">station_id</span><span class="o">=</span><span class="n">weather_station_id</span><span class="p">,</span>
+                <span class="n">begin_date</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">data_start</span><span class="p">),</span>
+                <span class="n">end_date</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">data_end</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">merge_tidal_weather</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">weather_df</span><span class="p">)</span>
+        <span class="n">status_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weather: merged </span><span class="si">{</span><span class="n">station_label</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s2">&quot;pressure&quot;</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">df</span><span class="p">[</span><span class="s2">&quot;dp_dt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;pressure&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">diff</span><span class="p">()</span>
+    <span class="k">if</span> <span class="s2">&quot;wind_u&quot;</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="ow">and</span> <span class="s2">&quot;wind_v&quot;</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">df</span><span class="p">[</span><span class="s2">&quot;wind_stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;wind_u&quot;</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;wind_v&quot;</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span>
+
+    <span class="n">loaded_index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">status_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Loaded window: </span><span class="si">{</span><span class="n">loaded_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">date</span><span class="p">()</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">loaded_index</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">date</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;df&quot;</span><span class="p">:</span> <span class="n">df</span><span class="p">,</span>
+        <span class="s2">&quot;sph&quot;</span><span class="p">:</span> <span class="n">infer_samples_per_hour</span><span class="p">(</span><span class="n">loaded_index</span><span class="p">),</span>
+        <span class="s2">&quot;date_min&quot;</span><span class="p">:</span> <span class="n">loaded_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">date</span><span class="p">(),</span>
+        <span class="s2">&quot;date_max&quot;</span><span class="p">:</span> <span class="n">loaded_index</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">date</span><span class="p">(),</span>
+        <span class="s2">&quot;status_message&quot;</span><span class="p">:</span> <span class="s2">&quot;; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">status_messages</span><span class="p">),</span>
+    <span class="p">}</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the targeted tests to verify they pass</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-k</span> <span class="pre">&quot;load_station_frame&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: PASS for both new range-aware loading regressions.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 5: Commit the loading changes</strong></p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>examples/example_tidal_compact.py<span class="w"> </span>test/test_example_tidal_compact.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add explicit compact data-window loading&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="task-2-explicit-load-controls-and-downstream-date-defaults">
+<h3>Task 2: Explicit Load Controls And Downstream Date Defaults<a class="headerlink" href="#task-2-explicit-load-controls-and-downstream-date-defaults" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py:152-190</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py:261-321</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py:1-92</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing tests for model date defaults</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">example_tidal_compact</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_model_date_defaults</span>  <span class="c1"># noqa: E402</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_model_date_defaults_keeps_example_split_when_available</span><span class="p">():</span>
+    <span class="n">train_start</span><span class="p">,</span> <span class="n">train_end</span><span class="p">,</span> <span class="n">test_end</span> <span class="o">=</span> <span class="n">build_model_date_defaults</span><span class="p">(</span>
+        <span class="n">date</span><span class="p">(</span><span class="mi">2023</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">15</span><span class="p">),</span>
+        <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">15</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">train_start</span> <span class="o">==</span> <span class="n">date</span><span class="p">(</span><span class="mi">2023</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">15</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">train_end</span> <span class="o">==</span> <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">test_end</span> <span class="o">==</span> <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">15</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_model_date_defaults_uses_midpoint_when_example_split_is_out_of_range</span><span class="p">():</span>
+    <span class="n">train_start</span><span class="p">,</span> <span class="n">train_end</span><span class="p">,</span> <span class="n">test_end</span> <span class="o">=</span> <span class="n">build_model_date_defaults</span><span class="p">(</span>
+        <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">train_start</span> <span class="o">==</span> <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">train_end</span> <span class="o">==</span> <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">test_end</span> <span class="o">==</span> <span class="n">date</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the new regression to verify it fails</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-k</span> <span class="pre">&quot;model_date_defaults&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with <code class="docutils literal notranslate"><span class="pre">ImportError:</span> <span class="pre">cannot</span> <span class="pre">import</span> <span class="pre">name</span> <span class="pre">'build_model_date_defaults'</span></code>.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Add explicit load controls and derive downstream defaults from the loaded frame</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">DATA_WINDOW_DEFAULT_START</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2022-01-01&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">date</span><span class="p">()</span>
+<span class="n">DATA_WINDOW_DEFAULT_END</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2024-03-31&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">date</span><span class="p">()</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_model_date_defaults</span><span class="p">(</span><span class="n">date_min</span><span class="p">:</span> <span class="n">date</span><span class="p">,</span> <span class="n">date_max</span><span class="p">:</span> <span class="n">date</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">date</span><span class="p">,</span> <span class="n">date</span><span class="p">,</span> <span class="n">date</span><span class="p">]:</span>
+    <span class="n">example_split</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">date</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">example_split</span> <span class="o">&lt;</span> <span class="n">date_min</span> <span class="ow">or</span> <span class="n">example_split</span> <span class="o">&gt;</span> <span class="n">date_max</span><span class="p">:</span>
+        <span class="n">example_split</span> <span class="o">=</span> <span class="n">date_min</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="p">(</span><span class="n">date_max</span> <span class="o">-</span> <span class="n">date_min</span><span class="p">)</span><span class="o">.</span><span class="n">days</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">date_min</span><span class="p">,</span> <span class="n">example_split</span><span class="p">,</span> <span class="n">date_max</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">cell</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">():</span>
+    <span class="n">_station_options</span> <span class="o">=</span> <span class="p">{</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]:</span> <span class="n">station_name</span> <span class="k">for</span> <span class="n">station_name</span><span class="p">,</span> <span class="n">meta</span> <span class="ow">in</span> <span class="n">STATION_CATALOG</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">station_picker</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">dropdown</span><span class="p">(</span><span class="n">options</span><span class="o">=</span><span class="n">_station_options</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="s2">&quot;The Battery, NY&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Station&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">station_picker</span><span class="p">,)</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">cell</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">station_picker</span><span class="p">):</span>
+    <span class="n">mo</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="ow">not</span> <span class="n">station_picker</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;*Select a station to enable data and weather options.*&quot;</span><span class="p">))</span>
+    <span class="n">_station_id</span> <span class="o">=</span> <span class="n">find_station</span><span class="p">(</span><span class="n">station_picker</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+    <span class="n">_weather_station</span> <span class="o">=</span> <span class="n">TIDE_TO_WEATHER</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_station_id</span><span class="p">)</span>
+    <span class="n">data_start</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">DATA_WINDOW_DEFAULT_START</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Data start&quot;</span><span class="p">)</span>
+    <span class="n">data_end</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">DATA_WINDOW_DEFAULT_END</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Data end&quot;</span><span class="p">)</span>
+    <span class="n">download_tidal</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">switch</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Download tidal data if not found&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">_weather_station</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">_station_label</span> <span class="o">=</span> <span class="n">_weather_station</span>
+        <span class="n">use_weather</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">switch</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Merge LCD weather from </span><span class="si">{</span><span class="n">_station_label</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">download_weather</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">switch</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Download weather data if not found&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">use_weather</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">switch</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;No mapped weather station&quot;</span><span class="p">,</span> <span class="n">disabled</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">download_weather</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">switch</span><span class="p">(</span>
+            <span class="n">value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Download weather data if not found&quot;</span><span class="p">,</span>
+            <span class="n">disabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">load_data</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">run_button</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Load data&quot;</span><span class="p">)</span>
+    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">mo</span><span class="o">.</span><span class="n">hstack</span><span class="p">([</span><span class="n">station_picker</span><span class="p">,</span> <span class="n">data_start</span><span class="p">,</span> <span class="n">data_end</span><span class="p">],</span> <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;start&quot;</span><span class="p">),</span>
+            <span class="n">mo</span><span class="o">.</span><span class="n">hstack</span><span class="p">([</span><span class="n">download_tidal</span><span class="p">,</span> <span class="n">use_weather</span><span class="p">,</span> <span class="n">download_weather</span><span class="p">],</span> <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;start&quot;</span><span class="p">),</span>
+            <span class="n">load_data</span><span class="p">,</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">data_end</span><span class="p">,</span> <span class="n">data_start</span><span class="p">,</span> <span class="n">download_tidal</span><span class="p">,</span> <span class="n">download_weather</span><span class="p">,</span> <span class="n">load_data</span><span class="p">,</span> <span class="n">use_weather</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">cell</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">data_end</span><span class="p">,</span> <span class="n">data_start</span><span class="p">,</span> <span class="n">download_tidal</span><span class="p">,</span> <span class="n">download_weather</span><span class="p">,</span> <span class="n">load_data</span><span class="p">,</span> <span class="n">station_picker</span><span class="p">,</span> <span class="n">use_weather</span><span class="p">):</span>
+    <span class="n">mo</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="ow">not</span> <span class="n">load_data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;*Choose a station and data window above, then click **Load data**.*&quot;</span><span class="p">))</span>
+    <span class="n">mo</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="n">data_start</span><span class="o">.</span><span class="n">value</span> <span class="o">&gt;</span> <span class="n">data_end</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;*`Data start` must be on or before `Data end`.*&quot;</span><span class="p">))</span>
+    <span class="n">station_data</span> <span class="o">=</span> <span class="n">load_station_frame</span><span class="p">(</span>
+        <span class="n">station_picker</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+        <span class="n">data_start</span><span class="o">=</span><span class="n">data_start</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+        <span class="n">data_end</span><span class="o">=</span><span class="n">data_end</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+        <span class="n">use_weather</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">use_weather</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+        <span class="n">download_tidal</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">download_tidal</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+        <span class="n">download_weather</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">download_weather</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">station_data</span><span class="p">,)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">cell</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">station_data</span><span class="p">):</span>
+    <span class="n">_df</span> <span class="o">=</span> <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">]</span>
+    <span class="n">harmonic_inputs</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">name</span><span class="p">:</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">slider</span><span class="p">(</span>
+            <span class="n">start</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">stop</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">order</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">PERIODS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="mf">8766.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> h)&quot;</span><span class="p">,</span>
+            <span class="n">show_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">full_width</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">order</span> <span class="ow">in</span> <span class="n">DEFAULT_HARMONICS</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+
+    <span class="n">_available_regressors</span> <span class="o">=</span> <span class="n">available_columns</span><span class="p">(</span><span class="n">_df</span><span class="p">,</span> <span class="n">MODEL_REGRESSOR_CANDIDATES</span><span class="p">)</span>
+    <span class="n">regressor_toggles</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">regressor_lags</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_regressor_rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_available_regressors</span><span class="p">:</span>
+        <span class="n">regressor_toggles</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">switch</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">_lag_start</span><span class="p">,</span> <span class="n">_lag_end</span> <span class="o">=</span> <span class="n">LAG_DEFAULTS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">regressor_lags</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">range_slider</span><span class="p">(</span>
+            <span class="n">start</span><span class="o">=-</span><span class="mi">6</span><span class="p">,</span>
+            <span class="n">stop</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="p">(</span><span class="n">_lag_start</span><span class="p">,</span> <span class="n">_lag_end</span><span class="p">),</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;lag (h)&quot;</span><span class="p">,</span>
+            <span class="n">show_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">_regressor_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mo</span><span class="o">.</span><span class="n">hstack</span><span class="p">([</span><span class="n">regressor_toggles</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">regressor_lags</span><span class="p">[</span><span class="n">name</span><span class="p">]],</span> <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;start&quot;</span><span class="p">))</span>
+
+    <span class="n">_train_start_default</span><span class="p">,</span> <span class="n">_train_end_default</span><span class="p">,</span> <span class="n">_test_end_default</span> <span class="o">=</span> <span class="n">build_model_date_defaults</span><span class="p">(</span>
+        <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;date_min&quot;</span><span class="p">],</span>
+        <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;date_max&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">train_start</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">_train_start_default</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Train start&quot;</span><span class="p">)</span>
+    <span class="n">train_end</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">_train_end_default</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Train end&quot;</span><span class="p">)</span>
+    <span class="n">test_end</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">_test_end_default</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Test end&quot;</span><span class="p">)</span>
+    <span class="n">run_fit</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">run_button</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Fit model&quot;</span><span class="p">)</span>
+
+    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;## Configure model&quot;</span><span class="p">),</span>
+            <span class="n">mo</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;**Harmonics** (0 = exclude)&quot;</span><span class="p">)]</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">harmonic_inputs</span><span class="o">.</span><span class="n">values</span><span class="p">())),</span>
+                    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;**Regressors** (toggle + lag range in hours)&quot;</span><span class="p">)]</span> <span class="o">+</span> <span class="n">_regressor_rows</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">_available_regressors</span>
+                    <span class="k">else</span> <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">),</span>
+                    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;**Date ranges**&quot;</span><span class="p">),</span> <span class="n">train_start</span><span class="p">,</span> <span class="n">train_end</span><span class="p">,</span> <span class="n">test_end</span><span class="p">]),</span>
+                <span class="p">],</span>
+                <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;start&quot;</span><span class="p">,</span>
+                <span class="n">gap</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">run_fit</span><span class="p">,</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">harmonic_inputs</span><span class="p">,</span>
+        <span class="n">regressor_lags</span><span class="p">,</span>
+        <span class="n">regressor_toggles</span><span class="p">,</span>
+        <span class="n">run_fit</span><span class="p">,</span>
+        <span class="n">test_end</span><span class="p">,</span>
+        <span class="n">train_end</span><span class="p">,</span>
+        <span class="n">train_start</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the full notebook-adjacent test file</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-v</span></code></p>
+<p>Expected: PASS for the existing periodogram/Shapley regressions plus the new data-window tests.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 5: Smoke-test the notebook manually</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">marimo</span> <span class="pre">edit</span> <span class="pre">examples/example_tidal_compact.py</span></code></p>
+<p>Expected:</p>
+<ul class="simple">
+<li><p>Before clicking <code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">data</span></code>, the notebook shows the top-level station/date window controls and a prompt to load data.</p></li>
+<li><p>Loading the default window shows a status message with cache/download origin and the actual loaded date span.</p></li>
+<li><p>Extending <code class="docutils literal notranslate"><span class="pre">Data</span> <span class="pre">end</span></code> and clicking <code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">data</span></code> updates the available exploration/model end dates if the data can be loaded.</p></li>
+<li><p>Disabling <code class="docutils literal notranslate"><span class="pre">Download</span> <span class="pre">tidal</span> <span class="pre">data</span> <span class="pre">if</span> <span class="pre">not</span> <span class="pre">found</span></code> and requesting an uncached future window shows a clear notebook-visible missing-cache message.</p></li>
+<li><p>Loading a short window that does not include <code class="docutils literal notranslate"><span class="pre">2024-01-01</span></code> causes the model <code class="docutils literal notranslate"><span class="pre">Train</span> <span class="pre">end</span></code> default to fall back to the midpoint of the loaded window.</p></li>
+<li><p>[ ] <strong>Step 6: Commit the UI/default changes</strong></p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>examples/example_tidal_compact.py<span class="w"> </span>test/test_example_tidal_compact.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add explicit compact notebook data windows&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

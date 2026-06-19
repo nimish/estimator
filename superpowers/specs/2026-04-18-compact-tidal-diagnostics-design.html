@@ -1,0 +1,287 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compact Tidal Diagnostics Design &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Compact Tidal Diagnostics Design</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/specs/2026-04-18-compact-tidal-diagnostics-design.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="compact-tidal-diagnostics-design">
+<h1>Compact Tidal Diagnostics Design<a class="headerlink" href="#compact-tidal-diagnostics-design" title="Link to this heading"></a></h1>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code> currently focuses its post-fit diagnostics on
+test-window figures plus a spline-basis inspection view for regressors. The goal
+of this change is to make the compact notebook more useful for exploratory tidal
+model iteration by adding train-set prediction views, PACT-style regressor
+response plots, investigative typical-cycle summaries, safer high-harmonic
+exploration, explicit fit verbosity/debug controls, and clearer MAPE semantics.</p>
+</section>
+<section id="goals">
+<h2>Goals<a class="headerlink" href="#goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Add train-set predicted-vs-observed diagnostics alongside the current test-set
+views.</p></li>
+<li><p>Add PACT-style regressor response tabs that show training-target scatterplots
+with overlaid fitted spline/linear responses.</p></li>
+<li><p>Add investigative <code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">day</span></code>, <code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">week</span></code>, and <code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">month</span></code> plots,
+where <code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">month</span></code> means a generic 30-day phase cycle.</p></li>
+<li><p>Extend harmonic exploration from <code class="docutils literal notranslate"><span class="pre">0..8</span></code> to <code class="docutils literal notranslate"><span class="pre">0..32</span></code> while automatically
+increasing Fourier regularization when long-period harmonic orders become
+aggressive.</p></li>
+<li><p>Add notebook fit controls for solver <code class="docutils literal notranslate"><span class="pre">verbose</span></code> output and estimator <code class="docutils literal notranslate"><span class="pre">debug</span></code>
+mode.</p></li>
+<li><p>Make the MAPE reference point explicit in the notebook output, including the
+subset of samples eligible for MAPE.</p></li>
+</ul>
+</section>
+<section id="non-goals">
+<h2>Non-Goals<a class="headerlink" href="#non-goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Do not refactor the estimator API to support per-period Fourier regularization
+weights.</p></li>
+<li><p>Do not redesign the compact notebook around a new layout or split it into
+multiple files.</p></li>
+<li><p>Do not change the underlying MAPE formula in <code class="docutils literal notranslate"><span class="pre">examples/tidal_model_shared.py</span></code>.</p></li>
+<li><p>Do not add broad plot snapshot tests or notebook end-to-end tests.</p></li>
+<li><p>Do not change the Shapley workflow or attribution semantics in this change.</p></li>
+</ul>
+</section>
+<section id="proposed-changes">
+<h2>Proposed Changes<a class="headerlink" href="#proposed-changes" title="Link to this heading"></a></h2>
+<section id="fit-state-and-controls">
+<h3>Fit State And Controls<a class="headerlink" href="#fit-state-and-controls" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Keep <code class="docutils literal notranslate"><span class="pre">run_tidal_model()</span></code> as the single entry point for notebook fitting.</p></li>
+<li><p>Extend the compact notebook fit state so <code class="docutils literal notranslate"><span class="pre">FitResult</span></code> carries enough
+train-aligned metadata to support:</p>
+<ul>
+<li><p>train predicted-vs-observed plots;</p></li>
+<li><p>regressor-response overlays tied to the fitted model;</p></li>
+<li><p>investigative typical day/week/30-day observed-vs-predicted plots;</p></li>
+<li><p>train/test MAPE eligibility counts.</p></li>
+</ul>
+</li>
+<li><p>Add notebook controls for:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">verbose</span></code> -&gt; threaded to <code class="docutils literal notranslate"><span class="pre">TsgamSolverConfig.verbose</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">debug</span></code> -&gt; threaded to <code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig.debug</span></code>.</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="train-test-prediction-diagnostics">
+<h3>Train/Test Prediction Diagnostics<a class="headerlink" href="#train-test-prediction-diagnostics" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Keep the existing test-window time-series figure.</p></li>
+<li><p>Add a train-set predicted-vs-observed figure alongside the existing test-set
+version.</p></li>
+<li><p>Keep the test-set predicted-vs-observed view in the diagnostics tabs and add a
+train-set sibling tab rather than replacing the existing figure.</p></li>
+</ul>
+</section>
+<section id="regressor-response-tabs">
+<h3>Regressor Response Tabs<a class="headerlink" href="#regressor-response-tabs" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Replace or augment the current basis-only regressor inspection section with one
+tab per active fitted regressor.</p></li>
+<li><p>Each regressor tab should:</p>
+<ul>
+<li><p>show a lag selector populated from that regressor’s active fitted lags;</p></li>
+<li><p>default to <code class="docutils literal notranslate"><span class="pre">lag=0</span></code> when available, otherwise the lag closest to <code class="docutils literal notranslate"><span class="pre">0</span></code>;</p></li>
+<li><p>plot the lag-aligned regressor values on the x-axis and the training target
+on the y-axis;</p></li>
+<li><p>color points by time, following the PACT pattern;</p></li>
+<li><p>overlay the fitted spline or linear response for the selected lag, shifted
+vertically onto the target scale so the curve is interpretable on the same
+axes as the scatter.</p></li>
+</ul>
+</li>
+<li><p>The overlay should be derived from the fitted estimator coefficients and knot
+state, not from a rolling smoother.</p></li>
+</ul>
+</section>
+<section id="typical-cycle-plots">
+<h3>Typical Cycle Plots<a class="headerlink" href="#typical-cycle-plots" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Add exploratory observed-vs-predicted plots that collapse timestamps onto
+generic cycle phases:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">day</span></code>: sample position within <code class="docutils literal notranslate"><span class="pre">24</span> <span class="pre">h</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">week</span></code>: sample position within <code class="docutils literal notranslate"><span class="pre">7</span> <span class="pre">d</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">month</span></code>: sample position within <code class="docutils literal notranslate"><span class="pre">30</span> <span class="pre">d</span></code>.</p></li>
+</ul>
+</li>
+<li><p>Treat these plots as investigative summaries of a typical cycle, not as formal
+error metrics or train/test score panels.</p></li>
+<li><p>Keep the aggregation on the model’s native sample grid instead of resampling to
+a coarser frequency first.</p></li>
+</ul>
+</section>
+<section id="harmonic-exploration-and-stabilization">
+<h3>Harmonic Exploration And Stabilization<a class="headerlink" href="#harmonic-exploration-and-stabilization" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Raise each harmonic slider cap from <code class="docutils literal notranslate"><span class="pre">8</span></code> to <code class="docutils literal notranslate"><span class="pre">32</span></code>.</p></li>
+<li><p>Keep the estimator-facing <code class="docutils literal notranslate"><span class="pre">TsgamMultiPeriodicConfig.reg_weight</span></code> as a single
+scalar, but compute that scalar in notebook code using a conservative schedule
+driven by the maximum active harmonic order among long-period constituents.</p></li>
+<li><p>Use the current compact default (<code class="docutils literal notranslate"><span class="pre">1e-4</span></code>) as the base weight and scale upward
+only when long-period harmonic orders exceed the safe baseline explored today.</p></li>
+<li><p>Leave short-period-only selections at the current effective behavior unless a
+long-period constituent activates the stronger schedule.</p></li>
+</ul>
+</section>
+<section id="mape-semantics-in-notebook-output">
+<h3>MAPE Semantics In Notebook Output<a class="headerlink" href="#mape-semantics-in-notebook-output" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Keep <code class="docutils literal notranslate"><span class="pre">tidal_metrics()</span></code> as the source of truth for metric computation.</p></li>
+<li><p>Update the notebook metric presentation so MAPE is labeled explicitly as:
+<code class="docutils literal notranslate"><span class="pre">MAPE</span> <span class="pre">(vs</span> <span class="pre">observed;</span> <span class="pre">|obs|</span> <span class="pre">&gt;</span> <span class="pre">0.01</span> <span class="pre">m)</span></code>.</p></li>
+<li><p>Add short explanatory text stating that MAPE is computed against observed water
+levels and only on samples with <code class="docutils literal notranslate"><span class="pre">|obs|</span> <span class="pre">&gt;</span> <span class="pre">0.01</span> <span class="pre">m</span></code>.</p></li>
+<li><p>Surface the number of eligible train/test samples used for MAPE so the metric’s
+reference subset is visible.</p></li>
+</ul>
+</section>
+</section>
+<section id="error-handling">
+<h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>If no regressors are active after fitting, show a clear notebook-visible
+message in the regressor-response section instead of rendering empty tabs.</p></li>
+<li><p>If a selected regressor/lag combination has no valid aligned samples after
+masking, show a notebook-visible message inside that regressor tab.</p></li>
+<li><p>If a fit falls back to NaN predictions due to solver failure, keep the current
+fallback behavior and let the new plots degrade gracefully rather than adding a
+new failure mode.</p></li>
+<li><p>If MAPE has no eligible samples, display <code class="docutils literal notranslate"><span class="pre">nan</span></code> and an eligible count of <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+</ul>
+</section>
+<section id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Add only light helper-level regression coverage in
+<code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code>.</p></li>
+<li><p>Cover the smallest durable seams introduced by this change, such as:</p>
+<ul>
+<li><p>default lag selection for regressor tabs;</p></li>
+<li><p>Fourier regularization scheduling for long-period high-order selections;</p></li>
+<li><p>MAPE eligibility metadata/reporting;</p></li>
+<li><p>typical day/week/30-day aggregation helpers.</p></li>
+</ul>
+</li>
+<li><p>Prefer testing data contracts and simple numeric behavior over broad figure
+snapshots.</p></li>
+</ul>
+</section>
+<section id="acceptance-criteria">
+<h2>Acceptance Criteria<a class="headerlink" href="#acceptance-criteria" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The compact notebook shows train-set prediction diagnostics in addition to the
+existing test-set ones.</p></li>
+<li><p>Active regressors can be inspected in per-regressor tabs with a lag selector
+defaulting to <code class="docutils literal notranslate"><span class="pre">0</span></code> or nearest-to-zero, and each tab shows a PACT-style scatter
+plus fitted response overlay.</p></li>
+<li><p>The notebook shows investigative <code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">day</span></code>, <code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">week</span></code>, and <code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">month</span></code> plots, where <code class="docutils literal notranslate"><span class="pre">Typical</span> <span class="pre">month</span></code> is a generic 30-day phase cycle.</p></li>
+<li><p>Harmonic controls allow up to <code class="docutils literal notranslate"><span class="pre">32</span></code> harmonics while long-period high-order fits
+automatically use stronger Fourier regularization than the current fixed
+baseline.</p></li>
+<li><p>The notebook exposes <code class="docutils literal notranslate"><span class="pre">verbose</span></code> and <code class="docutils literal notranslate"><span class="pre">debug</span></code> fit toggles.</p></li>
+<li><p>The notebook explicitly states the MAPE reference semantics and reports the
+eligible sample counts used for train/test MAPE.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

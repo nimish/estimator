@@ -1,0 +1,251 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compact Notebook Knot Preset Design &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Compact Notebook Knot Preset Design</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/specs/2026-04-15-compact-knot-preset-design.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="compact-notebook-knot-preset-design">
+<h1>Compact Notebook Knot Preset Design<a class="headerlink" href="#compact-notebook-knot-preset-design" title="Link to this heading"></a></h1>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code> currently hardcodes spline knot counts for
+exogenous regressors inside <code class="docutils literal notranslate"><span class="pre">build_exog_design_matrices()</span></code>. That makes it
+awkward to explore model stiffness in a notebook and to prepare a small
+human-readable hyperparameter grid. The goal is to expose a simple
+<code class="docutils literal notranslate"><span class="pre">low</span> <span class="pre">/</span> <span class="pre">med</span> <span class="pre">/</span> <span class="pre">high</span></code> knot-count control per regressor while leaving the rest of
+the regressor UX unchanged.</p>
+</section>
+<section id="goals">
+<h2>Goals<a class="headerlink" href="#goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Add a per-regressor spline knot preset control in the compact notebook.</p></li>
+<li><p>Map presets uniformly across regressors as:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">low</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">4</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">med</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">8</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">high</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">12</span></code></p></li>
+</ul>
+</li>
+<li><p>Feed the selected preset directly into <code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig(n_knots=...)</span></code>.</p></li>
+<li><p>Add a regressor visualization section that shows both the loaded regressor
+values and the spline basis implied by the selected knot preset.</p></li>
+<li><p>Keep the change easy to reason about as preparation for later manual or
+programmatic hyperparameter search.</p></li>
+</ul>
+</section>
+<section id="non-goals">
+<h2>Non-Goals<a class="headerlink" href="#non-goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Do not add a linear-vs-spline selector in this change.</p></li>
+<li><p>Do not change lag controls, regressor toggles, or harmonic controls.</p></li>
+<li><p>Do not add an actual grid-search runner in this notebook.</p></li>
+<li><p>Do not add fitted partial-effect interpretation charts in this change.</p></li>
+</ul>
+</section>
+<section id="proposed-changes">
+<h2>Proposed Changes<a class="headerlink" href="#proposed-changes" title="Link to this heading"></a></h2>
+<section id="notebook-controls">
+<h3>Notebook Controls<a class="headerlink" href="#notebook-controls" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Extend each regressor row in the <code class="docutils literal notranslate"><span class="pre">Configure</span> <span class="pre">model</span></code> section with a knot preset
+control.</p></li>
+<li><p>Use a compact dropdown or radio-style choice labeled <code class="docutils literal notranslate"><span class="pre">Knots</span></code> with values
+<code class="docutils literal notranslate"><span class="pre">low</span></code>, <code class="docutils literal notranslate"><span class="pre">med</span></code>, and <code class="docutils literal notranslate"><span class="pre">high</span></code>.</p></li>
+<li><p>Only render the knot preset control for regressors that are available in the
+loaded dataset and already shown in the current regressor section.</p></li>
+<li><p>Keep the current regressor toggle and lag range control in place; the new knot
+preset is additive rather than a redesign.</p></li>
+</ul>
+</section>
+<section id="parameter-mapping">
+<h3>Parameter Mapping<a class="headerlink" href="#parameter-mapping" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Add a small notebook-level mapping such as:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;low&quot;:</span> <span class="pre">4,</span> <span class="pre">&quot;med&quot;:</span> <span class="pre">8,</span> <span class="pre">&quot;high&quot;:</span> <span class="pre">12}</span></code></p></li>
+</ul>
+</li>
+<li><p>Keep the mapping global and uniform across regressors.</p></li>
+<li><p>Preserve the current behavior conceptually by treating <code class="docutils literal notranslate"><span class="pre">med</span> <span class="pre">=</span> <span class="pre">8</span></code> as the
+standard default and removing the special-cased hardcoded <code class="docutils literal notranslate"><span class="pre">10</span></code> knots for
+<code class="docutils literal notranslate"><span class="pre">pressure</span></code>.</p></li>
+</ul>
+</section>
+<section id="model-assembly">
+<h3>Model Assembly<a class="headerlink" href="#model-assembly" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Extend the current parameter collection path so regressor knot presets are
+captured alongside lag ranges and toggles.</p></li>
+<li><p>Update <code class="docutils literal notranslate"><span class="pre">build_exog_design_matrices()</span></code> to accept the selected preset-derived
+knot counts and use them when constructing each <code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig</span></code>.</p></li>
+<li><p>Continue using spline exogenous configs for all regressors in this change.</p></li>
+</ul>
+</section>
+<section id="regressor-visualization">
+<h3>Regressor Visualization<a class="headerlink" href="#regressor-visualization" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Add a separate notebook section for inspecting one currently available model
+regressor at a time.</p></li>
+<li><p>Include a regressor selector tied to the currently available regressor list.</p></li>
+<li><p>Show two complementary views for the selected regressor:</p>
+<ul>
+<li><p>a data view showing the raw loaded regressor values over the loaded time
+window;</p></li>
+<li><p>a basis view showing spline knot locations and basis-function shapes implied
+by the current <code class="docutils literal notranslate"><span class="pre">low</span> <span class="pre">/</span> <span class="pre">med</span> <span class="pre">/</span> <span class="pre">high</span></code> preset for that regressor.</p></li>
+</ul>
+</li>
+<li><p>Keep the visualization descriptive rather than inferential:</p>
+<ul>
+<li><p>it should show the input data and basis flexibility;</p></li>
+<li><p>it should not attempt to show a fitted regressor effect or causal
+interpretation in this change.</p></li>
+</ul>
+</li>
+<li><p>Derive the basis visualization from the same knot-count mapping and regressor
+data range used for model assembly so the chart and model stay aligned.</p></li>
+</ul>
+</section>
+</section>
+<section id="error-handling">
+<h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>If a regressor is disabled, its knot preset selection should have no effect.</p></li>
+<li><p>If a regressor is enabled but unavailable after preprocessing, the notebook
+should continue following the current active-regressor behavior without adding
+new failure modes.</p></li>
+<li><p>The preset mapping should be total and explicit so invalid preset labels do
+not silently fall back to arbitrary counts.</p></li>
+<li><p>If no model regressors are available in the loaded dataset, the visualization
+section should continue to fail closed with a clear notebook-visible message
+rather than rendering an empty chart.</p></li>
+</ul>
+</section>
+<section id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Add focused regression coverage for the preset mapping and exogenous config
+assembly path.</p></li>
+<li><p>Cover at least:</p>
+<ul>
+<li><p>translating <code class="docutils literal notranslate"><span class="pre">low</span> <span class="pre">/</span> <span class="pre">med</span> <span class="pre">/</span> <span class="pre">high</span></code> into <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">/</span> <span class="pre">8</span> <span class="pre">/</span> <span class="pre">12</span></code>;</p></li>
+<li><p>building spline exogenous configs with the selected knot counts instead of
+the previous hardcoded defaults;</p></li>
+<li><p>building the basis visualization inputs from the same preset-derived knot
+counts used by the model path.</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="acceptance-criteria">
+<h2>Acceptance Criteria<a class="headerlink" href="#acceptance-criteria" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The compact notebook shows a <code class="docutils literal notranslate"><span class="pre">low</span> <span class="pre">/</span> <span class="pre">med</span> <span class="pre">/</span> <span class="pre">high</span></code> knot preset control for each
+available regressor.</p></li>
+<li><p>Choosing different presets changes the resulting <code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig.n_knots</span></code>
+values used for fitting.</p></li>
+<li><p>The notebook includes a regressor inspection section that shows both the raw
+selected regressor series and the spline basis implied by the current preset.</p></li>
+<li><p>The notebook still behaves the same in all other regressor dimensions
+(toggle, lag range, spline-only model family).</p></li>
+<li><p>Users can use the notebook to define simple stiffness settings that are easy
+to translate into a later hyperparameter grid, while seeing what those
+settings mean for the selected regressor basis.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

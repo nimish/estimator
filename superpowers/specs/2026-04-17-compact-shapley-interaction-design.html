@@ -1,0 +1,270 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compact Notebook Shapley Interaction Design &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Compact Notebook Shapley Interaction Design</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/specs/2026-04-17-compact-shapley-interaction-design.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="compact-notebook-shapley-interaction-design">
+<h1>Compact Notebook Shapley Interaction Design<a class="headerlink" href="#compact-notebook-shapley-interaction-design" title="Link to this heading"></a></h1>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code> currently passes selected exogenous
+interaction pairs into ordinary model fits, but the notebook’s Shapley analysis
+only treats harmonics and main-effect regressors as components. The goal of
+this change is to promote selected interaction pairs into first-class Shapley
+components while enforcing the agreed semantics that an interaction component is
+only valid when both parent regressors are present in the coalition.</p>
+</section>
+<section id="goals">
+<h2>Goals<a class="headerlink" href="#goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Include active interaction pairs as explicit Shapley components in the compact
+notebook.</p></li>
+<li><p>Keep the existing interaction-selection UI and estimator behavior unchanged
+outside the Shapley path.</p></li>
+<li><p>Enforce the rule that an interaction component cannot be evaluated unless both
+parent regressors are active in the same coalition.</p></li>
+<li><p>Avoid redundant model fits by deduplicating invalid raw coalitions that repair
+to the same valid coalition.</p></li>
+<li><p>Show interaction terms in the Shapley waterfall output alongside harmonics and
+main-effect regressors.</p></li>
+</ul>
+</section>
+<section id="non-goals">
+<h2>Non-Goals<a class="headerlink" href="#non-goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Do not change estimator-level interaction semantics or validation in
+<code class="docutils literal notranslate"><span class="pre">tsgam_estimator.py</span></code>.</p></li>
+<li><p>Do not add new interaction-selection controls to the notebook.</p></li>
+<li><p>Do not introduce higher-order interactions or automatic interaction discovery.</p></li>
+<li><p>Do not replace the existing Shapley formula with a different attribution
+method.</p></li>
+<li><p>Do not redesign the notebook’s non-Shapley fit, diagnostics, or regressor UI.</p></li>
+</ul>
+</section>
+<section id="proposed-changes">
+<h2>Proposed Changes<a class="headerlink" href="#proposed-changes" title="Link to this heading"></a></h2>
+<section id="shapley-component-set">
+<h3>Shapley Component Set<a class="headerlink" href="#shapley-component-set" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Extend the Shapley component list to include:</p>
+<ul>
+<li><p>active harmonic terms;</p></li>
+<li><p>active main-effect regressors;</p></li>
+<li><p>active selected interaction pairs whose parents survive preprocessing.</p></li>
+</ul>
+</li>
+<li><p>Keep interaction components distinct from parent regressors in the Shapley
+output so users can see whether a gain comes from the marginal regressor fit
+or from the explicit interaction term.</p></li>
+<li><p>Use stable human-readable interaction labels such as
+<code class="docutils literal notranslate"><span class="pre">Pressure</span> <span class="pre">(hPa)</span> <span class="pre">x</span> <span class="pre">Wind</span> <span class="pre">U</span> <span class="pre">(m/s)</span></code> in the Shapley plot.</p></li>
+</ul>
+</section>
+<section id="coalition-semantics">
+<h3>Coalition Semantics<a class="headerlink" href="#coalition-semantics" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Treat the Shapley game as operating on a component list that now includes
+interactions.</p></li>
+<li><p>When a raw coalition includes an interaction component without both of its
+parent regressors, canonicalize that coalition by dropping the invalid
+interaction component before running the model.</p></li>
+<li><p>Leave parent-regressor inclusion unchanged; only the invalid interaction bit
+is repaired.</p></li>
+<li><p>Reuse canonicalized coalition metrics for every raw coalition that repairs to
+the same valid coalition so the existing <code class="docutils literal notranslate"><span class="pre">compute_shapley()</span></code> helper can still
+consume a full <code class="docutils literal notranslate"><span class="pre">bits</span> <span class="pre">-&gt;</span> <span class="pre">metrics</span></code> mapping.</p></li>
+</ul>
+</section>
+<section id="model-run-translation">
+<h3>Model-Run Translation<a class="headerlink" href="#model-run-translation" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Add notebook-level helpers that translate a canonical Shapley coalition into:</p>
+<ul>
+<li><p>the ordinary <code class="docutils literal notranslate"><span class="pre">component_mask</span></code> for harmonics and main-effect regressors;</p></li>
+<li><p>the subset of selected <code class="docutils literal notranslate"><span class="pre">interaction_pairs</span></code> whose interaction components are
+active and whose parents are active.</p></li>
+</ul>
+</li>
+<li><p>Keep <code class="docutils literal notranslate"><span class="pre">run_tidal_model()</span></code> as the single entry point for fitting. The Shapley
+layer should decide which parent components and interaction pairs are active
+for a coalition, then pass those through the existing model path.</p></li>
+<li><p>Preserve the current behavior that interactions whose parents were dropped by
+preprocessing are excluded cleanly.</p></li>
+</ul>
+</section>
+<section id="run-counting-and-progress">
+<h3>Run Counting and Progress<a class="headerlink" href="#run-counting-and-progress" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Count interactions toward the existing Shapley component cap.</p></li>
+<li><p>Build the raw component power set from the full component list, but only run
+unique canonical coalitions.</p></li>
+<li><p>Update the notebook progress bar to track the number of unique canonical
+coalitions actually evaluated.</p></li>
+<li><p>Update <code class="docutils literal notranslate"><span class="pre">ShapleyResult[&quot;coalitions&quot;]</span></code> to mean the number of evaluated canonical
+coalitions, since that value is displayed in the figure title.</p></li>
+</ul>
+</section>
+<section id="output-and-presentation">
+<h3>Output and Presentation<a class="headerlink" href="#output-and-presentation" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Keep the current Shapley figure structure, but allow interaction labels to
+appear as their own waterfall bars.</p></li>
+<li><p>Preserve the current baseline/full-model framing:</p>
+<ul>
+<li><p>baseline remains the empty coalition;</p></li>
+<li><p>full model remains the coalition with all active harmonics, regressors, and
+valid interaction components.</p></li>
+</ul>
+</li>
+<li><p>Keep solver-failure handling unchanged; failed canonical coalitions still fall
+back through the current metric sanitization path.</p></li>
+</ul>
+</section>
+</section>
+<section id="error-handling">
+<h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>If fewer than two Shapley components are active after preprocessing, continue
+to fail closed with the current notebook-visible message.</p></li>
+<li><p>If a selected interaction pair does not survive preprocessing because one or
+both parent regressors are inactive or unavailable, omit it from the Shapley
+component list rather than creating a dead component.</p></li>
+<li><p>If multiple raw coalitions canonicalize to the same valid coalition, evaluate
+that model once and reuse the result rather than treating the duplication as
+an error.</p></li>
+<li><p>If a canonical coalition fit produces non-finite metrics, continue using the
+current baseline fallback behavior inside <code class="docutils literal notranslate"><span class="pre">compute_shapley()</span></code>.</p></li>
+</ul>
+</section>
+<section id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Add focused regression tests for the notebook helpers that build Shapley
+interaction components and canonicalize coalitions.</p></li>
+<li><p>Cover at least:</p>
+<ul>
+<li><p>promoting active interaction pairs into the Shapley component set;</p></li>
+<li><p>dropping interaction bits when one or both parents are missing from a raw
+coalition;</p></li>
+<li><p>deduplicating repaired coalitions so equivalent invalid raw coalitions do
+not trigger repeated model runs;</p></li>
+<li><p>passing only the valid active interaction subset through the Shapley
+<code class="docutils literal notranslate"><span class="pre">run_tidal_model()</span></code> path;</p></li>
+<li><p>showing interaction labels in the Shapley result/figure path.</p></li>
+</ul>
+</li>
+<li><p>Keep existing Shapley tests passing for the no-interaction case.</p></li>
+</ul>
+</section>
+<section id="acceptance-criteria">
+<h2>Acceptance Criteria<a class="headerlink" href="#acceptance-criteria" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Running Shapley analysis in the compact notebook includes selected valid
+interaction pairs as explicit components in the attribution output.</p></li>
+<li><p>A coalition that turns on an interaction without both parents is evaluated as
+the corresponding parent-only coalition with that interaction removed.</p></li>
+<li><p>Equivalent repaired coalitions share the same fitted metrics rather than
+triggering duplicate model runs.</p></li>
+<li><p>The Shapley waterfall can display interaction contributions separately from
+parent regressor contributions.</p></li>
+<li><p>The notebook reports the number of canonical coalitions actually evaluated,
+not the raw unrepaired power-set size.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,330 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Battery Grid Rich Progress Design &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Battery Grid Rich Progress Design</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/specs/2026-04-18-battery-grid-rich-progress-design.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="battery-grid-rich-progress-design">
+<h1>Battery Grid Rich Progress Design<a class="headerlink" href="#battery-grid-rich-progress-design" title="Link to this heading"></a></h1>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">examples/run_tidal_battery_grid.py</span></code> currently reports progress through plain
+line-oriented logging plus a log file and partial CSV rewrites. That works, but
+it is hard to scan during long runs and does not make the current stage, best
+candidate, or failure counts obvious at a glance. The goal of this change is to
+upgrade the script to a richer terminal experience using the existing <code class="docutils literal notranslate"><span class="pre">rich</span></code>
+dependency while keeping the script a normal CLI, not a full-screen app.</p>
+</section>
+<section id="goals">
+<h2>Goals<a class="headerlink" href="#goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Add a richer interactive terminal UI for the Battery grid-search script.</p></li>
+<li><p>Show stage progress, elapsed time, counts of completed/failed runs, and the
+current best validation candidate live during execution.</p></li>
+<li><p>Make <code class="docutils literal notranslate"><span class="pre">Ctrl-C</span></code> stop the run promptly without requiring manual process killing.</p></li>
+<li><p>Keep the existing persistent artifacts:</p>
+<ul>
+<li><p>log file;</p></li>
+<li><p>partial CSV;</p></li>
+<li><p>final CSV;</p></li>
+<li><p>final markdown summary.</p></li>
+</ul>
+</li>
+<li><p>Preserve the current parallel execution model and support at least <code class="docutils literal notranslate"><span class="pre">6</span></code>
+workers cleanly.</p></li>
+<li><p>Avoid adding a new dependency when the existing <code class="docutils literal notranslate"><span class="pre">rich</span></code> package is sufficient.</p></li>
+</ul>
+</section>
+<section id="non-goals">
+<h2>Non-Goals<a class="headerlink" href="#non-goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Do not convert the script into a full-screen <code class="docutils literal notranslate"><span class="pre">textual</span></code> application.</p></li>
+<li><p>Do not add terminal input controls, menus, pausing, filtering, or keyboard
+navigation.</p></li>
+<li><p>Do not change the search grid, model defaults, train/validation/test split,
+or promotion logic in this UI-focused change.</p></li>
+<li><p>Do not remove the plain-text logging path for non-interactive environments.</p></li>
+</ul>
+</section>
+<section id="proposed-changes">
+<h2>Proposed Changes<a class="headerlink" href="#proposed-changes" title="Link to this heading"></a></h2>
+<section id="ui-mode-selection">
+<h3>UI Mode Selection<a class="headerlink" href="#ui-mode-selection" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Keep the script runnable as an ordinary CLI.</p></li>
+<li><p>Detect whether live terminal rendering is appropriate using the active Rich
+console / terminal capabilities.</p></li>
+<li><p>When the output stream is interactive, enable Rich live rendering.</p></li>
+<li><p>When the output stream is non-interactive, piped, or otherwise unsuitable,
+fall back to the current plain logging behavior.</p></li>
+</ul>
+</section>
+<section id="live-terminal-layout">
+<h3>Live Terminal Layout<a class="headerlink" href="#live-terminal-layout" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Build the interactive display from Rich primitives already available in the
+repo:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">Progress</span></code> for the active stage bar and elapsed time;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Live</span></code> for periodic screen refresh;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Panel</span></code> for summary/status blocks;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Table</span></code> for recent completed candidates.</p></li>
+</ul>
+</li>
+<li><p>Show the following sections in the live view:</p>
+<ul>
+<li><p>run metadata:</p>
+<ul>
+<li><p>station;</p></li>
+<li><p>split summary;</p></li>
+<li><p>worker count;</p></li>
+<li><p>output paths;</p></li>
+</ul>
+</li>
+<li><p>current stage progress:</p>
+<ul>
+<li><p>validation or promoted outer test;</p></li>
+<li><p>completed / total count;</p></li>
+<li><p>elapsed time;</p></li>
+</ul>
+</li>
+<li><p>stage counters:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">ok</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">non-finite</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">exception</span></code>;</p></li>
+</ul>
+</li>
+<li><p>best validation-so-far panel:</p>
+<ul>
+<li><p>candidate label;</p></li>
+<li><p>validation MAPE;</p></li>
+<li><p>validation RMSE;</p></li>
+<li><p>validation R^2;</p></li>
+</ul>
+</li>
+<li><p>recent results table:</p>
+<ul>
+<li><p>stage;</p></li>
+<li><p>candidate label;</p></li>
+<li><p>status;</p></li>
+<li><p>key metric values.</p></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="data-flow-and-logging">
+<h3>Data Flow And Logging<a class="headerlink" href="#data-flow-and-logging" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Keep file logging independent from the terminal presentation:</p>
+<ul>
+<li><p>log file writes should continue for every status update;</p></li>
+<li><p>partial CSV rewrites should continue as results arrive.</p></li>
+</ul>
+</li>
+<li><p>In plain mode:</p>
+<ul>
+<li><p>preserve the current line-by-line terminal logging behavior.</p></li>
+</ul>
+</li>
+<li><p>In live mode:</p>
+<ul>
+<li><p>update an in-memory render state after each completed fit;</p></li>
+<li><p>refresh the Rich display instead of printing every result as a new terminal
+line;</p></li>
+<li><p>continue appending detailed progress messages to the log file so the run is
+still inspectable after the fact.</p></li>
+</ul>
+</li>
+<li><p>Keep the final summary output after the live view closes so the finished run
+still leaves a readable terminal conclusion.</p></li>
+</ul>
+</section>
+<section id="parallel-execution">
+<h3>Parallel Execution<a class="headerlink" href="#parallel-execution" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Replace the current thread-based execution model with an interruptible worker
+backend that allows the parent process to stop queued and in-flight work more
+reliably on <code class="docutils literal notranslate"><span class="pre">Ctrl-C</span></code>.</p></li>
+<li><p>Treat interruptibility as more important than preserving the exact current
+thread-pool implementation.</p></li>
+<li><p>Ensure live UI updates happen only on the main thread as futures complete.</p></li>
+<li><p>Do not attempt per-worker nested progress bars or per-candidate spinner trees;
+the UI should summarize concurrent work, not try to render each worker
+independently.</p></li>
+<li><p>Continue defaulting the script to <code class="docutils literal notranslate"><span class="pre">--n-jobs</span> <span class="pre">6</span></code>.</p></li>
+</ul>
+</section>
+<section id="minimal-internal-structure">
+<h3>Minimal Internal Structure<a class="headerlink" href="#minimal-internal-structure" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Add a small render-state layer rather than a heavy UI framework.</p></li>
+<li><p>Prefer a few focused helpers such as:</p>
+<ul>
+<li><p>one function to determine whether live mode is enabled;</p></li>
+<li><p>one function to derive status counts from finished rows;</p></li>
+<li><p>one function to build the recent-results table;</p></li>
+<li><p>one function to build the full Rich layout from current state.</p></li>
+</ul>
+</li>
+<li><p>Keep the existing search/evaluation functions intact as much as possible.</p></li>
+<li><p>Treat the live UI as a presentation layer around the existing run loop, not a
+rewrite of the script’s control flow.</p></li>
+</ul>
+</section>
+</section>
+<section id="error-handling">
+<h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>If live rendering is unavailable or fails to initialize, fall back to plain
+logging rather than aborting the run.</p></li>
+<li><p>On <code class="docutils literal notranslate"><span class="pre">KeyboardInterrupt</span></code>, stop accepting new work, persist the current partial
+CSV/log state, tear down worker execution promptly, and exit with an interrupt
+status instead of hanging.</p></li>
+<li><p>Continue counting and surfacing <code class="docutils literal notranslate"><span class="pre">non-finite</span></code> and <code class="docutils literal notranslate"><span class="pre">exception</span></code> outcomes in both
+live and plain modes.</p></li>
+<li><p>Keep the persistent log file and partial CSV updates even when live mode is
+active so interrupted runs remain diagnosable.</p></li>
+<li><p>Do not suppress underlying fit errors; surface them through the existing row
+status/error fields and include recent failures in the live recent-results
+view.</p></li>
+</ul>
+</section>
+<section id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Add helper-level tests for the new presentation-state functions only.</p></li>
+<li><p>Cover durable, non-brittle seams such as:</p>
+<ul>
+<li><p>deciding whether live mode is enabled;</p></li>
+<li><p>computing status counters from completed rows;</p></li>
+<li><p>selecting and trimming recent results for display;</p></li>
+<li><p>extracting the best validation row for the live best-so-far panel.</p></li>
+</ul>
+</li>
+<li><p>Do not add ANSI snapshot tests or brittle assertions against exact terminal
+formatting.</p></li>
+<li><p>Keep the current script behavior tests passing:</p>
+<ul>
+<li><p>candidate-grid tests;</p></li>
+<li><p>promotion tests;</p></li>
+<li><p>evaluation-seam tests.</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="acceptance-criteria">
+<h2>Acceptance Criteria<a class="headerlink" href="#acceptance-criteria" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Running <code class="docutils literal notranslate"><span class="pre">examples/run_tidal_battery_grid.py</span></code> in an interactive terminal shows
+a live Rich-based progress view rather than only plain line-by-line logging.</p></li>
+<li><p>The live view makes the current stage, total progress, counts of completed
+outcomes, and best validation candidate visible at a glance.</p></li>
+<li><p>The script still writes its log file and partial CSV continuously during the
+run.</p></li>
+<li><p>The script still falls back cleanly to plain logging in non-interactive
+contexts.</p></li>
+<li><p>Pressing <code class="docutils literal notranslate"><span class="pre">Ctrl-C</span></code> during a live or plain run stops the script without needing
+Activity Monitor or another external kill path.</p></li>
+<li><p>No new dependency beyond the existing <code class="docutils literal notranslate"><span class="pre">rich</span></code> package is required for this
+upgrade.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

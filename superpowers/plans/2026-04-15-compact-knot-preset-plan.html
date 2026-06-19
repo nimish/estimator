@@ -1,0 +1,567 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compact Knot Preset Implementation Plan &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Compact Knot Preset Implementation Plan</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/plans/2026-04-15-compact-knot-preset-plan.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="compact-knot-preset-implementation-plan">
+<h1>Compact Knot Preset Implementation Plan<a class="headerlink" href="#compact-knot-preset-implementation-plan" title="Link to this heading"></a></h1>
+<blockquote>
+<div><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code class="docutils literal notranslate"><span class="pre">-</span> <span class="pre">[</span> <span class="pre">]</span></code>) syntax for tracking.</p>
+</div></blockquote>
+<p><strong>Goal:</strong> Add per-regressor <code class="docutils literal notranslate"><span class="pre">low</span> <span class="pre">/</span> <span class="pre">med</span> <span class="pre">/</span> <span class="pre">high</span></code> spline knot presets and a regressor/basis inspection section to <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code> so users can explore regressor stiffness before setting up a hyperparameter grid.</p>
+<p><strong>Architecture:</strong> Keep the existing compact notebook structure and spline-only exogenous model family. Add one small preset mapping plus regressor-knot widgets to the current parameter-collection path, and factor a pure helper that builds the visualization inputs from the same preset-derived knot counts used for model assembly. Use that helper to drive a new regressor inspection section with one raw-data chart and one spline-basis chart, so the model and visualization stay aligned.</p>
+<p><strong>Tech Stack:</strong> Python 3.12, marimo, pandas, NumPy, plotly, pytest</p>
+<hr class="docutils" />
+<section id="file-map">
+<h2>File Map<a class="headerlink" href="#file-map" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code></p>
+<ul>
+<li><p>Add knot preset constants and a preset-to-knot-count helper.</p></li>
+<li><p>Extend the regressor UI rows to include per-regressor knot preset widgets.</p></li>
+<li><p>Extend <code class="docutils literal notranslate"><span class="pre">ModelKwargs</span></code>, <code class="docutils literal notranslate"><span class="pre">collect_model_params(...)</span></code>, and <code class="docutils literal notranslate"><span class="pre">build_exog_design_matrices(...)</span></code> to carry preset-derived knot counts into <code class="docutils literal notranslate"><span class="pre">TsgamSplineConfig(n_knots=...)</span></code>.</p></li>
+<li><p>Add pure helpers for regressor/basis visualization inputs and figures.</p></li>
+<li><p>Add a regressor inspection notebook section driven by the currently available model regressors.</p></li>
+</ul>
+</li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p>
+<ul>
+<li><p>Add focused regression tests for preset mapping, spline-config assembly, and basis-visualization inputs.</p></li>
+</ul>
+</li>
+</ul>
+<section id="task-1-knot-preset-controls-and-model-wiring">
+<h3>Task 1: Knot Preset Controls And Model Wiring<a class="headerlink" href="#task-1-knot-preset-controls-and-model-wiring" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing tests</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">example_tidal_compact</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: E402</span>
+    <span class="n">KNOT_PRESET_TO_COUNT</span><span class="p">,</span>
+    <span class="n">build_knot_count</span><span class="p">,</span>
+    <span class="n">build_exog_design_matrices</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_knot_count_maps_named_presets</span><span class="p">():</span>
+    <span class="k">assert</span> <span class="n">KNOT_PRESET_TO_COUNT</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;low&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span> <span class="s2">&quot;med&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span> <span class="s2">&quot;high&quot;</span><span class="p">:</span> <span class="mi">12</span><span class="p">}</span>
+    <span class="k">assert</span> <span class="n">build_knot_count</span><span class="p">(</span><span class="s2">&quot;low&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
+    <span class="k">assert</span> <span class="n">build_knot_count</span><span class="p">(</span><span class="s2">&quot;med&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">8</span>
+    <span class="k">assert</span> <span class="n">build_knot_count</span><span class="p">(</span><span class="s2">&quot;high&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">12</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_exog_design_matrices_uses_selected_knot_preset</span><span class="p">():</span>
+    <span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;1h&quot;</span><span class="p">)</span>
+    <span class="n">df_train</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;water_level&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)),</span>
+            <span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1010.0</span><span class="p">,</span> <span class="mf">1012.0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)),</span>
+        <span class="p">},</span>
+        <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">df_test</span> <span class="o">=</span> <span class="n">df_train</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="o">-</span><span class="mi">4</span><span class="p">:]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">ok_train</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">df_train</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+
+    <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">active_regs</span><span class="p">,</span> <span class="n">exog_config</span> <span class="o">=</span> <span class="n">build_exog_design_matrices</span><span class="p">(</span>
+        <span class="n">df_train</span><span class="p">,</span>
+        <span class="n">df_test</span><span class="p">,</span>
+        <span class="n">ok_train</span><span class="p">,</span>
+        <span class="p">[</span><span class="s2">&quot;pressure&quot;</span><span class="p">],</span>
+        <span class="p">{</span><span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)},</span>
+        <span class="p">{</span><span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="s2">&quot;high&quot;</span><span class="p">},</span>
+        <span class="n">sph</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">active_regs</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;pressure&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">exog_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">exog_config</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">exog_config</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">tidal_compact</span><span class="o">.</span><span class="n">TsgamSplineConfig</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">exog_config</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">n_knots</span> <span class="o">==</span> <span class="mi">12</span>
+    <span class="k">assert</span> <span class="n">exog_config</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">lags</span> <span class="o">==</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the targeted tests to verify they fail</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-k</span> <span class="pre">&quot;knot_count</span> <span class="pre">or</span> <span class="pre">selected_knot_preset&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with missing imports such as <code class="docutils literal notranslate"><span class="pre">ImportError:</span> <span class="pre">cannot</span> <span class="pre">import</span> <span class="pre">name</span> <span class="pre">'build_knot_count'</span></code> or a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> because <code class="docutils literal notranslate"><span class="pre">build_exog_design_matrices(...)</span></code> does not yet accept regressor knot presets.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Implement the preset mapping and model path</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">KNOT_PRESET_TO_COUNT</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;low&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span> <span class="s2">&quot;med&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span> <span class="s2">&quot;high&quot;</span><span class="p">:</span> <span class="mi">12</span><span class="p">}</span>
+<span class="n">KNOT_PRESET_OPTIONS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Low&quot;</span><span class="p">:</span> <span class="s2">&quot;low&quot;</span><span class="p">,</span> <span class="s2">&quot;Med&quot;</span><span class="p">:</span> <span class="s2">&quot;med&quot;</span><span class="p">,</span> <span class="s2">&quot;High&quot;</span><span class="p">:</span> <span class="s2">&quot;high&quot;</span><span class="p">}</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_knot_count</span><span class="p">(</span><span class="n">preset</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">KNOT_PRESET_TO_COUNT</span><span class="p">[</span><span class="n">preset</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown knot preset: </span><span class="si">{</span><span class="n">preset</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ModelKwargs</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+    <span class="n">sph</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">harmonic_orders</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+    <span class="n">lag_ranges</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span>
+    <span class="n">knot_presets</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
+    <span class="n">train_start</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">train_end</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">test_end</span><span class="p">:</span> <span class="nb">str</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">collect_model_params</span><span class="p">(</span>
+    <span class="n">harmonic_inputs</span><span class="p">,</span>
+    <span class="n">regressor_lags</span><span class="p">,</span>
+    <span class="n">regressor_toggles</span><span class="p">,</span>
+    <span class="n">regressor_knots</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">sph</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">train_start</span><span class="p">,</span>
+    <span class="n">train_end</span><span class="p">,</span>
+    <span class="n">test_end</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">],</span> <span class="n">ModelKwargs</span><span class="p">]:</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">widget</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">widget</span> <span class="ow">in</span> <span class="n">harmonic_inputs</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">mask</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">widget</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">widget</span> <span class="ow">in</span> <span class="n">regressor_toggles</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span>
+    <span class="k">return</span> <span class="n">mask</span><span class="p">,</span> <span class="p">{</span>
+        <span class="s2">&quot;df&quot;</span><span class="p">:</span> <span class="n">df</span><span class="p">,</span>
+        <span class="s2">&quot;sph&quot;</span><span class="p">:</span> <span class="n">sph</span><span class="p">,</span>
+        <span class="s2">&quot;harmonic_orders&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">widget</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">widget</span> <span class="ow">in</span> <span class="n">harmonic_inputs</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+        <span class="s2">&quot;lag_ranges&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">widget</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">widget</span> <span class="ow">in</span> <span class="n">regressor_lags</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+        <span class="s2">&quot;knot_presets&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">widget</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">widget</span> <span class="ow">in</span> <span class="n">regressor_knots</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+        <span class="s2">&quot;train_start&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">train_start</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+        <span class="s2">&quot;train_end&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">train_end</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+        <span class="s2">&quot;test_end&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">test_end</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+    <span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_exog_design_matrices</span><span class="p">(</span>
+    <span class="n">df_train</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">df_test</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">ok_train</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span>
+    <span class="n">reg_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">lag_ranges</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+    <span class="n">knot_presets</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">sph</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+    <span class="n">x_train_fit</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">df_train</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="n">ok_train</span><span class="p">])</span>
+    <span class="n">x_train_pred</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">df_train</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">x_test_pred</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">df_test</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">reg_names</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">x_train_fit</span><span class="p">,</span> <span class="n">x_train_pred</span><span class="p">,</span> <span class="n">x_test_pred</span><span class="p">,</span> <span class="p">[],</span> <span class="kc">None</span>
+
+    <span class="n">x_train_raw</span><span class="p">,</span> <span class="n">x_test_raw</span><span class="p">,</span> <span class="n">active_regs</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">prepare_split_regressors</span><span class="p">(</span><span class="n">df_train</span><span class="p">,</span> <span class="n">df_test</span><span class="p">,</span> <span class="n">reg_names</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">active_regs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">x_train_fit</span><span class="p">,</span> <span class="n">x_train_pred</span><span class="p">,</span> <span class="n">x_test_pred</span><span class="p">,</span> <span class="p">[],</span> <span class="kc">None</span>
+
+    <span class="n">exog_config</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">active_regs</span><span class="p">:</span>
+        <span class="n">lag_start</span><span class="p">,</span> <span class="n">lag_end</span> <span class="o">=</span> <span class="n">lag_ranges</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">knot_count</span> <span class="o">=</span> <span class="n">build_knot_count</span><span class="p">(</span><span class="n">knot_presets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="s2">&quot;med&quot;</span><span class="p">))</span>
+        <span class="n">exog_config</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">TsgamSplineConfig</span><span class="p">(</span>
+                <span class="n">n_knots</span><span class="o">=</span><span class="n">knot_count</span><span class="p">,</span>
+                <span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="n">hour</span> <span class="o">*</span> <span class="n">sph</span> <span class="k">for</span> <span class="n">hour</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">lag_start</span><span class="p">,</span> <span class="n">lag_end</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)],</span>
+                <span class="n">reg_weight</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span>
+                <span class="n">diff_reg_weight</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">x_train_raw</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ok_train</span><span class="p">],</span>
+        <span class="n">x_train_raw</span><span class="p">,</span>
+        <span class="n">x_test_raw</span><span class="p">,</span>
+        <span class="n">active_regs</span><span class="p">,</span>
+        <span class="n">exog_config</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<p>Update the existing caller in <code class="docutils literal notranslate"><span class="pre">run_tidal_model(...)</span></code> to pass <code class="docutils literal notranslate"><span class="pre">knot_presets</span></code>.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the targeted tests to verify they pass</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-k</span> <span class="pre">&quot;knot_count</span> <span class="pre">or</span> <span class="pre">selected_knot_preset&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: PASS for the new preset-mapping and exog-config assembly regressions.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 5: Commit the preset/model wiring</strong></p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>examples/example_tidal_compact.py<span class="w"> </span>test/test_example_tidal_compact.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add knot presets to compact regressors&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="task-2-regressor-inspection-and-basis-visualization">
+<h3>Task 2: Regressor Inspection And Basis Visualization<a class="headerlink" href="#task-2-regressor-inspection-and-basis-visualization" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing visualization tests</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">example_tidal_compact</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: E402</span>
+    <span class="n">build_regressor_basis_inputs</span><span class="p">,</span>
+    <span class="n">build_regressor_basis_figure</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_regressor_basis_inputs_uses_preset_knot_count</span><span class="p">():</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1008.0</span><span class="p">,</span> <span class="mf">1010.0</span><span class="p">,</span> <span class="mf">1012.0</span><span class="p">,</span> <span class="mf">1014.0</span><span class="p">]},</span>
+        <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;1h&quot;</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="n">inputs</span> <span class="o">=</span> <span class="n">build_regressor_basis_inputs</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="s2">&quot;pressure&quot;</span><span class="p">,</span> <span class="s2">&quot;low&quot;</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;regressor_name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;pressure&quot;</span>
+    <span class="k">assert</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;knot_preset&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;low&quot;</span>
+    <span class="k">assert</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;knot_count&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">4</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;knot_locations&quot;</span><span class="p">])</span> <span class="o">==</span> <span class="mi">4</span>
+    <span class="k">assert</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;x_grid&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="mf">1008.0</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;x_grid&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="mf">1014.0</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_regressor_basis_figure_marks_knots</span><span class="p">():</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1008.0</span><span class="p">,</span> <span class="mf">1010.0</span><span class="p">,</span> <span class="mf">1012.0</span><span class="p">,</span> <span class="mf">1014.0</span><span class="p">]},</span>
+        <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;1h&quot;</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="n">inputs</span> <span class="o">=</span> <span class="n">build_regressor_basis_inputs</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="s2">&quot;pressure&quot;</span><span class="p">,</span> <span class="s2">&quot;med&quot;</span><span class="p">)</span>
+    <span class="n">figure</span> <span class="o">=</span> <span class="n">build_regressor_basis_figure</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">figure</span><span class="p">,</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">figure</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="k">assert</span> <span class="nb">any</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">x0</span> <span class="o">-</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;knot_locations&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mf">1.0e-9</span> <span class="k">for</span> <span class="n">shape</span> <span class="ow">in</span> <span class="n">figure</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">shapes</span><span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the targeted visualization tests to verify they fail</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-k</span> <span class="pre">&quot;basis_inputs</span> <span class="pre">or</span> <span class="pre">marks_knots&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with <code class="docutils literal notranslate"><span class="pre">ImportError</span></code> because the new basis-visualization helpers do not exist yet.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Implement the UI controls and basis visualization</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">RegressorBasisInputs</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">regressor_name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">knot_preset</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">knot_count</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">observed_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">observed_index</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span>
+    <span class="n">knot_locations</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">x_grid</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">basis_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_regressor_basis_inputs</span><span class="p">(</span>
+    <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">regressor_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">knot_preset</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RegressorBasisInputs</span><span class="p">:</span>
+    <span class="n">series</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">regressor_name</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+    <span class="n">knot_count</span> <span class="o">=</span> <span class="n">build_knot_count</span><span class="p">(</span><span class="n">knot_preset</span><span class="p">)</span>
+    <span class="n">knot_locations</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">series</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">series</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">knot_count</span><span class="p">)</span>
+    <span class="n">x_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">series</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">series</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="mi">200</span><span class="p">)</span>
+    <span class="n">basis_values</span> <span class="o">=</span> <span class="n">TsgamEstimator</span><span class="o">.</span><span class="n">_make_H</span><span class="p">(</span><span class="n">x_grid</span><span class="p">,</span> <span class="n">knot_locations</span><span class="p">,</span> <span class="n">include_offset</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;regressor_name&quot;</span><span class="p">:</span> <span class="n">regressor_name</span><span class="p">,</span>
+        <span class="s2">&quot;knot_preset&quot;</span><span class="p">:</span> <span class="n">knot_preset</span><span class="p">,</span>
+        <span class="s2">&quot;knot_count&quot;</span><span class="p">:</span> <span class="n">knot_count</span><span class="p">,</span>
+        <span class="s2">&quot;observed_values&quot;</span><span class="p">:</span> <span class="n">series</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+        <span class="s2">&quot;observed_index&quot;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">(</span><span class="n">series</span><span class="o">.</span><span class="n">index</span><span class="p">),</span>
+        <span class="s2">&quot;knot_locations&quot;</span><span class="p">:</span> <span class="n">knot_locations</span><span class="p">,</span>
+        <span class="s2">&quot;x_grid&quot;</span><span class="p">:</span> <span class="n">x_grid</span><span class="p">,</span>
+        <span class="s2">&quot;basis_values&quot;</span><span class="p">:</span> <span class="n">basis_values</span><span class="p">,</span>
+    <span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_regressor_basis_figure</span><span class="p">(</span><span class="n">inputs</span><span class="p">:</span> <span class="n">RegressorBasisInputs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">:</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">()</span>
+    <span class="n">basis_values</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;basis_values&quot;</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">basis_values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">add_trace</span><span class="p">(</span>
+            <span class="n">go</span><span class="o">.</span><span class="n">Scatter</span><span class="p">(</span>
+                <span class="n">x</span><span class="o">=</span><span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;x_grid&quot;</span><span class="p">],</span>
+                <span class="n">y</span><span class="o">=</span><span class="n">basis_values</span><span class="p">[:,</span> <span class="n">idx</span><span class="p">],</span>
+                <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;lines&quot;</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;B</span><span class="si">{</span><span class="n">idx</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">line</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mf">1.2</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">for</span> <span class="n">knot</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;knot_locations&quot;</span><span class="p">]:</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">add_vline</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">knot</span><span class="p">),</span> <span class="n">line_width</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">line_color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span> <span class="n">line_dash</span><span class="o">=</span><span class="s2">&quot;dot&quot;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span>
+        <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">inputs</span><span class="p">[</span><span class="s1">&#39;regressor_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> spline basis (</span><span class="si">{</span><span class="n">inputs</span><span class="p">[</span><span class="s1">&#39;knot_preset&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> / </span><span class="si">{</span><span class="n">inputs</span><span class="p">[</span><span class="s1">&#39;knot_count&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> knots)&quot;</span><span class="p">,</span>
+        <span class="n">xaxis_title</span><span class="o">=</span><span class="n">COLUMN_LABELS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;regressor_name&quot;</span><span class="p">],</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;regressor_name&quot;</span><span class="p">]),</span>
+        <span class="n">yaxis_title</span><span class="o">=</span><span class="s2">&quot;Basis value&quot;</span><span class="p">,</span>
+        <span class="n">height</span><span class="o">=</span><span class="mi">360</span><span class="p">,</span>
+        <span class="n">margin</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">l</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">50</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fig</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_regressor_series_figure</span><span class="p">(</span><span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">regressor_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">:</span>
+    <span class="n">series</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">regressor_name</span><span class="p">]</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">go</span><span class="o">.</span><span class="n">Scattergl</span><span class="p">(</span>
+                <span class="n">x</span><span class="o">=</span><span class="n">series</span><span class="o">.</span><span class="n">index</span><span class="p">,</span>
+                <span class="n">y</span><span class="o">=</span><span class="n">series</span><span class="p">,</span>
+                <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;lines&quot;</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">regressor_name</span><span class="p">,</span>
+                <span class="n">line</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">update_layout</span><span class="p">(</span>
+        <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">COLUMN_LABELS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">regressor_name</span><span class="p">,</span><span class="w"> </span><span class="n">regressor_name</span><span class="p">)</span><span class="si">}</span><span class="s2"> over loaded window&quot;</span><span class="p">,</span>
+        <span class="n">xaxis_title</span><span class="o">=</span><span class="s2">&quot;Time&quot;</span><span class="p">,</span>
+        <span class="n">yaxis_title</span><span class="o">=</span><span class="n">COLUMN_LABELS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">regressor_name</span><span class="p">,</span> <span class="n">regressor_name</span><span class="p">),</span>
+        <span class="n">height</span><span class="o">=</span><span class="mi">280</span><span class="p">,</span>
+        <span class="n">margin</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">l</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">40</span><span class="p">),</span>
+        <span class="n">showlegend</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fig</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">cell</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">station_data</span><span class="p">):</span>
+    <span class="n">_df</span> <span class="o">=</span> <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">]</span>
+    <span class="n">_train_start_default</span><span class="p">,</span> <span class="n">_train_end_default</span><span class="p">,</span> <span class="n">_test_end_default</span> <span class="o">=</span> <span class="n">build_model_date_defaults</span><span class="p">(</span>
+        <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;date_min&quot;</span><span class="p">],</span>
+        <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;date_max&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">harmonic_inputs</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">name</span><span class="p">:</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">slider</span><span class="p">(</span>
+            <span class="n">start</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">stop</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">order</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">PERIODS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="mf">8766.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> h)&quot;</span><span class="p">,</span>
+            <span class="n">show_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">full_width</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">order</span> <span class="ow">in</span> <span class="n">DEFAULT_HARMONICS</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+
+    <span class="n">_available_regressors</span> <span class="o">=</span> <span class="n">available_columns</span><span class="p">(</span><span class="n">_df</span><span class="p">,</span> <span class="n">MODEL_REGRESSOR_CANDIDATES</span><span class="p">)</span>
+    <span class="n">regressor_toggles</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">regressor_lags</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">regressor_knots</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_regressor_rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_available_regressors</span><span class="p">:</span>
+        <span class="n">regressor_toggles</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">switch</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">_lag_start</span><span class="p">,</span> <span class="n">_lag_end</span> <span class="o">=</span> <span class="n">LAG_DEFAULTS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">regressor_lags</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">range_slider</span><span class="p">(</span>
+            <span class="n">start</span><span class="o">=-</span><span class="mi">6</span><span class="p">,</span>
+            <span class="n">stop</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="p">(</span><span class="n">_lag_start</span><span class="p">,</span> <span class="n">_lag_end</span><span class="p">),</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;lag (h)&quot;</span><span class="p">,</span>
+            <span class="n">show_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">regressor_knots</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">dropdown</span><span class="p">(</span>
+            <span class="n">options</span><span class="o">=</span><span class="n">KNOT_PRESET_OPTIONS</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="s2">&quot;med&quot;</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;knots&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">_regressor_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">mo</span><span class="o">.</span><span class="n">hstack</span><span class="p">([</span><span class="n">regressor_toggles</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">regressor_lags</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">regressor_knots</span><span class="p">[</span><span class="n">name</span><span class="p">]],</span> <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;start&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="n">train_start</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">_train_start_default</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Train start&quot;</span><span class="p">)</span>
+    <span class="n">train_end</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">_train_end_default</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Train end&quot;</span><span class="p">)</span>
+    <span class="n">test_end</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">_test_end_default</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Test end&quot;</span><span class="p">)</span>
+    <span class="n">run_fit</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">run_button</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Fit model&quot;</span><span class="p">)</span>
+
+    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;## Configure model&quot;</span><span class="p">),</span>
+            <span class="n">mo</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;**Harmonics** (0 = exclude)&quot;</span><span class="p">)]</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">harmonic_inputs</span><span class="o">.</span><span class="n">values</span><span class="p">())),</span>
+                    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;**Regressors** (toggle + lag range in hours + knots)&quot;</span><span class="p">)]</span> <span class="o">+</span> <span class="n">_regressor_rows</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">_available_regressors</span>
+                    <span class="k">else</span> <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">),</span>
+                    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;**Date ranges**&quot;</span><span class="p">),</span> <span class="n">train_start</span><span class="p">,</span> <span class="n">train_end</span><span class="p">,</span> <span class="n">test_end</span><span class="p">]),</span>
+                <span class="p">],</span>
+                <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;start&quot;</span><span class="p">,</span>
+                <span class="n">gap</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">run_fit</span><span class="p">,</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">harmonic_inputs</span><span class="p">,</span>
+        <span class="n">regressor_knots</span><span class="p">,</span>
+        <span class="n">regressor_lags</span><span class="p">,</span>
+        <span class="n">regressor_toggles</span><span class="p">,</span>
+        <span class="n">run_fit</span><span class="p">,</span>
+        <span class="n">test_end</span><span class="p">,</span>
+        <span class="n">train_end</span><span class="p">,</span>
+        <span class="n">train_start</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<p>Update the <code class="docutils literal notranslate"><span class="pre">Fit</span> <span class="pre">model</span></code> and <code class="docutils literal notranslate"><span class="pre">Run</span> <span class="pre">Shapley</span></code> cells to pass <code class="docutils literal notranslate"><span class="pre">regressor_knots</span></code> into <code class="docutils literal notranslate"><span class="pre">collect_model_params(...)</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">cell</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">station_data</span><span class="p">):</span>
+    <span class="n">_available_regressors</span> <span class="o">=</span> <span class="n">available_columns</span><span class="p">(</span><span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">],</span> <span class="n">MODEL_REGRESSOR_CANDIDATES</span><span class="p">)</span>
+    <span class="n">mo</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">_available_regressors</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;*No model regressors are available in the loaded dataset.*&quot;</span><span class="p">))</span>
+    <span class="n">inspect_regressor</span> <span class="o">=</span> <span class="n">mo</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">dropdown</span><span class="p">(</span>
+        <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="n">COLUMN_LABELS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span> <span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_available_regressors</span><span class="p">},</span>
+        <span class="n">value</span><span class="o">=</span><span class="n">_available_regressors</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Inspect regressor&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">inspect_regressor</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">inspect_regressor</span><span class="p">,)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">cell</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">inspect_regressor</span><span class="p">,</span> <span class="n">regressor_knots</span><span class="p">,</span> <span class="n">station_data</span><span class="p">):</span>
+    <span class="n">_regressor_name</span> <span class="o">=</span> <span class="n">inspect_regressor</span><span class="o">.</span><span class="n">value</span>
+    <span class="n">_knot_preset</span> <span class="o">=</span> <span class="n">regressor_knots</span><span class="p">[</span><span class="n">_regressor_name</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+    <span class="n">_basis_inputs</span> <span class="o">=</span> <span class="n">build_regressor_basis_inputs</span><span class="p">(</span>
+        <span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">],</span>
+        <span class="n">_regressor_name</span><span class="p">,</span>
+        <span class="n">_knot_preset</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">mo</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="s2">&quot;## Regressor inspection&quot;</span><span class="p">),</span>
+            <span class="n">build_regressor_series_figure</span><span class="p">(</span><span class="n">station_data</span><span class="p">[</span><span class="s2">&quot;df&quot;</span><span class="p">],</span> <span class="n">_regressor_name</span><span class="p">),</span>
+            <span class="n">build_regressor_basis_figure</span><span class="p">(</span><span class="n">_basis_inputs</span><span class="p">),</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="k">return</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the full notebook-adjacent test file</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-v</span></code></p>
+<p>Expected: PASS for the existing notebook tests plus the new knot-preset and basis-visualization regressions.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 5: Smoke-test the notebook manually</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">marimo</span> <span class="pre">edit</span> <span class="pre">examples/example_tidal_compact.py</span></code></p>
+<p>Expected:</p>
+<ul class="simple">
+<li><p>Each available regressor row now includes a <code class="docutils literal notranslate"><span class="pre">Knots</span></code> preset with default <code class="docutils literal notranslate"><span class="pre">med</span></code>.</p></li>
+<li><p>Changing a regressor from <code class="docutils literal notranslate"><span class="pre">med</span></code> to <code class="docutils literal notranslate"><span class="pre">low</span></code> or <code class="docutils literal notranslate"><span class="pre">high</span></code> changes the resulting spline config used by the fit path.</p></li>
+<li><p>The new <code class="docutils literal notranslate"><span class="pre">Regressor</span> <span class="pre">inspection</span></code> section appears when model regressors are available.</p></li>
+<li><p>The inspection section lets you choose a regressor and shows both the raw series and the spline basis with knot markers for the currently selected preset.</p></li>
+<li><p>[ ] <strong>Step 6: Commit the visualization work</strong></p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>examples/example_tidal_compact.py<span class="w"> </span>test/test_example_tidal_compact.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add compact regressor knot presets&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

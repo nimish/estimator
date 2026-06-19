@@ -1,0 +1,418 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tidal Multi-Station Report Design &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Tidal Multi-Station Report Design</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/specs/2026-04-21-tidal-multi-station-report-design.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="tidal-multi-station-report-design">
+<h1>Tidal Multi-Station Report Design<a class="headerlink" href="#tidal-multi-station-report-design" title="Link to this heading"></a></h1>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p>Add a new standalone script that runs the same fixed Battery-style tidal model
+across the stations already exposed by <code class="docutils literal notranslate"><span class="pre">examples/tidal_analysis.ipynb</span></code> via
+<code class="docutils literal notranslate"><span class="pre">STATION_CATALOG</span></code>, then produces a shareable report artifact. The purpose is to
+measure how well one common model form and one common parameterization transport
+across stations, not to retune each station independently.</p>
+<p>The output should be a batch-friendly script that writes:</p>
+<ul class="simple">
+<li><p>a results CSV for included stations;</p></li>
+<li><p>an exclusions CSV for skipped stations;</p></li>
+<li><p>a Markdown report with full metric tables and embedded charts;</p></li>
+<li><p>a log file;</p></li>
+<li><p>PNG figures for metric-wide comparisons and per-station diagnostics.</p></li>
+</ul>
+</section>
+<section id="goals">
+<h2>Goals<a class="headerlink" href="#goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Reuse the notebook’s station set by iterating the same <code class="docutils literal notranslate"><span class="pre">STATION_CATALOG</span></code>
+source of truth.</p></li>
+<li><p>Apply one fixed, Battery-style model form and one fixed parameterization to
+every station.</p></li>
+<li><p>Keep the model focused on the lower-timescale tidal periods plus the weather
+regressors <code class="docutils literal notranslate"><span class="pre">pressure</span></code>, <code class="docutils literal notranslate"><span class="pre">dp_dt</span></code>, and <code class="docutils literal notranslate"><span class="pre">wind_u</span></code>.</p></li>
+<li><p>Skip stations that cannot support the required data window or regressors, and
+report the exclusion reason clearly.</p></li>
+<li><p>Produce a Markdown report that includes all fit metrics for each included
+station plus embedded charts.</p></li>
+<li><p>Produce both across-station comparison charts and per-station diagnostic
+figures.</p></li>
+<li><p>Keep the script usable as a normal CLI batch job with durable output files.</p></li>
+</ul>
+</section>
+<section id="non-goals">
+<h2>Non-Goals<a class="headerlink" href="#non-goals" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Do not run a per-station hyperparameter search in this first report.</p></li>
+<li><p>Do not create a notebook-first artifact as the primary deliverable.</p></li>
+<li><p>Do not broaden the model form to new regressors beyond <code class="docutils literal notranslate"><span class="pre">pressure</span></code>, <code class="docutils literal notranslate"><span class="pre">dp_dt</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">wind_u</span></code>.</p></li>
+<li><p>Do not automatically shorten the analysis window per station; stations that
+cannot support the requested window should be excluded.</p></li>
+<li><p>Do not replace the current single-station Battery search script.</p></li>
+</ul>
+</section>
+<section id="fixed-model-configuration">
+<h2>Fixed Model Configuration<a class="headerlink" href="#fixed-model-configuration" title="Link to this heading"></a></h2>
+<p>The report should use one fixed configuration for every station.</p>
+<section id="data-window">
+<h3>Data Window<a class="headerlink" href="#data-window" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Train window: <code class="docutils literal notranslate"><span class="pre">2022-01-01</span></code> through <code class="docutils literal notranslate"><span class="pre">2023-12-31</span></code></p></li>
+<li><p>Held-out window: <code class="docutils literal notranslate"><span class="pre">2024-01-01</span></code> through <code class="docutils literal notranslate"><span class="pre">2024-12-31</span></code></p></li>
+<li><p>Data loading window should include the full train + held-out span needed by
+the model and requested regressors.</p></li>
+</ul>
+</section>
+<section id="tidal-structure">
+<h3>Tidal Structure<a class="headerlink" href="#tidal-structure" title="Link to this heading"></a></h3>
+<p>Use the same lower-timescale structure as the Battery anchor point:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">M2</span> <span class="pre">=</span> <span class="pre">4</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">S2</span> <span class="pre">=</span> <span class="pre">1</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">N2</span> <span class="pre">=</span> <span class="pre">1</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">K1</span> <span class="pre">=</span> <span class="pre">2</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">O1</span> <span class="pre">=</span> <span class="pre">1</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mf</span> <span class="pre">=</span> <span class="pre">0</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mm</span> <span class="pre">=</span> <span class="pre">0</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">annual</span> <span class="pre">=</span> <span class="pre">0</span></code></p></li>
+</ul>
+<p>This keeps the periodic model focused on the shorter-timescale constituents
+while intentionally omitting the long-period terms for this transport test.</p>
+</section>
+<section id="exogenous-regressors">
+<h3>Exogenous Regressors<a class="headerlink" href="#exogenous-regressors" title="Link to this heading"></a></h3>
+<p>Use the same fixed regressor set at every station:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">pressure</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dp_dt</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wind_u</span></code></p></li>
+</ul>
+<p>Use the same lag ranges as the Battery configuration:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">pressure:</span> <span class="pre">(-2,</span> <span class="pre">0)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dp_dt:</span> <span class="pre">(-2,</span> <span class="pre">0)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wind_u:</span> <span class="pre">(-1,</span> <span class="pre">0)</span></code></p></li>
+</ul>
+<p>Use the same knot preset across those regressors:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">med</span></code></p></li>
+</ul>
+<p>Use the same Fourier regularization weight as the Battery fixed point:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">1e-4</span></code></p></li>
+</ul>
+<p>The implementation should keep the solver choice aligned with the current
+single-station Battery script path rather than introducing a separate
+station-by-station solver decision in this report script.</p>
+</section>
+</section>
+<section id="station-selection">
+<h2>Station Selection<a class="headerlink" href="#station-selection" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Build the station list from the same <code class="docutils literal notranslate"><span class="pre">STATION_CATALOG</span></code> that powers the
+notebook station dropdown.</p></li>
+<li><p>Preserve the station metadata needed for reporting, especially:</p>
+<ul>
+<li><p>station id;</p></li>
+<li><p>station name;</p></li>
+<li><p>tidal regime when available.</p></li>
+</ul>
+</li>
+<li><p>Process stations independently so one station failure does not abort the
+entire report run.</p></li>
+</ul>
+</section>
+<section id="coverage-and-exclusion-policy">
+<h2>Coverage And Exclusion Policy<a class="headerlink" href="#coverage-and-exclusion-policy" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Attempt to load each station with weather enabled so the fixed regressor set
+can be evaluated honestly.</p></li>
+<li><p>Require enough data coverage to support the requested train window, held-out
+window, and the derived <code class="docutils literal notranslate"><span class="pre">dp_dt</span></code>/lagged regressor features.</p></li>
+<li><p>If a station cannot support the required window or regressors:</p>
+<ul>
+<li><p>skip it;</p></li>
+<li><p>record a clear exclusion reason;</p></li>
+<li><p>continue the run.</p></li>
+</ul>
+</li>
+<li><p>Do not silently shorten the station window to rescue incomplete stations in
+this first-pass report.</p></li>
+</ul>
+</section>
+<section id="script-shape">
+<h2>Script Shape<a class="headerlink" href="#script-shape" title="Link to this heading"></a></h2>
+<p>Add a new script rather than overloading the existing Battery grid runner.</p>
+<p>Recommended target:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">examples/run_tidal_multi_station_report.py</span></code></p></li>
+</ul>
+<p>The script should:</p>
+<ol class="arabic simple">
+<li><p>Build the station list from <code class="docutils literal notranslate"><span class="pre">STATION_CATALOG</span></code>.</p></li>
+<li><p>Load each station frame with weather enabled.</p></li>
+<li><p>Validate whether the station can support the fixed report configuration.</p></li>
+<li><p>Run the fixed model fit for included stations.</p></li>
+<li><p>Collect per-station metrics and fit metadata.</p></li>
+<li><p>Write CSV outputs as the run progresses or at safe checkpoints.</p></li>
+<li><p>Produce comparison and per-station figures.</p></li>
+<li><p>Write the Markdown summary with embedded images.</p></li>
+</ol>
+<p>The script should support a normal CLI batch workflow similar to the existing
+examples:</p>
+<ul class="simple">
+<li><p>explicit output directory;</p></li>
+<li><p>optional no-download mode;</p></li>
+<li><p>logging to disk;</p></li>
+<li><p>station-by-station progress messages.</p></li>
+</ul>
+</section>
+<section id="output-files">
+<h2>Output Files<a class="headerlink" href="#output-files" title="Link to this heading"></a></h2>
+<section id="results-csv">
+<h3>Results CSV<a class="headerlink" href="#results-csv" title="Link to this heading"></a></h3>
+<p>Write a machine-readable included-stations table, e.g.
+<code class="docutils literal notranslate"><span class="pre">multi_station_results.csv</span></code>, with one row per included station and at least:</p>
+<ul class="simple">
+<li><p>station id;</p></li>
+<li><p>station name;</p></li>
+<li><p>tidal regime;</p></li>
+<li><p>active regressors;</p></li>
+<li><p>train metrics:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">rmse</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mae</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mape</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">r2</span></code></p></li>
+</ul>
+</li>
+<li><p>held-out metrics:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">rmse</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mae</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mape</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">r2</span></code></p></li>
+</ul>
+</li>
+<li><p>train and held-out sample counts;</p></li>
+<li><p>metric gap columns where useful, such as held-out minus train.</p></li>
+</ul>
+</section>
+<section id="exclusions-csv">
+<h3>Exclusions CSV<a class="headerlink" href="#exclusions-csv" title="Link to this heading"></a></h3>
+<p>Write <code class="docutils literal notranslate"><span class="pre">multi_station_excluded.csv</span></code> with:</p>
+<ul class="simple">
+<li><p>station id;</p></li>
+<li><p>station name;</p></li>
+<li><p>exclusion category;</p></li>
+<li><p>clear human-readable reason.</p></li>
+</ul>
+</section>
+<section id="markdown-report">
+<h3>Markdown Report<a class="headerlink" href="#markdown-report" title="Link to this heading"></a></h3>
+<p>Write <code class="docutils literal notranslate"><span class="pre">multi_station_summary.md</span></code> as the shareable report artifact.</p>
+<p>It should include:</p>
+<ul class="simple">
+<li><p>a setup section describing the fixed model form and data window;</p></li>
+<li><p>an included-stations table with all metrics;</p></li>
+<li><p>a skipped-stations table with reasons;</p></li>
+<li><p>ranked summaries of best/worst held-out performance;</p></li>
+<li><p>embedded metric-wide charts;</p></li>
+<li><p>embedded per-station figures.</p></li>
+</ul>
+</section>
+<section id="figures">
+<h3>Figures<a class="headerlink" href="#figures" title="Link to this heading"></a></h3>
+<p>Write charts into a figures subdirectory, for example
+<code class="docutils literal notranslate"><span class="pre">figures/multi_station/</span></code>, and reference them from the Markdown using relative
+paths.</p>
+</section>
+</section>
+<section id="charts">
+<h2>Charts<a class="headerlink" href="#charts" title="Link to this heading"></a></h2>
+<p>The Markdown report should embed both comparison charts and per-station
+diagnostics.</p>
+<section id="across-station-charts">
+<h3>Across-Station Charts<a class="headerlink" href="#across-station-charts" title="Link to this heading"></a></h3>
+<p>Include one chart per key metric across stations. At minimum:</p>
+<ul class="simple">
+<li><p>held-out <code class="docutils literal notranslate"><span class="pre">MAPE</span></code> by station;</p></li>
+<li><p>held-out <code class="docutils literal notranslate"><span class="pre">RMSE</span></code> by station;</p></li>
+<li><p>held-out <code class="docutils literal notranslate"><span class="pre">MAE</span></code> by station;</p></li>
+<li><p>held-out <code class="docutils literal notranslate"><span class="pre">R^2</span></code> by station.</p></li>
+</ul>
+<p>Also include train-versus-held-out comparisons so generalization is visible,
+either as:</p>
+<ul class="simple">
+<li><p>paired bars per station; or</p></li>
+<li><p>separate train/held-out ranked plots; or</p></li>
+<li><p>another compact comparison form that stays readable in Markdown.</p></li>
+</ul>
+<p>The charts should prioritize readability over density; station labels may need
+rotation or ranking by held-out score.</p>
+</section>
+<section id="per-station-figures">
+<h3>Per-Station Figures<a class="headerlink" href="#per-station-figures" title="Link to this heading"></a></h3>
+<p>Include one compact figure per included station. Each figure should provide
+useful context without reproducing the entire notebook diagnostic suite.</p>
+<p>Recommended content:</p>
+<ul class="simple">
+<li><p>held-out observed versus predicted time-series overlay;</p></li>
+<li><p>a compact title/annotation block with train and held-out metrics;</p></li>
+<li><p>optionally a small residual panel if it materially improves interpretability.</p></li>
+</ul>
+</section>
+</section>
+<section id="error-handling">
+<h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>A failure on one station should produce an exclusion/failure record and allow
+the script to continue with the next station.</p></li>
+<li><p>Data-loading failures, weather-coverage failures, and fit failures should be
+distinguished in logs and exclusion output where practical.</p></li>
+<li><p>The script should preserve partial outputs when possible so long multi-station
+runs remain diagnosable.</p></li>
+</ul>
+</section>
+<section id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Link to this heading"></a></h2>
+<p>Add focused tests around the script’s durable logic rather than brittle
+end-to-end plotting assertions.</p>
+<p>Cover helper seams such as:</p>
+<ul class="simple">
+<li><p>building the station list from <code class="docutils literal notranslate"><span class="pre">STATION_CATALOG</span></code>;</p></li>
+<li><p>constructing the fixed fit configuration;</p></li>
+<li><p>classifying included versus excluded stations;</p></li>
+<li><p>shaping results and exclusion rows;</p></li>
+<li><p>generating the Markdown sections/relative figure paths.</p></li>
+</ul>
+<p>Avoid brittle image-content snapshot tests. Where figures are tested, prefer
+asserting that the expected files are created and referenced.</p>
+</section>
+<section id="acceptance-criteria">
+<h2>Acceptance Criteria<a class="headerlink" href="#acceptance-criteria" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Running the new multi-station script iterates the same station set exposed by
+the notebook via <code class="docutils literal notranslate"><span class="pre">STATION_CATALOG</span></code>.</p></li>
+<li><p>Every included station is fit with the same fixed model form and parameter
+values.</p></li>
+<li><p>Stations lacking required coverage are skipped and written to an exclusions
+CSV with clear reasons.</p></li>
+<li><p>The output directory contains:</p>
+<ul>
+<li><p>results CSV;</p></li>
+<li><p>exclusions CSV;</p></li>
+<li><p>Markdown summary;</p></li>
+<li><p>log file;</p></li>
+<li><p>embedded chart images.</p></li>
+</ul>
+</li>
+<li><p>The Markdown report contains all train and held-out metrics for each included
+station.</p></li>
+<li><p>The Markdown report embeds both:</p>
+<ul>
+<li><p>across-station metric comparison charts;</p></li>
+<li><p>per-station diagnostic figures.</p></li>
+</ul>
+</li>
+<li><p>The script can be rerun as a normal batch CLI without requiring notebook
+interaction.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
