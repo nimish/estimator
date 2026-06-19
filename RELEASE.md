@@ -21,6 +21,7 @@ No long-lived PyPI API token is required.
 
    ```bash
    uv sync --frozen --group dev
+   uv run ty check
    uv run pytest
    ```
 
@@ -28,6 +29,7 @@ No long-lived PyPI API token is required.
 
    ```bash
    uv build
+   uv run python scripts/check_package_contents.py
    uv run --with twine twine check dist/*
    ```
 

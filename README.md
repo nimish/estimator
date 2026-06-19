@@ -4,8 +4,16 @@ Time series generalized additive model (tsgam) is a package for fitting "general
 
 ## Installation
 
+From PyPI:
+
 ```bash
-uv sync
+uv add tsgam-estimator
+```
+
+For local development:
+
+```bash
+uv sync --group dev
 ```
 
 ## Documentation
@@ -46,13 +54,28 @@ make html
 ### Running Tests
 
 ```bash
+uv sync --group test
 uv run pytest
+```
+
+### Running Type Checks
+
+```bash
+uv sync --group typecheck
+uv run ty check
 ```
 
 ### Running Tests with Coverage
 
 ```bash
-uv run pytest --cov=tsgam_estimator --cov=load_model_estimator --cov-report=html
+uv run pytest --cov=tsgam_estimator --cov-report=html
+```
+
+### Working with Examples and Notebooks
+
+```bash
+uv sync --group examples
+uv sync --group notebooks
 ```
 
 ## License
@@ -62,4 +85,3 @@ BSD 3-Clause License - see [LICENSE](LICENSE) for details.
 ## Contributors
 
 See [CONTRIBUTORS](CONTRIBUTORS) for a list of contributors.
-

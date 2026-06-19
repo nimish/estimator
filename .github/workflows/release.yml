@@ -25,11 +25,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group dev
 
+      - name: Run type checks
+        run: uv run ty check
+
       - name: Run tests
         run: uv run pytest
 
       - name: Build package
         run: uv build
+
+      - name: Check package contents
+        run: uv run python scripts/check_package_contents.py
 
       - name: Check package metadata
         run: uv run --with twine twine check dist/*
