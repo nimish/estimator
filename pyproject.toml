@@ -4,6 +4,27 @@ version = "0.1.0"
 description = "Time series GAM (Generalized Additive Model) estimators for load forecasting"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Nimish Telang" },
+]
+keywords = [
+    "time-series",
+    "forecasting",
+    "generalized-additive-models",
+    "optimization",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
 dependencies = [
     "cvxpy>=1.7.3",
     "numpy>=2.3.4",
@@ -13,6 +34,11 @@ dependencies = [
     "vegafusion>=2.0.3",
     "vl-convert-python>=1.9.0.post1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/nimish/estimator"
+Repository = "https://github.com/nimish/estimator"
+Issues = "https://github.com/nimish/estimator/issues"
 
 [dependency-groups]
 dev = [
@@ -53,7 +79,7 @@ examples = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.9.23,<0.10.0"]
+requires = ["uv_build>=0.9.23,<0.12.0"]
 build-backend = "uv_build"
 
 
@@ -63,4 +89,3 @@ source = ["src/tsgam_estimator"]
 
 [tool.marimo.runtime]
 output_max_bytes = 50_000_000
-
