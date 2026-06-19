@@ -5,8 +5,8 @@
 Regression tests for trend term in predict.
 
 Covers the dimension mismatch when predicting on a time window that spans
-fewer periods than the training data (n_periods_pred < n_periods_fit), gapped
-prediction timestamps, and explicit monotonic trend directions.
+fewer periods than the training data (n_periods_pred < n_periods_fit),
+prediction frequency validation, and explicit monotonic trend directions.
 """
 
 import numpy as np
@@ -66,12 +66,11 @@ def test_predict_subset_before_end(fitted):
 
 
 def test_predict_gapped_subset(fitted):
-    """Predict on every 5th timestamp within training range."""
+    """Reject prediction subsets that skip the fitted sampling frequency."""
     est, X = fitted
-    full_preds = est.predict(X)
     every_5th = np.arange(0, len(X), 5)
-    gapped_preds = est.predict(X.iloc[every_5th])
-    np.testing.assert_allclose(gapped_preds, full_preds[every_5th])
+    with pytest.raises(ValueError, match="frequency"):
+        est.predict(X.iloc[every_5th])
 
 
 def test_predict_beyond_training(fitted):

@@ -12,6 +12,8 @@ This package provides a GAM model for time series forecasting that combines:
 - Optional autoregressive (AR) modeling of residuals
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .tsgam_estimator import (
     # Main estimator class
     TsgamEstimator,
@@ -63,4 +65,7 @@ __all__ = [
     "PERIOD_YEARLY_YEARLY",
 ]
 
-__version__ = "0.1.0"
+try:
+    __version__ = version("tsgam_estimator")
+except PackageNotFoundError:
+    __version__ = "0.1.0"
