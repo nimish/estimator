@@ -7,14 +7,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>tsgam_estimator.tsgam_estimator &mdash; estimator 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=01f34227"></script>
-      <script src="../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" /> 
@@ -124,7 +124,28 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">num_harmonics</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
     <span class="n">periods</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
-    <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0e-4</span></div>
+    <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0e-4</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_harmonics</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">periods</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;num_harmonics and periods must have the same length.&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="p">(</span><span class="n">harmonics</span><span class="p">,</span> <span class="n">period</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_harmonics</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">periods</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">harmonics</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">))</span>
+                <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">harmonics</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
+                <span class="ow">or</span> <span class="n">harmonics</span> <span class="o">&lt;</span> <span class="mi">0</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;num_harmonics[</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2">] must be a non-negative integer, got </span><span class="si">{</span><span class="n">harmonics</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">period</span><span class="p">)</span> <span class="ow">or</span> <span class="n">period</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;periods[</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2">] must be positive and finite, got </span><span class="si">{</span><span class="n">period</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+            <span class="n">max_harmonics</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">period</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">harmonics</span> <span class="o">&gt;</span> <span class="n">max_harmonics</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;num_harmonics[</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2">]=</span><span class="si">{</span><span class="n">harmonics</span><span class="si">}</span><span class="s2"> exceeds the Nyquist limit &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">max_harmonics</span><span class="si">}</span><span class="s2"> for period </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">period</span><span class="p">)</span><span class="si">:</span><span class="s2">.6g</span><span class="si">}</span><span class="s2"> samples.&quot;</span>
+                <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="TsgamSplineConfig">
@@ -249,7 +270,11 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">TrendType</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
     <span class="n">NONE</span> <span class="o">=</span> <span class="s1">&#39;none&#39;</span>
     <span class="n">LINEAR</span> <span class="o">=</span> <span class="s1">&#39;linear&#39;</span>
-    <span class="n">NONLINEAR</span> <span class="o">=</span> <span class="s1">&#39;nonlinear&#39;</span></div>
+    <span class="n">NONLINEAR</span> <span class="o">=</span> <span class="s1">&#39;nonlinear&#39;</span>
+    <span class="n">NONLINEAR_DECREASING</span> <span class="o">=</span> <span class="s1">&#39;nonlinear_decreasing&#39;</span>
+    <span class="n">NONLINEAR_INCREASING</span> <span class="o">=</span> <span class="s1">&#39;nonlinear_increasing&#39;</span>
+    <span class="n">NONLINEAR_DEC</span> <span class="o">=</span> <span class="s1">&#39;nonlinear_decreasing&#39;</span>
+    <span class="n">NONLINEAR_INC</span> <span class="o">=</span> <span class="s1">&#39;nonlinear_increasing&#39;</span></div>
 
 
 <div class="viewcode-block" id="TsgamTrendConfig">
@@ -395,6 +420,8 @@
     <span class="n">period_hours</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
+<span class="nb">type</span> <span class="n">SolverOptionValue</span> <span class="o">=</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SolverOptionValue</span><span class="p">]</span>
+
 <div class="viewcode-block" id="TsgamSolverConfig">
 <a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamSolverConfig">[docs]</a>
 <span class="nd">@dataclass</span>
@@ -413,13 +440,52 @@
 <span class="sd">    verbose : bool, default=True</span>
 <span class="sd">        Whether to print solver output during optimization. Useful for debugging</span>
 <span class="sd">        but can be verbose for large problems.</span>
+<span class="sd">    warm_start : bool, default=True</span>
+<span class="sd">        Whether to warm-start the solver using cached results from a previous</span>
+<span class="sd">        solve. Can significantly speed up repeated solves with similar data.</span>
+<span class="sd">    solver_opts : dict[str, SolverOptionValue] | None, default=None</span>
+<span class="sd">        Additional keyword arguments forwarded to ``cvxpy.Problem.solve()``.</span>
+<span class="sd">        Each solver accepts its own options; see</span>
+<span class="sd">        https://www.cvxpy.org/tutorial/solvers/index.html#setting-solver-options</span>
+
+<span class="sd">        CLARABEL options include ``max_iter`` (default 50) and</span>
+<span class="sd">        ``time_limit`` (default 0.0, no limit).</span>
+
+<span class="sd">        MOSEK options are passed via a ``mosek_params`` dict with string</span>
+<span class="sd">        parameter names, e.g.</span>
+<span class="sd">        ``{&quot;mosek_params&quot;: {&quot;MSK_IPAR_INTPNT_MAX_ITERATIONS&quot;: 400}}``.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
 <span class="sd">    &gt;&gt;&gt; config = TsgamSolverConfig(solver=&#39;CLARABEL&#39;, verbose=False)</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamSolverConfig(</span>
+<span class="sd">    ...     solver=&#39;CLARABEL&#39;,</span>
+<span class="sd">    ...     solver_opts={&quot;max_iter&quot;: 200, &quot;time_limit&quot;: 60.0},</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; config = TsgamSolverConfig(</span>
+<span class="sd">    ...     solver=&#39;MOSEK&#39;,</span>
+<span class="sd">    ...     solver_opts={</span>
+<span class="sd">    ...         &quot;mosek_params&quot;: {&quot;MSK_IPAR_INTPNT_MAX_ITERATIONS&quot;: 400}</span>
+<span class="sd">    ...     },</span>
+<span class="sd">    ... )</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">solver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;CLARABEL&#39;</span>
-    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span></div>
+    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">warm_start</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">solver_opts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SolverOptionValue</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">_RESERVED_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;solver&quot;</span><span class="p">,</span> <span class="s2">&quot;verbose&quot;</span><span class="p">,</span> <span class="s2">&quot;warm_start&quot;</span><span class="p">})</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_solve_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SolverOptionValue</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build the extra kwargs dict for ``Problem.solve()``, validating no reserved keys.&quot;&quot;&quot;</span>
+        <span class="n">opts</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solver_opts</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="n">conflict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_RESERVED_KEYS</span> <span class="o">&amp;</span> <span class="n">opts</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">conflict</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;solver_opts must not contain keys that are passed explicitly: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">conflict</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">opts</span></div>
 
 
 <div class="viewcode-block" id="TsgamEstimatorConfig">
@@ -441,6 +507,12 @@
 <span class="sd">        List of configurations for exogenous variables. Each element corresponds</span>
 <span class="sd">        to one exogenous variable in X. Order must match column order in X.</span>
 <span class="sd">        If None, no exogenous variables are used.</span>
+<span class="sd">    interaction_pairs : list[tuple[int, int]] or None, default=None</span>
+<span class="sd">        Exact 2-way interaction pairs between exogenous terms. Each tuple refers</span>
+<span class="sd">        to positions in ``exog_config`` and the matching X column order. When</span>
+<span class="sd">        interactions are enabled, they use only each factor&#39;s current-index</span>
+<span class="sd">        response block (``lag=0``), even if the corresponding main effect also</span>
+<span class="sd">        includes additional lagged terms.</span>
 <span class="sd">    ar_config : TsgamArConfig or None, default=None</span>
 <span class="sd">        Configuration for AR residual modeling. If None, no AR model is fitted.</span>
 <span class="sd">    trend_config : TsgamTrendConfig or None, default=None</span>
@@ -465,9 +537,10 @@
 <span class="sd">        If True, sort the data by its datetime index before fit/predict so that</span>
 <span class="sd">        row order matches time order. If False, require the index to already be</span>
 <span class="sd">        sorted (chronologically); raise ValueError if not.</span>
-<span class="sd">    random_state : RandomState or None, default=None</span>
-<span class="sd">        Random state for reproducible results. Used in AR sampling if ar_config</span>
-<span class="sd">        is provided.</span>
+<span class="sd">    random_state : int, RandomState instance or None, default=None</span>
+<span class="sd">        Random seed/state for reproducible stochastic sampling. Integer seeds are</span>
+<span class="sd">        convenient for shared configs, while ``RandomState`` instances allow</span>
+<span class="sd">        callers to manage RNG state explicitly.</span>
 <span class="sd">    debug : bool, default=False</span>
 <span class="sd">        If True, stores additional debug attributes (e.g., _baseline_residuals_,</span>
 <span class="sd">        _B_running_view_) for inspection.</span>
@@ -488,12 +561,13 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">multi_periodic_config</span><span class="p">:</span> <span class="n">TsgamMultiPeriodicConfig</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">exog_config</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">interaction_pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># ensure this works with linear and splines</span>
     <span class="n">ar_config</span><span class="p">:</span> <span class="n">TsgamArConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">trend_config</span><span class="p">:</span> <span class="n">TsgamTrendConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">outlier_config</span><span class="p">:</span> <span class="n">TsgamOutlierConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">solver_config</span><span class="p">:</span> <span class="n">TsgamSolverConfig</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">TsgamSolverConfig</span><span class="p">)</span>
     <span class="n">sort_index</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="n">random_state</span><span class="p">:</span> <span class="n">RandomState</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">random_state</span><span class="p">:</span> <span class="n">RandomState</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
 
 
@@ -1039,7 +1113,24 @@
                 <span class="sa">f</span><span class="s2">&quot;Timestamps must be regularly spaced with frequency &#39;</span><span class="si">{</span><span class="n">expected_freq</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_numeric_prefix</span><span class="p">(</span><span class="n">inferred_freq</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_numeric_prefix</span><span class="p">(</span><span class="n">expected_freq</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+        <span class="n">normalized_inferred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_numeric_prefix</span><span class="p">(</span><span class="n">inferred_freq</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">normalized_expected</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_numeric_prefix</span><span class="p">(</span><span class="n">expected_freq</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">normalized_inferred</span> <span class="o">!=</span> <span class="n">normalized_expected</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">allow_gaps</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">inferred_step</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">tseries</span><span class="o">.</span><span class="n">frequencies</span><span class="o">.</span><span class="n">to_offset</span><span class="p">(</span><span class="n">inferred_freq</span><span class="p">))</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span>
+                    <span class="n">expected_step</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">tseries</span><span class="o">.</span><span class="n">frequencies</span><span class="o">.</span><span class="n">to_offset</span><span class="p">(</span><span class="n">expected_freq</span><span class="p">))</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                    <span class="n">inferred_step</span> <span class="o">=</span> <span class="n">expected_step</span> <span class="o">=</span> <span class="kc">None</span>
+
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">inferred_step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="n">expected_step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="n">inferred_step</span> <span class="o">&gt;=</span> <span class="n">expected_step</span>
+                    <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">inferred_step</span> <span class="o">%</span> <span class="n">expected_step</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+                <span class="p">):</span>
+                    <span class="k">return</span>
+
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Timestamps frequency &#39;</span><span class="si">{</span><span class="n">inferred_freq</span><span class="si">}</span><span class="s2">&#39; does not match &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;expected frequency &#39;</span><span class="si">{</span><span class="n">expected_freq</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
@@ -1332,7 +1423,7 @@
                 <span class="n">H0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_H</span><span class="p">(</span><span class="n">exog_var</span><span class="p">,</span> <span class="n">knots</span><span class="p">,</span> <span class="n">include_offset</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
                 <span class="n">H_lag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_offset_H</span><span class="p">(</span><span class="n">H0</span><span class="p">,</span> <span class="n">lag</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>  <span class="c1"># TsgamLinearConfig</span>
-                <span class="n">H0</span> <span class="o">=</span> <span class="n">exog_var</span>
+                <span class="n">H0</span> <span class="o">=</span> <span class="n">exog_var</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
                 <span class="n">H_lag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_offset_H</span><span class="p">(</span><span class="n">H0</span><span class="p">,</span> <span class="n">lag</span><span class="p">)</span>
 
             <span class="n">Hs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">H_lag</span><span class="p">)</span>
@@ -1383,6 +1474,94 @@
         <span class="n">valid_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">Hs</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">valid_mask</span><span class="p">,</span> <span class="n">Hs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_zero_lag_H</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exog_cfg</span><span class="p">:</span> <span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">,</span> <span class="n">Hs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ndarray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the current-index basis block for an exogenous term.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">zero_lag_ix</span> <span class="o">=</span> <span class="n">exog_cfg</span><span class="o">.</span><span class="n">lags</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Interaction pairs require each referenced exogenous factor to include lag=0.&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">return</span> <span class="n">Hs</span><span class="p">[</span><span class="n">zero_lag_ix</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_outer_column_product</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arr1</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">arr2</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a q*r interaction design block from two response matrices.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">arr1</span><span class="p">[:,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">arr2</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">arr1</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_interaction_contribution_from_blocks</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">arr1</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">arr2</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">interaction_coef</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">nan_to_zero</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Contract two response matrices against flattened interaction coefficients.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">nan_to_zero</span><span class="p">:</span>
+            <span class="n">arr1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">arr1</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">arr2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">arr2</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">coef_matrix</span> <span class="o">=</span> <span class="n">interaction_coef</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">arr1</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">arr2</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">arr1</span> <span class="o">@</span> <span class="n">coef_matrix</span><span class="p">)</span> <span class="o">*</span> <span class="n">arr2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_normalize_interaction_pairs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate and normalize configured exogenous interaction pairs.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">interaction_pairs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;interaction_pairs requires a non-empty exog_config.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">normalized_pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">seen_pairs</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">n_exog</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">interaction_pairs</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">left_ix</span><span class="p">,</span> <span class="n">right_ix</span> <span class="o">=</span> <span class="n">pair</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Each interaction pair must contain exactly two exogenous indices.&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+            <span class="n">left_is_integer_index</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">left_ix</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">))</span>
+                <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">left_ix</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">right_is_integer_index</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">right_ix</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">))</span>
+                <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">right_ix</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">left_is_integer_index</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">right_is_integer_index</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Each interaction pair index must be an integer exogenous index.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">left_ix</span> <span class="o">==</span> <span class="n">right_ix</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;interaction_pairs cannot contain self-pairs.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">left_ix</span> <span class="o">&lt;</span> <span class="n">n_exog</span> <span class="ow">or</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">right_ix</span> <span class="o">&lt;</span> <span class="n">n_exog</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;interaction pair </span><span class="si">{</span><span class="p">(</span><span class="n">left_ix</span><span class="p">,</span><span class="w"> </span><span class="n">right_ix</span><span class="p">)</span><span class="si">}</span><span class="s2"> is out of range for &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n_exog</span><span class="si">}</span><span class="s2"> exogenous terms.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">normalized_pair</span> <span class="o">=</span> <span class="p">(</span><span class="n">left_ix</span><span class="p">,</span> <span class="n">right_ix</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">right_ix</span> <span class="o">&lt;</span> <span class="n">left_ix</span><span class="p">:</span>
+                <span class="n">normalized_pair</span> <span class="o">=</span> <span class="p">(</span><span class="n">right_ix</span><span class="p">,</span> <span class="n">left_ix</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">normalized_pair</span> <span class="ow">in</span> <span class="n">seen_pairs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Duplicate interaction pair detected: </span><span class="si">{</span><span class="n">normalized_pair</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">exog_ix</span> <span class="ow">in</span> <span class="n">normalized_pair</span><span class="p">:</span>
+                <span class="k">if</span> <span class="mi">0</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">[</span><span class="n">exog_ix</span><span class="p">]</span><span class="o">.</span><span class="n">lags</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;Interaction pairs require each referenced exogenous factor &quot;</span>
+                        <span class="s2">&quot;to include lag=0.&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="n">seen_pairs</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">normalized_pair</span><span class="p">)</span>
+            <span class="n">normalized_pairs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">normalized_pair</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">normalized_pairs</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_min_samples_required</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1522,14 +1701,19 @@
             <span class="s1">&#39;constant&#39;</span><span class="p">:</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">(),</span>
         <span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Store knots only when auto-computed from training data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">interaction_pairs_</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">model_term</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span>
         <span class="n">regularization_term</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="c1"># Start with mask excluding NaN&#39;s in y (defensive programming - check_X_y should have rejected them)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span> <span class="o">=</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+        <span class="n">exog_fit_data</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">interaction_Hs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">interaction_pairs_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_interaction_pairs</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">exog_cfg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">):</span>
                 <span class="n">valid_mask</span><span class="p">,</span> <span class="n">Hs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_exog_config</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">X_array</span><span class="p">[:,</span> <span class="n">ix</span><span class="p">])</span>
+                <span class="n">exog_fit_data</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">valid_mask</span><span class="p">,</span> <span class="n">Hs</span><span class="p">))</span>
 
                 <span class="c1"># Store knots only if auto-computed (not provided in config)</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">TsgamSplineConfig</span><span class="p">):</span>
@@ -1557,11 +1741,28 @@
                     <span class="n">regularization_term</span> <span class="o">+=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">exog_coef</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span> <span class="o">*</span> <span class="n">exog_cfg</span><span class="o">.</span><span class="n">diff_reg_weight</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span> <span class="o">&amp;=</span> <span class="n">valid_mask</span>
 
-            <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">exog_cfg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">):</span>
-                <span class="c1"># Rebuild Hs to build model term (Hs are only needed during fit)</span>
-                <span class="n">valid_mask</span><span class="p">,</span> <span class="n">Hs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_exog_config</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">X_array</span><span class="p">[:,</span> <span class="n">ix</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">pair_ix</span><span class="p">,</span> <span class="p">(</span><span class="n">left_ix</span><span class="p">,</span> <span class="n">right_ix</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">interaction_pairs_</span><span class="p">):</span>
+                <span class="n">left_cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">[</span><span class="n">left_ix</span><span class="p">]</span>
+                <span class="n">right_cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">[</span><span class="n">right_ix</span><span class="p">]</span>
+                <span class="n">left_H</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_zero_lag_H</span><span class="p">(</span><span class="n">left_cfg</span><span class="p">,</span> <span class="n">exog_fit_data</span><span class="p">[</span><span class="n">left_ix</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">right_H</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_zero_lag_H</span><span class="p">(</span><span class="n">right_cfg</span><span class="p">,</span> <span class="n">exog_fit_data</span><span class="p">[</span><span class="n">right_ix</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">interaction_H</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_outer_column_product</span><span class="p">(</span><span class="n">left_H</span><span class="p">,</span> <span class="n">right_H</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span> <span class="o">&amp;=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">interaction_H</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+                <span class="n">interaction_coef</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span><span class="n">interaction_H</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;interaction_coef_</span><span class="si">{</span><span class="n">pair_ix</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">interaction_coef</span>
+                <span class="n">interaction_weight</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">left_cfg</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">*</span> <span class="n">right_cfg</span><span class="o">.</span><span class="n">reg_weight</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">regularization_term</span> <span class="o">+=</span> <span class="n">interaction_weight</span> <span class="o">*</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">interaction_coef</span><span class="p">)</span>
+                <span class="n">interaction_Hs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">interaction_H</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">Hs</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">exog_fit_data</span><span class="p">):</span>
                 <span class="c1"># Sum over lags: H @ exog_coef[:, lag_ix] for each lag</span>
                 <span class="n">model_term</span> <span class="o">+=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">expr</span><span class="o">=</span><span class="p">[</span><span class="n">H</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;exog_coef_</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">][:,</span> <span class="n">lag_ix</span><span class="p">]</span> <span class="k">for</span> <span class="n">lag_ix</span><span class="p">,</span> <span class="n">H</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">Hs</span><span class="p">)])</span>
+
+            <span class="k">for</span> <span class="n">pair_ix</span><span class="p">,</span> <span class="n">interaction_H</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">interaction_Hs</span><span class="p">):</span>
+                <span class="n">model_term</span> <span class="o">+=</span> <span class="n">interaction_H</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;interaction_coef_</span><span class="si">{</span><span class="n">pair_ix</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span>
 
 
 
@@ -1630,9 +1831,14 @@
                 <span class="n">slope</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">slope</span>
                 <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">==</span> <span class="n">slope</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR</span><span class="p">,</span>
+                <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR_DEC</span><span class="p">,</span>
+            <span class="p">):</span>
                 <span class="c1"># Nonlinear monotonic decreasing trend</span>
                 <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR_INC</span><span class="p">:</span>
+                <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>
             <span class="c1"># For &#39;none&#39;, trend_term is None so it won&#39;t be added</span>
 
         <span class="c1"># Add outlier detector term if configured</span>
@@ -1674,7 +1880,12 @@
         <span class="n">weight_valid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_weight_</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
         <span class="n">error</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">weight_valid</span><span class="p">),</span> <span class="n">residual</span><span class="p">))</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weight_valid</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="n">error</span> <span class="o">+</span> <span class="n">regularization_term</span><span class="p">),</span> <span class="n">constraints</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">solver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+            <span class="n">solver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span>
+            <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="p">,</span>
+            <span class="n">warm_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">warm_start</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">_solve_kwargs</span><span class="p">(),</span>
+        <span class="p">)</span>
 
         <span class="c1"># Check convergence</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">status</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;optimal&quot;</span><span class="p">,</span> <span class="s2">&quot;optimal_inaccurate&quot;</span><span class="p">]:</span>
@@ -1713,15 +1924,32 @@
         <span class="n">baseline_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
 
         <span class="c1"># Add exogenous terms if present</span>
+        <span class="n">zero_lag_Hs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">interaction_parent_indices</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">exog_ix</span>
+            <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;interaction_pairs_&#39;</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="k">for</span> <span class="n">exog_ix</span> <span class="ow">in</span> <span class="n">pair</span>
+        <span class="p">}</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">exog_cfg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">):</span>
                 <span class="n">exog_var</span> <span class="o">=</span> <span class="n">X_array</span><span class="p">[:,</span> <span class="n">ix</span><span class="p">]</span>
                 <span class="n">stored_knots</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">TsgamSplineConfig</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
                 <span class="n">_</span><span class="p">,</span> <span class="n">Hs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_exog_config</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">exog_var</span><span class="p">,</span> <span class="n">knots</span><span class="o">=</span><span class="n">stored_knots</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">ix</span> <span class="ow">in</span> <span class="n">interaction_parent_indices</span><span class="p">:</span>
+                    <span class="n">zero_lag_Hs</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_zero_lag_H</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">Hs</span><span class="p">)</span>
                 <span class="n">exog_coef</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;exog_coef_</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
                 <span class="k">if</span> <span class="n">exog_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">exog_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">([</span><span class="n">H</span> <span class="o">@</span> <span class="n">exog_coef</span><span class="p">[:,</span> <span class="n">lag_ix</span><span class="p">]</span> <span class="k">for</span> <span class="n">lag_ix</span><span class="p">,</span> <span class="n">H</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">Hs</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
                     <span class="n">baseline_pred</span> <span class="o">+=</span> <span class="n">exog_pred</span>
+
+        <span class="k">for</span> <span class="n">pair_ix</span><span class="p">,</span> <span class="p">(</span><span class="n">left_ix</span><span class="p">,</span> <span class="n">right_ix</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;interaction_pairs_&#39;</span><span class="p">,</span> <span class="p">[])):</span>
+            <span class="n">interaction_coef</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;interaction_coef_</span><span class="si">{</span><span class="n">pair_ix</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">if</span> <span class="n">interaction_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">baseline_pred</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_interaction_contribution_from_blocks</span><span class="p">(</span>
+                    <span class="n">zero_lag_Hs</span><span class="p">[</span><span class="n">left_ix</span><span class="p">],</span>
+                    <span class="n">zero_lag_Hs</span><span class="p">[</span><span class="n">right_ix</span><span class="p">],</span>
+                    <span class="n">interaction_coef</span><span class="p">,</span>
+                <span class="p">)</span>
 
         <span class="c1"># Add Fourier terms if present</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_periodic_config</span><span class="p">:</span>
@@ -1775,7 +2003,12 @@
             <span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">residuals</span><span class="p">[</span><span class="n">ar_valid_mask</span><span class="p">]</span> <span class="o">-</span> <span class="n">B</span><span class="p">[</span><span class="n">ar_valid_mask</span><span class="p">]</span> <span class="o">@</span> <span class="n">theta</span> <span class="o">-</span> <span class="n">constant</span><span class="p">)),</span>
             <span class="p">[</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">norm1</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">ar_config</span><span class="o">.</span><span class="n">l1_constraint</span><span class="p">]</span>
         <span class="p">)</span>
-        <span class="n">ar_problem</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">solver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
+        <span class="n">ar_problem</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+            <span class="n">solver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span>
+            <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="p">,</span>
+            <span class="n">warm_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">warm_start</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">_solve_kwargs</span><span class="p">(),</span>
+        <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">ar_problem</span><span class="o">.</span><span class="n">status</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;infeasible&quot;</span><span class="p">,</span> <span class="s2">&quot;unbounded&quot;</span><span class="p">]:</span>
             <span class="k">assert</span> <span class="n">theta</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;AR coefficients should be set&quot;</span>
@@ -1796,7 +2029,9 @@
 
 <div class="viewcode-block" id="TsgamEstimator.predict">
 <a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimator.predict">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+                <span class="n">remove_periodic</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">remove_exogenous</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> 
+                <span class="n">remove_trend</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Predict target values for new data.</span>
 
@@ -1846,8 +2081,8 @@
         <span class="c1"># Extract timestamps and validate</span>
         <span class="n">timestamps</span><span class="p">,</span> <span class="n">X_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_timestamp_index</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 
-        <span class="c1"># Prediction data must be regularly spaced with no gaps</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">)</span>
+        <span class="c1"># Prediction data must be regularly spaced at the fitted frequency.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">,</span> <span class="n">allow_gaps</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
         <span class="c1"># Convert timestamps to indices using stored reference</span>
         <span class="n">time_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timestamps_to_indices</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_reference_</span><span class="p">)</span>
@@ -1862,7 +2097,13 @@
         <span class="n">predictions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">X_array</span><span class="p">),</span> <span class="n">constant_value</span><span class="p">)</span>
 
         <span class="c1"># Add exogenous terms if present</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">:</span>
+        <span class="n">zero_lag_Hs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">interaction_parent_indices</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">exog_ix</span>
+            <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;interaction_pairs_&#39;</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="k">for</span> <span class="n">exog_ix</span> <span class="ow">in</span> <span class="n">pair</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">remove_exogenous</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">exog_cfg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">):</span>
                 <span class="n">exog_var</span> <span class="o">=</span> <span class="n">X_array</span><span class="p">[:,</span> <span class="n">ix</span><span class="p">]</span>
 
@@ -1871,6 +2112,8 @@
 
                 <span class="c1"># Use _process_exog_config with stored knots (will use config knots if stored_knots is None)</span>
                 <span class="n">valid_mask_pred</span><span class="p">,</span> <span class="n">Hs_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_exog_config</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">exog_var</span><span class="p">,</span> <span class="n">knots</span><span class="o">=</span><span class="n">stored_knots</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">ix</span> <span class="ow">in</span> <span class="n">interaction_parent_indices</span><span class="p">:</span>
+                    <span class="n">zero_lag_Hs</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_zero_lag_H</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">Hs_pred</span><span class="p">)</span>
 
                 <span class="c1"># Check for NaN in input variable (this is a real problem, not just boundary effects)</span>
                 <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">exog_var</span><span class="p">)):</span>
@@ -1905,8 +2148,37 @@
                     <span class="p">)</span>
                 <span class="n">predictions</span> <span class="o">+=</span> <span class="n">exog_pred</span>
 
+        <span class="k">for</span> <span class="n">pair_ix</span><span class="p">,</span> <span class="p">(</span><span class="n">left_ix</span><span class="p">,</span> <span class="n">right_ix</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;interaction_pairs_&#39;</span><span class="p">,</span> <span class="p">[])</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">remove_exogenous</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="p">):</span>
+            <span class="n">interaction_coef</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;interaction_coef_</span><span class="si">{</span><span class="n">pair_ix</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">if</span> <span class="n">interaction_coef</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Interaction coefficients for pair </span><span class="si">{</span><span class="n">pair_ix</span><span class="si">}</span><span class="s2"> are None. &quot;</span>
+                    <span class="s2">&quot;Model may not have converged.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">interaction_coef</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Interaction coefficients for pair </span><span class="si">{</span><span class="n">pair_ix</span><span class="si">}</span><span class="s2"> contain NaN.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">interaction_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_interaction_contribution_from_blocks</span><span class="p">(</span>
+                <span class="n">zero_lag_Hs</span><span class="p">[</span><span class="n">left_ix</span><span class="p">],</span>
+                <span class="n">zero_lag_Hs</span><span class="p">[</span><span class="n">right_ix</span><span class="p">],</span>
+                <span class="n">interaction_coef</span><span class="p">,</span>
+                <span class="n">nan_to_zero</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">interaction_pred</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Interaction prediction for pair </span><span class="si">{</span><span class="n">pair_ix</span><span class="si">}</span><span class="s2"> contains NaN. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;left_H shape: </span><span class="si">{</span><span class="n">zero_lag_Hs</span><span class="p">[</span><span class="n">left_ix</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;right_H shape: </span><span class="si">{</span><span class="n">zero_lag_Hs</span><span class="p">[</span><span class="n">right_ix</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;interaction_coef shape: </span><span class="si">{</span><span class="n">interaction_coef</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">predictions</span> <span class="o">+=</span> <span class="n">interaction_pred</span>
+
         <span class="c1"># Add Fourier terms if present</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_periodic_config</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_periodic_config</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">remove_periodic</span><span class="p">:</span>
             <span class="c1"># Check for NaN in time_indices</span>
             <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">time_indices</span><span class="p">)):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Time indices contain NaN. Check timestamp conversion.&quot;</span><span class="p">)</span>
@@ -2014,6 +2286,8 @@
                     <span class="n">trend_extended</span><span class="p">[</span><span class="n">n_periods_fit</span><span class="p">:]</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 
                 <span class="n">trend</span> <span class="o">=</span> <span class="n">trend_extended</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">trend</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[:</span><span class="n">n_periods_pred</span><span class="p">]</span>
 
             <span class="c1"># Add trend term to predictions</span>
             <span class="n">predictions</span> <span class="o">+=</span> <span class="n">T_pred</span> <span class="o">@</span> <span class="n">trend</span>
@@ -2081,6 +2355,8 @@
 <span class="sd">        &gt;&gt;&gt; p95 = np.percentile(samples_original, 95, axis=0)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;problem_&#39;</span><span class="p">,</span> <span class="s1">&#39;time_reference_&#39;</span><span class="p">,</span> <span class="s1">&#39;freq_&#39;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">random_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">random_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">random_state</span>
         <span class="n">random_state</span> <span class="o">=</span> <span class="n">check_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
 
         <span class="c1"># Get baseline predictions</span>

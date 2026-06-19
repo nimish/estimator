@@ -1,0 +1,468 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compact Estimator Config Export Implementation Plan &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            estimator
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">estimator</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Compact Estimator Config Export Implementation Plan</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/superpowers/plans/2026-04-15-compact-estimator-config-export-plan.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="compact-estimator-config-export-implementation-plan">
+<h1>Compact Estimator Config Export Implementation Plan<a class="headerlink" href="#compact-estimator-config-export-implementation-plan" title="Link to this heading"></a></h1>
+<blockquote>
+<div><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code class="docutils literal notranslate"><span class="pre">-</span> <span class="pre">[</span> <span class="pre">]</span></code>) syntax for tracking.</p>
+</div></blockquote>
+<p><strong>Goal:</strong> Show the compact tidal notebook’s currently selected <code class="docutils literal notranslate"><span class="pre">TsgamEstimatorConfig</span></code> as shareable YAML, using the same config assembly path that powers model fitting.</p>
+<p><strong>Architecture:</strong> Refactor <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code> so one helper assembles the estimator config, selected harmonic metadata, and exogenous design matrices. Serialize that exact config into plain Python data and YAML once, store it on <code class="docutils literal notranslate"><span class="pre">FitResult</span></code>, and render it with a small markdown helper that also handles the all-components-off mean-baseline case.</p>
+<p><strong>Tech Stack:</strong> Python 3.12, marimo, PyYAML, NumPy, pandas, pytest</p>
+<hr class="docutils" />
+<section id="file-map">
+<h2>File Map<a class="headerlink" href="#file-map" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code></p>
+<ul>
+<li><p>Add a shared <code class="docutils literal notranslate"><span class="pre">build_estimator_config(...)</span></code> helper used by <code class="docutils literal notranslate"><span class="pre">run_tidal_model(...)</span></code></p></li>
+<li><p>Add YAML serialization helpers and a small markdown-rendering helper</p></li>
+<li><p>Extend <code class="docutils literal notranslate"><span class="pre">FitResult</span></code> with <code class="docutils literal notranslate"><span class="pre">estimator_config_yaml</span></code></p></li>
+<li><p>Render the YAML block or a mean-baseline note in the notebook UI</p></li>
+</ul>
+</li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p>
+<ul>
+<li><p>Add focused regression coverage for YAML serialization and baseline rendering</p></li>
+<li><p>Add a lightweight regression for the mean-baseline <code class="docutils literal notranslate"><span class="pre">run_tidal_model(...)</span></code> path</p></li>
+</ul>
+</li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></p>
+<ul>
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">PyYAML</span></code> as a runtime dependency because the notebook module imports it directly</p></li>
+</ul>
+</li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code></p>
+<ul>
+<li><p>Capture the dependency update from <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">add</span> <span class="pre">pyyaml</span></code></p></li>
+</ul>
+</li>
+</ul>
+<section id="task-1-shared-config-builder-and-yaml-helpers">
+<h3>Task 1: Shared Config Builder And YAML Helpers<a class="headerlink" href="#task-1-shared-config-builder-and-yaml-helpers" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing tests</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">example_tidal_compact</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: E402</span>
+    <span class="n">build_estimator_config</span><span class="p">,</span>
+    <span class="n">build_estimator_config_markdown</span><span class="p">,</span>
+    <span class="n">dump_estimator_config_yaml</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_dump_estimator_config_yaml_round_trips_selected_model</span><span class="p">():</span>
+    <span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">96</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;1h&quot;</span><span class="p">)</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;water_level&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">))</span> <span class="o">/</span> <span class="n">PERIODS</span><span class="p">[</span><span class="s2">&quot;M2&quot;</span><span class="p">]),</span>
+            <span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1010.0</span><span class="p">,</span> <span class="mf">1012.0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)),</span>
+        <span class="p">},</span>
+        <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">df_train</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="mi">72</span><span class="p">]</span>
+    <span class="n">df_test</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">72</span><span class="p">:]</span>
+    <span class="n">ok_train</span> <span class="o">=</span> <span class="n">df_train</span><span class="p">[</span><span class="s2">&quot;water_level&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span>
+
+    <span class="n">picked</span><span class="p">,</span> <span class="n">active_regs</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">build_estimator_config</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;M2&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+        <span class="n">df_train</span><span class="o">=</span><span class="n">df_train</span><span class="p">,</span>
+        <span class="n">df_test</span><span class="o">=</span><span class="n">df_test</span><span class="p">,</span>
+        <span class="n">ok_train</span><span class="o">=</span><span class="n">ok_train</span><span class="p">,</span>
+        <span class="n">harmonic_orders</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;M2&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;S2&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+        <span class="n">lag_ranges</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)},</span>
+        <span class="n">sph</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">picked</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;M2&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">PERIODS</span><span class="p">[</span><span class="s2">&quot;M2&quot;</span><span class="p">],</span> <span class="mi">2</span><span class="p">)}</span>
+    <span class="k">assert</span> <span class="n">active_regs</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;pressure&quot;</span><span class="p">]</span>
+    <span class="n">yaml_data</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">dump_estimator_config_yaml</span><span class="p">(</span><span class="n">config</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="n">yaml_data</span><span class="p">[</span><span class="s2">&quot;multi_periodic_config&quot;</span><span class="p">][</span><span class="s2">&quot;periods&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="p">[</span><span class="n">PERIODS</span><span class="p">[</span><span class="s2">&quot;M2&quot;</span><span class="p">]]</span>
+    <span class="k">assert</span> <span class="n">yaml_data</span><span class="p">[</span><span class="s2">&quot;multi_periodic_config&quot;</span><span class="p">][</span><span class="s2">&quot;num_harmonics&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">yaml_data</span><span class="p">[</span><span class="s2">&quot;exog_config&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;lags&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">yaml_data</span><span class="p">[</span><span class="s2">&quot;solver_config&quot;</span><span class="p">][</span><span class="s2">&quot;solver&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;SCS&quot;</span>
+    <span class="k">assert</span> <span class="n">yaml_data</span><span class="p">[</span><span class="s2">&quot;solver_config&quot;</span><span class="p">][</span><span class="s2">&quot;verbose&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_build_estimator_config_markdown_handles_yaml_and_baseline</span><span class="p">():</span>
+    <span class="n">yaml_block</span> <span class="o">=</span> <span class="s2">&quot;solver_config:</span><span class="se">\n</span><span class="s2">  solver: SCS</span><span class="se">\n</span><span class="s2">&quot;</span>
+
+    <span class="n">baseline_markdown</span> <span class="o">=</span> <span class="n">build_estimator_config_markdown</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">config_markdown</span> <span class="o">=</span> <span class="n">build_estimator_config_markdown</span><span class="p">(</span><span class="n">yaml_block</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="s2">&quot;Mean baseline selected&quot;</span> <span class="ow">in</span> <span class="n">baseline_markdown</span>
+    <span class="k">assert</span> <span class="s2">&quot;TsgamEstimatorConfig&quot;</span> <span class="ow">in</span> <span class="n">baseline_markdown</span>
+    <span class="k">assert</span> <span class="s2">&quot;```yaml&quot;</span> <span class="ow">in</span> <span class="n">config_markdown</span>
+    <span class="k">assert</span> <span class="s2">&quot;solver: SCS&quot;</span> <span class="ow">in</span> <span class="n">config_markdown</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the targeted tests to verify they fail</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-k</span> <span class="pre">&quot;config_yaml</span> <span class="pre">or</span> <span class="pre">config_markdown&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with missing imports such as <code class="docutils literal notranslate"><span class="pre">ImportError:</span> <span class="pre">cannot</span> <span class="pre">import</span> <span class="pre">name</span> <span class="pre">'build_estimator_config'</span></code>, <code class="docutils literal notranslate"><span class="pre">ImportError:</span> <span class="pre">cannot</span> <span class="pre">import</span> <span class="pre">name</span> <span class="pre">'dump_estimator_config_yaml'</span></code>, or <code class="docutils literal notranslate"><span class="pre">ModuleNotFoundError:</span> <span class="pre">No</span> <span class="pre">module</span> <span class="pre">named</span> <span class="pre">'yaml'</span></code>.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Add the dependency and implement the shared helpers</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">add</span> <span class="pre">pyyaml</span></code></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">asdict</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FitResult</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">metrics_train</span><span class="p">:</span> <span class="n">MetricDict</span>
+    <span class="n">metrics_test</span><span class="p">:</span> <span class="n">MetricDict</span>
+    <span class="n">te_index</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span>
+    <span class="n">te_obs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">te_pred</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">te_obs_clean</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">te_pred_clean</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">residuals</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">picked</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span>
+    <span class="n">active_regs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">n_train</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">n_test</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">sph</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">estimator_config_yaml</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_estimator_config</span><span class="p">(</span>
+    <span class="n">component_mask</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">df_train</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">df_test</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">ok_train</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span>
+    <span class="n">harmonic_orders</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+    <span class="n">lag_ranges</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+    <span class="n">sph</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span>
+    <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+    <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">TsgamEstimatorConfig</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+<span class="p">]:</span>
+    <span class="n">picked</span><span class="p">,</span> <span class="n">periodic_config</span> <span class="o">=</span> <span class="n">build_periodic_config</span><span class="p">(</span><span class="n">component_mask</span><span class="p">,</span> <span class="n">harmonic_orders</span><span class="p">,</span> <span class="n">sph</span><span class="p">)</span>
+    <span class="n">reg_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">active</span> <span class="ow">in</span> <span class="n">component_mask</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">active</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">PERIODS</span><span class="p">]</span>
+    <span class="n">x_train_fit</span><span class="p">,</span> <span class="n">x_train_pred</span><span class="p">,</span> <span class="n">x_test_pred</span><span class="p">,</span> <span class="n">active_regs</span><span class="p">,</span> <span class="n">exog_config</span> <span class="o">=</span> <span class="n">build_exog_design_matrices</span><span class="p">(</span>
+        <span class="n">df_train</span><span class="p">,</span>
+        <span class="n">df_test</span><span class="p">,</span>
+        <span class="n">ok_train</span><span class="p">,</span>
+        <span class="n">reg_names</span><span class="p">,</span>
+        <span class="n">lag_ranges</span><span class="p">,</span>
+        <span class="n">sph</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">periodic_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">exog_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">TsgamEstimatorConfig</span><span class="p">(</span>
+            <span class="n">multi_periodic_config</span><span class="o">=</span><span class="n">periodic_config</span><span class="p">,</span>
+            <span class="n">exog_config</span><span class="o">=</span><span class="n">exog_config</span><span class="p">,</span>
+            <span class="n">solver_config</span><span class="o">=</span><span class="n">TsgamSolverConfig</span><span class="p">(</span><span class="n">solver</span><span class="o">=</span><span class="s2">&quot;SCS&quot;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">picked</span><span class="p">,</span> <span class="n">active_regs</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">x_train_fit</span><span class="p">,</span> <span class="n">x_train_pred</span><span class="p">,</span> <span class="n">x_test_pred</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">estimator_config_to_plain_data</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">TsgamEstimatorConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_plainify</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">key</span><span class="p">):</span> <span class="n">_plainify</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">_plainify</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">return</span> <span class="n">value</span>
+
+    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span> <span class="n">_plainify</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">config</span><span class="p">)))</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">dump_estimator_config_yaml</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">TsgamEstimatorConfig</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_dump</span><span class="p">(</span><span class="n">estimator_config_to_plain_data</span><span class="p">(</span><span class="n">config</span><span class="p">),</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_estimator_config_markdown</span><span class="p">(</span><span class="n">estimator_config_yaml</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">estimator_config_yaml</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="s2">&quot;### Estimator config</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+            <span class="s2">&quot;_Mean baseline selected; no `TsgamEstimatorConfig` is created when every component is off._&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;### Estimator config</span><span class="se">\n\n</span><span class="s2">```yaml</span><span class="se">\n</span><span class="si">{</span><span class="n">estimator_config_yaml</span><span class="si">}</span><span class="se">\n</span><span class="s2">```&quot;</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the targeted tests to verify they pass</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-k</span> <span class="pre">&quot;config_yaml</span> <span class="pre">or</span> <span class="pre">config_markdown&quot;</span> <span class="pre">-v</span></code></p>
+<p>Expected: PASS for both new regression tests.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 5: Commit the helper work</strong></p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>pyproject.toml<span class="w"> </span>uv.lock<span class="w"> </span>examples/example_tidal_compact.py<span class="w"> </span>test/test_example_tidal_compact.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add compact notebook config export helpers&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="task-2-wire-the-fit-path-and-notebook-output">
+<h3>Task 2: Wire The Fit Path And Notebook Output<a class="headerlink" href="#task-2-wire-the-fit-path-and-notebook-output" title="Link to this heading"></a></h3>
+<p><strong>Files:</strong></p>
+<ul class="simple">
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">examples/example_tidal_compact.py</span></code></p></li>
+<li><p>Modify: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>Test: <code class="docutils literal notranslate"><span class="pre">test/test_example_tidal_compact.py</span></code></p></li>
+<li><p>[ ] <strong>Step 1: Write the failing regression for the mean-baseline fit path</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">example_tidal_compact</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_tidal_model</span>  <span class="c1"># noqa: E402</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_run_tidal_model_baseline_has_no_estimator_yaml</span><span class="p">():</span>
+    <span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">72</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;1h&quot;</span><span class="p">)</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;water_level&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">))},</span>
+        <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">fit_result</span> <span class="o">=</span> <span class="n">run_tidal_model</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;M2&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;pressure&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
+        <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+        <span class="n">sph</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">harmonic_orders</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;M2&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+        <span class="n">lag_ranges</span><span class="o">=</span><span class="p">{},</span>
+        <span class="n">train_start</span><span class="o">=</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span>
+        <span class="n">train_end</span><span class="o">=</span><span class="s2">&quot;2024-01-03&quot;</span><span class="p">,</span>
+        <span class="n">test_end</span><span class="o">=</span><span class="s2">&quot;2024-01-04&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">fit_result</span><span class="p">[</span><span class="s2">&quot;estimator_config_yaml&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>[ ] <strong>Step 2: Run the new regression to verify it fails</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py::test_run_tidal_model_baseline_has_no_estimator_yaml</span> <span class="pre">-v</span></code></p>
+<p>Expected: FAIL with <code class="docutils literal notranslate"><span class="pre">KeyError:</span> <span class="pre">'estimator_config_yaml'</span></code> or equivalent because <code class="docutils literal notranslate"><span class="pre">FitResult</span></code> is not yet populated with the export field on every return path.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 3: Refactor the fit path and add the notebook YAML section</strong></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">pack_model_result</span><span class="p">(</span>
+    <span class="n">df_test</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">y_train</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">ok_train</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span>
+    <span class="n">ok_test</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span>
+    <span class="n">yhat_train</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">yhat_test</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">picked</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+    <span class="n">active_regs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">sph</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">estimator_config_yaml</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FitResult</span><span class="p">:</span>
+    <span class="c1"># ... existing metrics assembly ...</span>
+    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">FitResult</span><span class="p">,</span> <span class="p">{</span>
+        <span class="s2">&quot;metrics_train&quot;</span><span class="p">:</span> <span class="n">train_metrics</span><span class="p">,</span>
+        <span class="s2">&quot;metrics_test&quot;</span><span class="p">:</span> <span class="n">test_metrics</span><span class="p">,</span>
+        <span class="s2">&quot;te_index&quot;</span><span class="p">:</span> <span class="n">te_index</span><span class="p">,</span>
+        <span class="s2">&quot;te_obs&quot;</span><span class="p">:</span> <span class="n">test_obs</span><span class="p">,</span>
+        <span class="s2">&quot;te_pred&quot;</span><span class="p">:</span> <span class="n">yhat_test</span><span class="p">,</span>
+        <span class="s2">&quot;te_obs_clean&quot;</span><span class="p">:</span> <span class="n">test_obs_clean</span><span class="p">,</span>
+        <span class="s2">&quot;te_pred_clean&quot;</span><span class="p">:</span> <span class="n">yhat_test</span><span class="p">[</span><span class="n">ok_test_np</span><span class="p">],</span>
+        <span class="s2">&quot;residuals&quot;</span><span class="p">:</span> <span class="n">test_obs</span> <span class="o">-</span> <span class="n">yhat_test</span><span class="p">,</span>
+        <span class="s2">&quot;picked&quot;</span><span class="p">:</span> <span class="n">picked</span><span class="p">,</span>
+        <span class="s2">&quot;active_regs&quot;</span><span class="p">:</span> <span class="n">active_regs</span><span class="p">,</span>
+        <span class="s2">&quot;n_train&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_train</span><span class="p">),</span>
+        <span class="s2">&quot;n_test&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">ok_test</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+        <span class="s2">&quot;sph&quot;</span><span class="p">:</span> <span class="n">sph</span><span class="p">,</span>
+        <span class="s2">&quot;estimator_config_yaml&quot;</span><span class="p">:</span> <span class="n">estimator_config_yaml</span><span class="p">,</span>
+    <span class="p">})</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run_tidal_model</span><span class="p">(</span><span class="o">...</span><span class="p">):</span>
+    <span class="n">split_time</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="n">train_end</span><span class="p">)</span>
+    <span class="n">window</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">train_start</span><span class="p">:</span><span class="n">test_end</span><span class="p">]</span>
+    <span class="n">df_train</span> <span class="o">=</span> <span class="n">window</span><span class="p">[</span><span class="n">window</span><span class="o">.</span><span class="n">index</span> <span class="o">&lt;</span> <span class="n">split_time</span><span class="p">]</span>
+    <span class="n">df_test</span> <span class="o">=</span> <span class="n">window</span><span class="p">[</span><span class="n">window</span><span class="o">.</span><span class="n">index</span> <span class="o">&gt;=</span> <span class="n">split_time</span><span class="p">]</span>
+    <span class="n">ok_train</span> <span class="o">=</span> <span class="n">df_train</span><span class="p">[</span><span class="s2">&quot;water_level&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span>
+    <span class="n">ok_test</span> <span class="o">=</span> <span class="n">df_test</span><span class="p">[</span><span class="s2">&quot;water_level&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span>
+    <span class="n">y_train</span> <span class="o">=</span> <span class="n">df_train</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ok_train</span><span class="p">,</span> <span class="s2">&quot;water_level&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="n">picked</span><span class="p">,</span> <span class="n">active_regs</span><span class="p">,</span> <span class="n">estimator_config</span><span class="p">,</span> <span class="n">x_train_fit</span><span class="p">,</span> <span class="n">x_train_pred</span><span class="p">,</span> <span class="n">x_test_pred</span> <span class="o">=</span> <span class="n">build_estimator_config</span><span class="p">(</span>
+        <span class="n">component_mask</span><span class="p">,</span>
+        <span class="n">df_train</span><span class="o">=</span><span class="n">df_train</span><span class="p">,</span>
+        <span class="n">df_test</span><span class="o">=</span><span class="n">df_test</span><span class="p">,</span>
+        <span class="n">ok_train</span><span class="o">=</span><span class="n">ok_train</span><span class="p">,</span>
+        <span class="n">harmonic_orders</span><span class="o">=</span><span class="n">harmonic_orders</span><span class="p">,</span>
+        <span class="n">lag_ranges</span><span class="o">=</span><span class="n">lag_ranges</span><span class="p">,</span>
+        <span class="n">sph</span><span class="o">=</span><span class="n">sph</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">estimator_config_yaml</span> <span class="o">=</span> <span class="n">dump_estimator_config_yaml</span><span class="p">(</span><span class="n">estimator_config</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">estimator_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">baseline</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">y_train</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">pack_model_result</span><span class="p">(</span>
+            <span class="n">df_test</span><span class="p">,</span>
+            <span class="n">y_train</span><span class="p">,</span>
+            <span class="n">ok_train</span><span class="p">,</span>
+            <span class="n">ok_test</span><span class="p">,</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df_train</span><span class="p">),</span> <span class="n">baseline</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df_test</span><span class="p">),</span> <span class="n">baseline</span><span class="p">),</span>
+            <span class="n">picked</span><span class="p">,</span>
+            <span class="n">active_regs</span><span class="p">,</span>
+            <span class="n">sph</span><span class="p">,</span>
+            <span class="n">estimator_config_yaml</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">TsgamEstimator</span><span class="p">(</span><span class="n">estimator_config</span><span class="p">)</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">x_train_fit</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pack_model_result</span><span class="p">(</span>
+        <span class="n">df_test</span><span class="p">,</span>
+        <span class="n">y_train</span><span class="p">,</span>
+        <span class="n">ok_train</span><span class="p">,</span>
+        <span class="n">ok_test</span><span class="p">,</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">x_train_pred</span><span class="p">),</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">x_test_pred</span><span class="p">),</span>
+        <span class="n">picked</span><span class="p">,</span>
+        <span class="n">active_regs</span><span class="p">,</span>
+        <span class="n">sph</span><span class="p">,</span>
+        <span class="n">estimator_config_yaml</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@app</span><span class="o">.</span><span class="n">cell</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">fit_result</span><span class="p">):</span>
+    <span class="n">mo</span><span class="o">.</span><span class="n">md</span><span class="p">(</span><span class="n">build_estimator_config_markdown</span><span class="p">(</span><span class="n">fit_result</span><span class="p">[</span><span class="s2">&quot;estimator_config_yaml&quot;</span><span class="p">]))</span>
+    <span class="k">return</span>
+</pre></div>
+</div>
+<p>Place that cell immediately after the fit metrics/summary block so the shareable YAML appears near the selected model diagnostics rather than far down in the notebook.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 4: Run the focused notebook tests</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">pytest</span> <span class="pre">test/test_example_tidal_compact.py</span> <span class="pre">-v</span></code></p>
+<p>Expected: PASS for the existing periodogram/Shapley tests plus the new config-export regressions.</p>
+<ul class="simple">
+<li><p>[ ] <strong>Step 5: Smoke-test the notebook output manually</strong></p></li>
+</ul>
+<p>Run: <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">marimo</span> <span class="pre">edit</span> <span class="pre">examples/example_tidal_compact.py</span></code></p>
+<p>Expected:</p>
+<ul class="simple">
+<li><p>Fit a model with at least one tidal constituent enabled and confirm a new <code class="docutils literal notranslate"><span class="pre">Estimator</span> <span class="pre">config</span></code> section appears with YAML output.</p></li>
+<li><p>Toggle every tidal constituent and regressor off, rerun, and confirm the section switches to the mean-baseline note instead of a YAML block.</p></li>
+<li><p>Verify the YAML reflects the selected harmonics, lag ranges, and SCS solver settings.</p></li>
+<li><p>[ ] <strong>Step 6: Commit the notebook integration</strong></p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>examples/example_tidal_compact.py<span class="w"> </span>test/test_example_tidal_compact.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: show estimator config yaml in compact notebook&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Alliance for Sustainable Energy, LLC and Nimish Telang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
