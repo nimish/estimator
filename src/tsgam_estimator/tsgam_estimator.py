@@ -1,6 +1,6 @@
 """Compatibility exports for the historical submodule import path."""
 
-from . import (
+from ._estimator import (
     PERIOD_DAILY_YEARLY,
     PERIOD_HOURLY_DAILY,
     PERIOD_HOURLY_WEEKLY,
@@ -22,10 +22,18 @@ from . import (
     TsgamTrendConfig,
     get_recommended_periods,
 )
+from ._forecast import (
+    TsgamForecastConfig,
+    TsgamForecastCouplingConfig,
+    TsgamForecastEstimator,
+)
 
 __all__ = [
     "TsgamEstimator",
+    "TsgamForecastEstimator",
     "TsgamEstimatorConfig",
+    "TsgamForecastConfig",
+    "TsgamForecastCouplingConfig",
     "TsgamMultiPeriodicConfig",
     "TsgamSplineConfig",
     "TsgamLinearConfig",
