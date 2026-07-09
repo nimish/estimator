@@ -28,15 +28,15 @@ app = marimo.App(width="full")
 @app.cell
 def _(mo):
     mo.md(r"""
-# Forecast-Origin Explorer
+    # Forecast-Origin Explorer
 
-Scrub an evaluation origin to inspect one direct multi-horizon forecast: what was
-observed then, which lagged driver values were available, and which future targets
-the independent and coupled models predict.
+    Scrub an evaluation origin to inspect one direct multi-horizon forecast: what was
+    observed then, which lagged driver values were available, and which future targets
+    the independent and coupled models predict.
 
-Run with `uv run --group notebooks marimo edit
-examples/example_forecast_origin_explorer_marimo.py`.
-""")
+    Run with `uv run --group notebooks marimo edit
+    examples/example_forecast_origin_explorer_marimo.py`.
+    """)
     return
 
 
@@ -424,15 +424,7 @@ def _(
 
 
 @app.cell
-def _(
-    actual,
-    exog_lags,
-    forecast_horizon,
-    frame,
-    mo,
-    pd,
-    selected_origin,
-):
+def _(actual, exog_lags, forecast_horizon, frame, mo, pd, selected_origin):
     _feature_rows = []
     for _lag in exog_lags:
         _source_time = selected_origin + pd.Timedelta(hours=_lag)
