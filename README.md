@@ -49,6 +49,32 @@ cd docs
 make html
 ```
 
+## Forecast Visualization
+
+Install the optional Matplotlib support and plot the origin-indexed output from
+`TsgamForecastEstimator.predict` directly:
+
+```bash
+uv add "tsgam-estimator[viz]"
+```
+
+```python
+from tsgam_estimator import plot_forecast_horizon, plot_forecast_origin
+
+predictions = forecaster.predict(X_test)
+
+# One forecast path, with observed history and an explicit forecast-origin marker.
+plot_forecast_origin(predictions, actual=y, origin=predictions.index[24])
+
+# One fixed horizon aligned to target time across all evaluation origins.
+plot_forecast_horizon(predictions, actual=y, horizon=6)
+```
+
+Both functions also accept a mapping of labels to prediction DataFrames for
+side-by-side model comparisons. Use `forecast_to_long_dataframe` when a notebook
+needs the aligned origin/target data for Altair, Seaborn, or another plotting
+library.
+
 ## Development
 
 ### Running Tests
