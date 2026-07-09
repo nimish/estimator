@@ -28,11 +28,17 @@ jobs:
     - name: Install dependencies
       run: uv sync --frozen --group dev
 
+    - name: Run type checks
+      run: uv run ty check
+
     - name: Run tests with coverage
-      run: uv run pytest . -v -s --cov=tsgam_estimator --cov=load_model_estimator --cov-report=xml --cov-report=html --cov-report=term --junitxml=junit.xml
+      run: uv run pytest . -v -s --cov=tsgam_estimator --cov-report=xml --cov-report=html --cov-report=term --junitxml=junit.xml
 
     - name: Build package
       run: uv build
+
+    - name: Check package contents
+      run: uv run python scripts/check_package_contents.py
 
     - name: Check package metadata
       run: uv run --with twine twine check dist/*

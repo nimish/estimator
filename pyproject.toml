@@ -1,5 +1,5 @@
 [project]
-name = "tsgam_estimator"
+name = "tsgam-estimator"
 version = "0.1.0"
 description = "Time series GAM (Generalized Additive Model) estimators for load forecasting"
 readme = "README.md"
@@ -26,13 +26,12 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-    "cvxpy>=1.7.3",
-    "numpy>=2.3.4",
-    "pandas>=2.3.3",
-    "scikit-learn>=1.7.2",
-    "spcqe>=0.3.0",
-    "vegafusion>=2.0.3",
-    "vl-convert-python>=1.9.0.post1",
+    "cvxpy>=1.7.3,<2",
+    "numpy>=2.3.4,<3",
+    "pandas>=2.3.3,<4",
+    "scipy>=1.16.3,<2",
+    "scikit-learn>=1.7.2,<2",
+    "spcqe>=0.3.0,<0.4",
 ]
 
 [project.urls]
@@ -41,10 +40,16 @@ Repository = "https://github.com/nimish/estimator"
 Issues = "https://github.com/nimish/estimator/issues"
 
 [dependency-groups]
-dev = [
+test = [
+    {include-group = "examples"},
+    {include-group = "notebooks"},
+    {include-group = "viz"},
     "openpyxl>=3.1.5",
     "pytest>=8.4.2",
     "pytest-cov>=7.0.0",
+]
+typecheck = [
+    "ty>=0.0.50",
 ]
 docs = [
     "sphinx>=8.0.0",
@@ -55,6 +60,8 @@ viz = [
     "altair>=6.0.0",
     "matplotlib>=3.10.7",
     "seaborn>=0.13.2",
+    "vegafusion>=2.0.3",
+    "vl-convert-python>=1.9.0.post1",
 ]
 notebooks = [
     "click>=8.1.0",
@@ -77,11 +84,29 @@ examples = [
     "solar-data-tools>=2.1.1",
     "plotly>=6.7.0",
 ]
+dev = [
+    {include-group = "test"},
+    {include-group = "typecheck"},
+    {include-group = "docs"},
+]
 
 [build-system]
 requires = ["uv_build>=0.9.23,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.uv]
+package = true
+
+[tool.uv.build-backend]
+module-name = "tsgam_estimator"
+module-root = "src"
+
+[tool.ty.environment]
+python-version = "3.12"
+root = ["./src"]
+
+[tool.ty.src]
+include = ["src"]
 
 [tool.coverage.run]
 relative_files = true
