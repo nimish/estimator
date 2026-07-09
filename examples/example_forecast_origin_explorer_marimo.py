@@ -56,6 +56,7 @@ def _():
         sys.path.insert(0, str(src_dir))
 
     from tsgam_estimator import (
+        TsgamEstimator,
         TsgamEstimatorConfig,
         TsgamForecastConfig,
         TsgamForecastCouplingConfig,
@@ -67,6 +68,7 @@ def _():
     )
 
     return (
+        TsgamEstimator,
         TsgamEstimatorConfig,
         TsgamForecastConfig,
         TsgamForecastCouplingConfig,
@@ -84,6 +86,7 @@ def _():
 
 @app.cell
 def _(
+    TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamForecastConfig,
     TsgamForecastCouplingConfig,
@@ -160,6 +163,7 @@ def _(
             mode="independent",
         )
     ).fit(_x_train, _y_train)
+    _nowcast = TsgamEstimator(config=_base_config()).fit(_x_train, _y_train)
     _coupled = TsgamForecastEstimator(
         TsgamForecastConfig(
             horizon=forecast_horizon,
@@ -170,6 +174,11 @@ def _(
     ).fit(_x_train, _y_train)
     independent_prediction = _independent.predict(_x_eval)
     coupled_prediction = _coupled.predict(_x_eval)
+    nowcast_prediction = pd.Series(
+        _nowcast.predict(_x_eval),
+        index=_x_eval.index,
+        name="Nowcast",
+    )
     actual = pd.DataFrame(
         {
             f"horizon_{_horizon}": frame["observed"].shift(-_horizon).loc[_x_eval.index]
@@ -186,6 +195,7 @@ def _(
         frame,
         history_hours,
         independent_prediction,
+        nowcast_prediction,
         origin_times,
     )
 
@@ -221,6 +231,7 @@ def _(
     frame,
     history_hours,
     independent_prediction,
+    nowcast_prediction,
     plot_forecast_origin,
     plt,
     selected_origin,
@@ -232,6 +243,7 @@ def _(
             "Coupled forecast": coupled_prediction,
         },
         actual=frame["observed"],
+        nowcast=nowcast_prediction,
         origin=selected_origin,
         history_steps=history_hours,
         ax=_axis,
@@ -241,7 +253,15 @@ def _(
 
 
 @app.cell
-def _(actual, exog_lags, forecast_horizon, frame, mo, pd, selected_origin):
+def _(
+    actual,
+    exog_lags,
+    forecast_horizon,
+    frame,
+    mo,
+    pd,
+    selected_origin,
+):
     _feature_rows = []
     for _lag in exog_lags:
         _source_time = selected_origin + pd.Timedelta(hours=_lag)
@@ -254,7 +274,13 @@ def _(actual, exog_lags, forecast_horizon, frame, mo, pd, selected_origin):
                 ),
             }
         )
-    _target_rows = []
+    _target_rows = [
+        {
+            "horizon": "0h (nowcast)",
+            "target time": selected_origin.strftime("%a, %b %d %H:%M"),
+            "observed target": round(float(frame.loc[selected_origin, "observed"]), 3),
+        }
+    ]
     for _horizon in range(1, forecast_horizon + 1):
         _target_time = selected_origin + pd.Timedelta(hours=_horizon)
         _target_rows.append(
@@ -271,7 +297,8 @@ def _(actual, exog_lags, forecast_horizon, frame, mo, pd, selected_origin):
             mo.md(
                 "### Feature provenance\n\n"
                 "The direct models receive only these lagged driver values at the "
-                "origin. Each forecast horizon is scored against its own later target."
+                "origin. The nowcast is scored at the origin; each forecast horizon "
+                "is scored against its own later target."
             ),
             mo.hstack(
                 [

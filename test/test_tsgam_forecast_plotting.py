@@ -28,7 +28,7 @@ from tsgam_estimator.tsgam_estimator import (  # noqa: E402
 )
 
 
-def _plot_data() -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
+def _plot_data() -> tuple[pd.Series, pd.Series, pd.DataFrame, pd.DataFrame]:
     timestamps = pd.date_range("2025-01-01", periods=12, freq="1h")
     actual = pd.Series(np.arange(12, dtype=float), index=timestamps, name="load")
     origins = timestamps[2:8]
@@ -42,11 +42,13 @@ def _plot_data() -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
         index=origins,
     )
     coupled = independent + 0.05
-    return actual, independent, coupled
+    nowcast = actual.reindex(origins) - 0.05
+    nowcast.name = "nowcast"
+    return actual, nowcast, independent, coupled
 
 
 def test_forecast_to_long_dataframe_aligns_origins_to_target_time():
-    actual, predictions, _ = _plot_data()
+    actual, _, predictions, _ = _plot_data()
 
     long = forecast_to_long_dataframe(predictions, actual, model="Independent")
 
@@ -73,7 +75,7 @@ def test_forecast_to_long_dataframe_aligns_origins_to_target_time():
 
 
 def test_forecast_to_long_dataframe_accepts_explicit_single_origin_frequency():
-    actual, predictions, _ = _plot_data()
+    actual, _, predictions, _ = _plot_data()
     one_origin = predictions.iloc[[0]]
 
     long = forecast_to_long_dataframe(one_origin, actual.iloc[[0]], freq="1h")
@@ -85,11 +87,12 @@ def test_forecast_to_long_dataframe_accepts_explicit_single_origin_frequency():
 
 
 def test_plot_forecast_origin_separates_history_and_future():
-    actual, independent, coupled = _plot_data()
+    actual, nowcast, independent, coupled = _plot_data()
 
     ax = plot_forecast_origin(
         {"Independent": independent, "Coupled": coupled},
         actual,
+        nowcast=nowcast,
         origin=independent.index[2],
         history_steps=2,
     )
@@ -100,6 +103,7 @@ def test_plot_forecast_origin_separates_history_and_future():
         "Realized future",
         "Independent",
         "Coupled",
+        "Nowcast",
         "Forecast origin",
     }
     assert len(ax.patches) == 1
@@ -109,7 +113,7 @@ def test_plot_forecast_origin_separates_history_and_future():
 
 
 def test_plot_forecast_horizon_uses_target_time_axis():
-    actual, independent, coupled = _plot_data()
+    actual, _, independent, coupled = _plot_data()
 
     ax = plot_forecast_horizon(
         {"Independent": independent, "Coupled": coupled},
@@ -125,8 +129,42 @@ def test_plot_forecast_horizon_uses_target_time_axis():
     plt.close(ax.figure)
 
 
+def test_forecast_to_long_dataframe_includes_aligned_nowcast_rows():
+    actual, nowcast, predictions, _ = _plot_data()
+
+    long = forecast_to_long_dataframe(predictions, actual, nowcast=nowcast)
+
+    horizon_zero = long[long["horizon"] == 0]
+    assert len(horizon_zero) == len(predictions)
+    assert horizon_zero["model"].eq("Nowcast").all()
+    pd.testing.assert_series_equal(
+        horizon_zero["origin_time"].reset_index(drop=True),
+        horizon_zero["target_time"].reset_index(drop=True),
+        check_names=False,
+    )
+    np.testing.assert_allclose(horizon_zero["prediction"], nowcast)
+
+
+def test_plot_forecast_horizon_zero_uses_nowcast():
+    actual, nowcast, independent, coupled = _plot_data()
+
+    ax = plot_forecast_horizon(
+        {"Independent": independent, "Coupled": coupled},
+        actual,
+        horizon=0,
+        nowcast=nowcast,
+    )
+
+    labels = {line.get_label() for line in ax.lines}
+    assert labels == {"Actual", "Nowcast"}
+    assert ax.get_title(loc="left") == (
+        "Horizon 0: forecast and actual over target time"
+    )
+    plt.close(ax.figure)
+
+
 def test_forecast_plotting_rejects_invalid_prediction_shapes():
-    actual, predictions, _ = _plot_data()
+    actual, _, predictions, _ = _plot_data()
     invalid = predictions.rename(
         columns=lambda column: column.replace("horizon", "step")
     )
@@ -135,6 +173,8 @@ def test_forecast_plotting_rejects_invalid_prediction_shapes():
         forecast_to_long_dataframe(invalid, actual)
     with pytest.raises(ValueError, match="horizon_3"):
         plot_forecast_horizon(predictions, actual, horizon=3)
+    with pytest.raises(ValueError, match="nowcast must be provided"):
+        plot_forecast_horizon(predictions, actual, horizon=0)
     with pytest.raises(ValueError, match="same forecast-origin index"):
         plot_forecast_origin(
             {"first": predictions, "second": predictions.iloc[1:]},
