@@ -34,9 +34,6 @@ from ._problem import (
     weighted_squared_loss,
 )
 
-_ForecastVariable = cvxpy.Variable | list[cvxpy.Variable]
-
-
 @dataclass
 class TsgamForecastCouplingConfig:
     """
@@ -45,23 +42,37 @@ class TsgamForecastCouplingConfig:
     Parameters
     ----------
     roughness_weight : float, default=1.0
-        Weight for coefficient roughness penalties across forecast horizons.
-    roughness_order : int or None, default=None
-        Difference order across horizons. If None, uses first differences.
-        Supported values are 1 and 2.
+        Weight for coefficient roughness penalties across positive forecast
+        horizons. The horizon-zero nowcast remains an uncoupled diagnostic
+        baseline.
+    roughness_order : {1, 2}, default=1
+        Difference order across horizons. Second differences fall back to first
+        differences when fewer than three horizons are fitted.
     """
 
     roughness_weight: float = 1.0
-    roughness_order: int | None = None
+    roughness_order: Literal[1, 2] = 1
 
     def __post_init__(self) -> None:
-        if not np.isfinite(self.roughness_weight) or self.roughness_weight < 0:
+        if (
+            isinstance(self.roughness_weight, (bool, np.bool_))
+            or not isinstance(
+                self.roughness_weight,
+                (int, float, np.integer, np.floating),
+            )
+            or not np.isfinite(self.roughness_weight)
+            or self.roughness_weight < 0
+        ):
             raise ValueError(
                 f"roughness_weight must be non-negative and finite, got {self.roughness_weight!r}."
             )
-        if self.roughness_order is not None and self.roughness_order not in (1, 2):
+        if (
+            isinstance(self.roughness_order, (bool, np.bool_))
+            or not isinstance(self.roughness_order, (int, np.integer))
+            or self.roughness_order not in (1, 2)
+        ):
             raise ValueError(
-                f"roughness_order must be 1, 2, or None, got {self.roughness_order!r}."
+                f"roughness_order must be 1 or 2, got {self.roughness_order!r}."
             )
 
 
@@ -83,14 +94,29 @@ class TsgamForecastConfig:
     coupling_config: TsgamForecastCouplingConfig | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.base_config, TsgamEstimatorConfig):
+            raise TypeError(
+                "base_config must be a TsgamEstimatorConfig, got "
+                f"{type(self.base_config).__name__}."
+            )
         if not isinstance(self.horizon, (int, np.integer)) or isinstance(self.horizon, bool):
             raise ValueError(f"horizon must be a non-negative integer, got {self.horizon!r}.")
         if self.horizon < 0:
             raise ValueError(f"horizon must be non-negative, got {self.horizon!r}.")
         if self.mode not in ("independent", "coupled"):
             raise ValueError(f"mode must be 'independent' or 'coupled', got {self.mode!r}.")
-        if self.mode == "coupled" and self.coupling_config is None:
+        if self.mode == "independent":
+            if self.coupling_config is not None:
+                raise ValueError(
+                    "coupling_config is only valid when mode='coupled'."
+                )
+        elif self.coupling_config is None:
             self.coupling_config = TsgamForecastCouplingConfig()
+        elif not isinstance(self.coupling_config, TsgamForecastCouplingConfig):
+            raise TypeError(
+                "coupling_config must be a TsgamForecastCouplingConfig or None, got "
+                f"{type(self.coupling_config).__name__}."
+            )
 
 
 class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
@@ -155,7 +181,6 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
         self.freq_ = infer_fit_frequency(timestamps)
         self.step_ = step_timedelta(self.freq_)
         self.time_reference_ = timestamps[0]
-        self.origin_index_ = timestamps
         return X, np.asarray(y), sample_weight
 
     def fit(
@@ -207,22 +232,23 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
     ) -> "TsgamForecastEstimator":
         self._validate_coupled_config()
         base_config = self.config.base_config
-        coupling = self.config.coupling_config or TsgamForecastCouplingConfig()
+        coupling = self.config.coupling_config
+        assert coupling is not None
         roughness_order = coupling.roughness_order
-        if roughness_order is None:
-            roughness_order = 1
         n_horizons = len(self.horizons_)
-        if n_horizons <= roughness_order:
+        n_forecast_horizons = n_horizons - 1
+        if n_forecast_horizons <= roughness_order:
             roughness_order = 1
 
         def add_horizon_roughness(
             term: cvxpy.Expression,
             coef_by_horizon: cvxpy.Expression,
         ) -> cvxpy.Expression:
-            if coupling.roughness_weight == 0 or n_horizons < 2:
+            if coupling.roughness_weight == 0 or n_forecast_horizons < 2:
                 return term
+            forecast_coefs = coef_by_horizon[:, 1:]
             return term + coupling.roughness_weight * cvxpy.sum_squares(
-                cvxpy.diff(coef_by_horizon, k=roughness_order, axis=1)
+                cvxpy.diff(forecast_coefs, k=roughness_order, axis=1)
             )
 
         self.exog_knots_ = resolve_exog_knots(base_config, X)

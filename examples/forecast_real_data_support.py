@@ -19,6 +19,7 @@ from tsgam_estimator import (
     TsgamLinearConfig,
     TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
+    plot_forecast_origin,
 )
 
 
@@ -351,7 +352,7 @@ def split_and_alignment_table(datasets: Mapping[str, PreparedDataset]) -> pd.Dat
         spec = prepared.spec
         frame = prepared.frame
         origin = frame.index[spec.train_samples]
-        for horizon in sorted({1, max(1, spec.horizon // 2), spec.horizon}):
+        for horizon in sorted({0, 1, max(1, spec.horizon // 2), spec.horizon}):
             rows.append(
                 {
                     "dataset": spec.display_name,
@@ -391,7 +392,7 @@ def _actual_targets(
         f"horizon_{horizon}": target.reindex(
             origins + horizon * prepared.step
         ).to_numpy()
-        for horizon in range(1, prepared.spec.horizon + 1)
+        for horizon in range(prepared.spec.horizon + 1)
     }
     actuals = pd.DataFrame(values, index=origins)
     if actuals.isna().any().any():
@@ -437,8 +438,9 @@ def _make_model(
 
 def _roughness(model: TsgamForecastEstimator) -> float:
     vectors = []
+    forecast_horizons = [horizon for horizon in model.horizons_ if horizon > 0]
     if model.config.mode == "independent":
-        for horizon in model.horizons_:
+        for horizon in forecast_horizons:
             variables = model.forecast_estimators_[horizon].variables_
             vectors.append(
                 np.concatenate(
@@ -450,7 +452,8 @@ def _roughness(model: TsgamForecastEstimator) -> float:
             )
     else:
         horizon_count = len(model.horizons_)
-        for horizon_ix in range(horizon_count):
+        for horizon in forecast_horizons:
+            horizon_ix = model.horizons_.index(horizon)
             parts = []
             for _, variable in sorted(model.variables_.items()):
                 if isinstance(variable, list):
@@ -463,6 +466,8 @@ def _roughness(model: TsgamForecastEstimator) -> float:
                         value = value[..., horizon_ix]
                 parts.append(np.asarray(value, dtype=float).ravel(order="F"))
             vectors.append(np.concatenate(parts))
+    if len(vectors) < 2:
+        return 0.0
     coefficients = np.vstack(vectors)
     return float(np.sqrt(np.mean(np.diff(coefficients, axis=0) ** 2)))
 
@@ -499,7 +504,7 @@ def benchmark_dataset(prepared: PreparedDataset) -> BenchmarkResult:
                 "coefficient RMS first difference": _roughness(model),
             }
         )
-        for horizon in range(1, spec.horizon + 1):
+        for horizon in range(spec.horizon + 1):
             column = f"horizon_{horizon}"
             error = prediction[column].to_numpy() - actuals[column].to_numpy()
             metric_rows.append(
@@ -535,7 +540,7 @@ def metrics_table(results: Mapping[str, BenchmarkResult]) -> pd.DataFrame:
 
 
 def compact_summary(results: Mapping[str, BenchmarkResult]) -> pd.DataFrame:
-    """Keep cross-dataset h=1/h=max metrics, roughness, and runtime compact."""
+    """Keep cross-dataset h=0/h=1/h=max metrics, roughness, and runtime compact."""
 
     rows = []
     for result in results.values():
@@ -552,6 +557,8 @@ def compact_summary(results: Mapping[str, BenchmarkResult]) -> pd.DataFrame:
             roughness = result.roughness.loc[
                 result.roughness["model"] == mode, "coefficient RMS first difference"
             ].iloc[0]
+            row[f"{mode} RMSE h=0"] = float(metrics.loc[0, "rmse"])
+            row[f"{mode} MAE h=0"] = float(metrics.loc[0, "mae"])
             row[f"{mode} RMSE h=1"] = float(metrics.loc[1, "rmse"])
             row[f"{mode} MAE h=1"] = float(metrics.loc[1, "mae"])
             row[f"{mode} RMSE h=max"] = float(metrics.loc[spec.horizon, "rmse"])
@@ -598,7 +605,6 @@ def plot_forecast_paths(
     figure, axes = plt.subplots(
         len(results), 1, figsize=(13, 3.6 * len(results)), squeeze=False
     )
-    colors = {"independent": "#1f77b4", "coupled": "#d95f02"}
     for axis, result in zip(axes[:, 0], results.values(), strict=True):
         prediction = result.predictions["independent"]
         position = min(
@@ -606,42 +612,19 @@ def plot_forecast_paths(
         )
         origin = prediction.index[position]
         spec = result.dataset.spec
-        columns = [f"horizon_{horizon}" for horizon in range(1, spec.horizon + 1)]
-        target_times = pd.DatetimeIndex(
-            [
-                origin + horizon * result.dataset.step
-                for horizon in range(1, spec.horizon + 1)
-            ]
+        plot_forecast_origin(
+            {
+                "Independent": result.predictions["independent"],
+                "Coupled": result.predictions["coupled"],
+            },
+            actual=result.dataset.frame["target"],
+            origin=origin,
+            history_steps=min(24, spec.train_samples),
+            freq=result.dataset.step,
+            ax=axis,
         )
-        axis.scatter(
-            [origin],
-            [result.dataset.frame.loc[origin, "target"]],
-            color="#222222",
-            marker="D",
-            zorder=4,
-            label="known now",
-        )
-        axis.plot(
-            target_times,
-            result.actuals.loc[origin, columns].to_numpy(dtype=float),
-            color="#222222",
-            linewidth=2.0,
-            label="realized future",
-        )
-        for mode in ("independent", "coupled"):
-            axis.plot(
-                target_times,
-                result.predictions[mode].loc[origin, columns].to_numpy(dtype=float),
-                color=colors[mode],
-                linestyle="--",
-                linewidth=1.8,
-                label=mode,
-            )
-        axis.axvline(origin, color="#666666", linestyle=":", linewidth=1.0)
-        axis.set_title(f"{spec.display_name}: forecast origin and future targets")
-        axis.set_xlabel("timestamp")
+        axis.set_title(f"{spec.display_name}: nowcast and future forecast path")
         axis.set_ylabel(spec.target_label)
-        axis.legend(ncol=4, frameon=False)
     figure.tight_layout()
     return figure
 
@@ -762,7 +745,8 @@ def write_notebook(path: Path | None = None) -> Path:
             "## Train/test origins and target alignment\n\n"
             "For origin o and horizon h, direct multi-horizon fitting uses "
             "X(o) to y(o + h). The table shows the split plus concrete examples "
-            "of the origin, known-feature timestamp, and scored target timestamp."
+            "of the origin, known-feature timestamp, and scored target timestamp, "
+            "including the h=0 nowcast."
         ),
         nbf.v4.new_code_cell(
             _cell_source("display(split_and_alignment_table(datasets))")
@@ -770,8 +754,9 @@ def write_notebook(path: Path | None = None) -> Path:
         nbf.v4.new_markdown_cell(
             "## Run the benchmark\n\n"
             "Independent and coupled modes use the same origin-time basis. Coupling "
-            "adds a first-difference penalty across horizon-specific coefficients, "
-            "so lower coefficient roughness is a smoothness result rather than a "
+            "adds a first-difference penalty across positive-horizon coefficients; "
+            "h=0 remains an uncoupled diagnostic baseline. "
+            "Lower coefficient roughness is a smoothness result rather than a "
             "guarantee of lower error."
         ),
         nbf.v4.new_code_cell(
@@ -782,7 +767,11 @@ def write_notebook(path: Path | None = None) -> Path:
                 "print(f'Completed {len(results)} bounded local benchmarks in {total_runtime_seconds:.1f} seconds.')",
             )
         ),
-        nbf.v4.new_markdown_cell("## Horizon-wise RMSE and MAE"),
+        nbf.v4.new_markdown_cell(
+            "## Horizon-wise RMSE and MAE\n\n"
+            "Horizon zero is the aligned nowcast baseline; positive horizons are "
+            "future forecasts from the same origin rows."
+        ),
         nbf.v4.new_code_cell(
             _cell_source(
                 "metrics = metrics_table(results)",
@@ -793,9 +782,9 @@ def write_notebook(path: Path | None = None) -> Path:
         ),
         nbf.v4.new_markdown_cell(
             "## Forecast paths\n\n"
-            "Each panel separates the observed origin (known now) from its future "
-            "target path. Prediction rows are indexed by origin and unwrapped onto "
-            "their target timestamps for this view."
+            "Each panel shows observed history, the h=0 nowcast at the forecast "
+            "origin, and the future target path. Prediction rows are indexed by "
+            "origin and unwrapped onto their target timestamps for this view."
         ),
         nbf.v4.new_code_cell(
             _cell_source(

@@ -363,7 +363,7 @@ def _(
         actual = pd.DataFrame(
             {
                 f"horizon_{step}": frame["observed"].shift(-step).loc[x_eval.index]
-                for step in range(1, horizon + 1)
+                for step in range(horizon + 1)
             },
             index=x_eval.index,
         )
@@ -445,6 +445,7 @@ def _(
             independent = results["independent"]
             coupled = results["coupled"]
             for response_horizon in independent.horizons_:
+                coupled_horizon_ix = coupled.horizons_.index(response_horizon)
                 independent_child = independent.forecast_estimators_[response_horizon]
                 for lag_ix, lag in enumerate(lags):
                     append_coefficient(
@@ -463,17 +464,17 @@ def _(
                         "coupled",
                         float(
                             coupled.variables_["exog_coef_0"][
-                                response_horizon - 1
+                                coupled_horizon_ix
                             ].value[0, lag_ix]
                         ),
                     )
         else:
-            for response_horizon in range(1, horizon + 1):
+            for response_horizon in range(horizon + 1):
                 for lag in lags:
                     append_coefficient(response_horizon, lag, "independent", 0.0)
                     append_coefficient(response_horizon, lag, "coupled", 0.0)
 
-        for response_horizon in range(1, horizon + 1):
+        for response_horizon in range(horizon + 1):
             for lag in lags:
                 append_coefficient(response_horizon, lag, "true", true_weights[lag])
         return pd.DataFrame(response_rows)
@@ -592,13 +593,13 @@ def _(
         component_frame,
         driver_contribution_frame,
         driver_linear_function_frame,
+        driver_response_frame,
         fit_models,
         horizon_path_frame,
         make_periodic_data,
         metric_frame,
         model_difference_frame,
         prediction_by_horizon_frame,
-        driver_response_frame,
     )
 
 
@@ -657,7 +658,6 @@ def _(
         component_plot_data,
         driver_contribution_plot_data,
         driver_linear_function_plot_data,
-        driver_response_plot_data,
         metric_plot_data,
         model_difference_plot_data,
         train_stop,
@@ -722,13 +722,7 @@ def _(alt, component_plot_data, mo, style_chart):
 
 
 @app.cell
-def _(
-    alt,
-    driver_contribution_plot_data,
-    mo,
-    settings,
-    style_chart,
-):
+def _(alt, driver_contribution_plot_data, mo, settings, style_chart):
     driver_contribution_chart = style_chart(
         (
             alt.Chart(driver_contribution_plot_data)
@@ -804,7 +798,13 @@ def _(forecast_results, mo):
 
 
 @app.cell
-def _(forecast_results, horizon_path_frame, origin_slider, prediction_by_horizon_frame, horizon_slider):
+def _(
+    forecast_results,
+    horizon_path_frame,
+    horizon_slider,
+    origin_slider,
+    prediction_by_horizon_frame,
+):
     path_plot_data = horizon_path_frame(
         forecast_results,
         origin_offset=origin_slider.value,
@@ -817,7 +817,14 @@ def _(forecast_results, horizon_path_frame, origin_slider, prediction_by_horizon
 
 
 @app.cell
-def _(alt, horizon_series_plot_data, horizon_slider, mo, path_plot_data, style_chart):
+def _(
+    alt,
+    horizon_series_plot_data,
+    horizon_slider,
+    mo,
+    path_plot_data,
+    style_chart,
+):
     path_origin = path_plot_data["origin_time"].iloc[0]
     series_domain = [
         "actual",
@@ -895,13 +902,7 @@ def _(alt, horizon_series_plot_data, horizon_slider, mo, path_plot_data, style_c
 
 
 @app.cell
-def _(
-    alt,
-    driver_linear_function_plot_data,
-    mo,
-    settings,
-    style_chart,
-):
+def _(alt, driver_linear_function_plot_data, mo, settings, style_chart):
     coefficient_models = ["true", "coupled", "independent"]
     coefficient_colors = ["#222222", "#4c78a8", "#e45756"]
     lag_coefficient_chart = style_chart(

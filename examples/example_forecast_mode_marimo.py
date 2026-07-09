@@ -80,12 +80,6 @@ def _():
 
 
 @app.cell
-def _(mo):
-    is_script_mode = mo.app_meta().mode == "script"
-    return (is_script_mode,)
-
-
-@app.cell
 def _():
     PROFILE_OPTIONS = ["smooth decay", "jagged response", "delayed peak"]
     return (PROFILE_OPTIONS,)
@@ -289,7 +283,7 @@ def _(
         actual = pd.DataFrame(
             {
                 f"horizon_{step}": frame["demand"].shift(-step).loc[x_eval.index]
-                for step in range(1, horizon + 1)
+                for step in range(horizon + 1)
             },
             index=x_eval.index,
         )
@@ -361,14 +355,18 @@ def _(
         train_stop = max(train_stop, horizon + 24)
         train_stop = min(train_stop, len(frame) - horizon - 1)
         rows = []
-        for step in range(1, horizon + 1):
+        for step in range(horizon + 1):
             rows.append(
                 {
                     "horizon": step,
                     "training rows": train_stop - step,
                     "origin range": f"{frame.index[0]} to {frame.index[train_stop - step - 1]}",
                     "target range": f"{frame.index[step]} to {frame.index[train_stop - 1]}",
-                    "operation": f"fit X[:-{step}] against y[{step}:]",
+                    "operation": (
+                        "fit X against y"
+                        if step == 0
+                        else f"fit X[:-{step}] against y[{step}:]"
+                    ),
                 }
             )
         return pd.DataFrame(rows)
@@ -442,6 +440,7 @@ def _(
         coupled = results["coupled"]
         rows = []
         for horizon, true_coefficient in enumerate(true_coefficients, start=1):
+            coupled_horizon_ix = coupled.horizons_.index(horizon)
             child = independent.forecast_estimators_[horizon]
             rows.append(
                 {
@@ -462,7 +461,7 @@ def _(
                     "model": "coupled",
                     "horizon": horizon,
                     "coefficient": float(
-                        coupled.variables_["exog_coef_0"][horizon - 1].value[0, 0]
+                        coupled.variables_["exog_coef_0"][coupled_horizon_ix].value[0, 0]
                     ),
                 }
             )
@@ -500,8 +499,8 @@ def _(
             else pd.Timedelta(hours=1)
         )
         rows = []
-        for horizon in range(1, len(actual.columns) + 1):
-            column = f"horizon_{horizon}"
+        for column in actual.columns:
+            horizon = int(column.split("_")[1])
             target_time = origin_time + horizon * origin_step
             rows.extend(
                 [
@@ -602,18 +601,18 @@ def _(
                 },
                 {
                     "stage": "independent mode",
-                    "what forecast mode does": f"fit {horizon} separate TsgamEstimator models",
-                    "result": f"{horizon} child estimators, one per horizon",
+                    "what forecast mode does": f"fit {horizon + 1} separate TsgamEstimator models",
+                    "result": f"{horizon + 1} child estimators for h=0 through h={horizon}",
                 },
                 {
                     "stage": "coupled mode",
-                    "what forecast mode does": f"solve all {horizon} horizons in one CVXPY problem with roughness weight {roughness:g}",
-                    "result": "one model whose horizon coefficients are smoothed together",
+                    "what forecast mode does": f"solve all {horizon + 1} horizons in one CVXPY problem with roughness weight {roughness:g}",
+                    "result": "one model whose h=1...T coefficients are smoothed; h=0 stays uncoupled",
                 },
                 {
                     "stage": "predict",
                     "what forecast mode does": "return one row per forecast origin and one column per horizon",
-                    "result": "DataFrame columns horizon_1 ... horizon_T",
+                    "result": "DataFrame columns horizon_0 ... horizon_T",
                 },
             ]
         )
@@ -713,11 +712,16 @@ def _(horizon_count, mo, pd, profile_name, true_coefficients):
         ]
     )
     problem_statement
-    return (truth_rows,)
+    return
 
 
 @app.cell
-def _(horizon_count, problem_frame, synthetic_component_frame, synthetic_total_frame):
+def _(
+    horizon_count,
+    problem_frame,
+    synthetic_component_frame,
+    synthetic_total_frame,
+):
     synthetic_components = synthetic_component_frame(
         problem_frame,
         horizon=horizon_count.value,
@@ -817,7 +821,7 @@ def _(
         ]
     )
     split_view
-    return horizon_rows, split_summary
+    return
 
 
 @app.cell
@@ -854,7 +858,7 @@ def _(horizon_count, mo, pd, problem_frame):
 
 
 @app.cell
-def _(alt, horizon_count, problem_frame, pd, train_fraction):
+def _(alt, horizon_count, pd, problem_frame, train_fraction):
     train_stop = int(len(problem_frame) * train_fraction.value)
     train_stop = max(train_stop, horizon_count.value + 24)
     train_stop = min(train_stop, len(problem_frame) - horizon_count.value - 1)
@@ -1009,7 +1013,7 @@ def _(coefficient_frame, forecast_results, true_coefficients):
 
 
 @app.cell
-def _(metric_frame, forecast_results):
+def _(forecast_results, metric_frame):
     forecast_metrics = metric_frame(forecast_results)
     return (forecast_metrics,)
 
@@ -1281,7 +1285,13 @@ def _(actual_predicted_points, alt, focus_horizon, pd):
 
 
 @app.cell
-def _(forecast_coefficients, forecast_metrics, mo, roughness_frame, shape_summary):
+def _(
+    forecast_coefficients,
+    forecast_metrics,
+    mo,
+    roughness_frame,
+    shape_summary,
+):
     summary_table = mo.vstack(
         [
             mo.md(
