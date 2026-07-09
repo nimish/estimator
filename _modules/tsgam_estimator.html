@@ -1,23 +1,23 @@
 
 
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" data-content_root="../../">
+<html class="writer-html5" lang="en" data-content_root="../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tsgam_estimator.tsgam_estimator &mdash; estimator 0.1.0 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+  <title>tsgam_estimator &mdash; estimator 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
 
   
-      <script src="../../_static/jquery.js?v=5d32c60e"></script>
-      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=01f34227"></script>
-      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
-      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-    <script src="../../_static/js/theme.js"></script>
-    <link rel="index" title="Index" href="../../genindex.html" />
-    <link rel="search" title="Search" href="../../search.html" /> 
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -28,11 +28,11 @@
 
           
           
-          <a href="../../index.html" class="icon icon-home">
+          <a href="../index.html" class="icon icon-home">
             estimator
           </a>
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -41,7 +41,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API Reference</a></li>
 </ul>
 
         </div>
@@ -50,16 +50,16 @@
 
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../../index.html">estimator</a>
+          <a href="../index.html">estimator</a>
       </nav>
 
       <div class="wy-nav-content">
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
-          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
-      <li class="breadcrumb-item active">tsgam_estimator.tsgam_estimator</li>
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">tsgam_estimator</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -68,12 +68,13 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <h1>Source code for tsgam_estimator.tsgam_estimator</h1><div class="highlight"><pre>
+  <h1>Source code for tsgam_estimator</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Copyright (c) 2025 Alliance for Sustainable Energy, LLC and Nimish Telang</span>
 <span class="c1"># SPDX-License-Identifier: BSD-3-Clause</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrEnum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">importlib.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">PackageNotFoundError</span><span class="p">,</span> <span class="n">version</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">overload</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">itertools</span><span class="w"> </span><span class="kn">import</span> <span class="n">combinations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndarray</span>
@@ -88,8 +89,13 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">spcqe.functions</span><span class="w"> </span><span class="kn">import</span> <span class="n">initialize_arrays</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">__version__</span> <span class="o">=</span> <span class="n">version</span><span class="p">(</span><span class="s2">&quot;tsgam-estimator&quot;</span><span class="p">)</span>
+<span class="k">except</span> <span class="n">PackageNotFoundError</span><span class="p">:</span>
+    <span class="n">__version__</span> <span class="o">=</span> <span class="s2">&quot;0.1.0&quot;</span>
+
 <div class="viewcode-block" id="TsgamMultiPeriodicConfig">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamMultiPeriodicConfig">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamMultiPeriodicConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamMultiPeriodicConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -149,7 +155,7 @@
 
 
 <div class="viewcode-block" id="TsgamSplineConfig">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamSplineConfig">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamSplineConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamSplineConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -199,7 +205,7 @@
 
 
 <div class="viewcode-block" id="TsgamLinearConfig">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamLinearConfig">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamLinearConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamLinearConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -233,7 +239,7 @@
 
 
 <div class="viewcode-block" id="TsgamArConfig">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamArConfig">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamArConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamArConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -266,7 +272,7 @@
 
 
 <div class="viewcode-block" id="TrendType">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TrendType">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TrendType">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">TrendType</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
     <span class="n">NONE</span> <span class="o">=</span> <span class="s1">&#39;none&#39;</span>
     <span class="n">LINEAR</span> <span class="o">=</span> <span class="s1">&#39;linear&#39;</span>
@@ -278,7 +284,7 @@
 
 
 <div class="viewcode-block" id="TsgamTrendConfig">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamTrendConfig">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamTrendConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamTrendConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -323,7 +329,7 @@
 
 
 <div class="viewcode-block" id="TsgamOutlierConfig">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamOutlierConfig">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamOutlierConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamOutlierConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -423,7 +429,7 @@
 <span class="nb">type</span> <span class="n">SolverOptionValue</span> <span class="o">=</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SolverOptionValue</span><span class="p">]</span>
 
 <div class="viewcode-block" id="TsgamSolverConfig">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamSolverConfig">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamSolverConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamSolverConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -489,7 +495,7 @@
 
 
 <div class="viewcode-block" id="TsgamEstimatorConfig">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimatorConfig">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamEstimatorConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamEstimatorConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -589,7 +595,7 @@
 
 
 <div class="viewcode-block" id="get_recommended_periods">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.get_recommended_periods">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.get_recommended_periods">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">get_recommended_periods</span><span class="p">(</span><span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">include_harmonics</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Get recommended periods for Fourier basis based on data frequency.</span>
@@ -786,7 +792,7 @@
 
 
 <div class="viewcode-block" id="TsgamEstimator">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimator">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamEstimator">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">TsgamEstimator</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">RegressorMixin</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Time Series Generalized Additive Model (TSGAM) Estimator.</span>
@@ -1602,7 +1608,7 @@
         <span class="k">return</span> <span class="n">min_samples</span>
 
 <div class="viewcode-block" id="TsgamEstimator.fit">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimator.fit">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamEstimator.fit">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">sample_weight</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;TsgamEstimator&quot;</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Fit the TSGAM model to training data.</span>
@@ -2028,7 +2034,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_scale_</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="TsgamEstimator.predict">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimator.predict">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamEstimator.predict">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
                 <span class="n">remove_periodic</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">remove_exogenous</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> 
                 <span class="n">remove_trend</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
@@ -2307,7 +2313,7 @@
 
 
 <div class="viewcode-block" id="TsgamEstimator.sample">
-<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimator.sample">[docs]</a>
+<a class="viewcode-back" href="../api.html#tsgam_estimator.TsgamEstimator.sample">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">random_state</span><span class="p">:</span> <span class="n">RandomState</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Generate sample predictions with AR noise rollout.</span>
@@ -2458,108 +2464,28 @@
 
 
 
-
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Baseline configuration replicating the notebook baseline model.</span>
-
-<span class="sd">    Configuration:</span>
-<span class="sd">    - Multi-periodic: [6, 4, 3] harmonics for periods [365.2425*24, 7*24, 24]</span>
-<span class="sd">    - Temperature spline: 10 knots, lags [-3, -2, -1, 0, 1, 2, 3]</span>
-<span class="sd">    - Regularization: 1e-4 for Fourier and exog, 1.0 for exog diff</span>
-<span class="sd">    - Solver: CLARABEL with verbose=True</span>
-<span class="sd">    - No AR model (baseline only)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-
-    <span class="c1"># Load data from same place as notebook</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">load_notebook_data</span><span class="p">(</span><span class="n">sheet</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;RI&#39;</span><span class="p">,</span> <span class="n">years</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">years</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">years</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2020</span><span class="p">,</span> <span class="mi">2021</span><span class="p">]</span>
-        <span class="n">df_list</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">year</span> <span class="ow">in</span> <span class="n">years</span><span class="p">:</span>
-            <span class="n">fp</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s1">&#39;examples&#39;</span> <span class="o">/</span> <span class="s1">&#39;data&#39;</span> <span class="o">/</span> <span class="s1">&#39;iso&#39;</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">year</span><span class="si">}</span><span class="s1">_smd_hourly.xlsx&#39;</span>
-            <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_excel</span><span class="p">(</span><span class="n">fp</span><span class="p">,</span> <span class="n">sheet_name</span><span class="o">=</span><span class="n">sheet</span><span class="p">)</span>
-            <span class="n">df</span><span class="p">[</span><span class="s1">&#39;year&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">year</span>
-            <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;Date&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39; &#39;</span> <span class="o">+</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;Hr_End&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">x</span><span class="o">-</span><span class="mi">1</span><span class="si">}</span><span class="s2">:00:00&quot;</span><span class="p">))</span> <span class="o">+</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-            <span class="n">df_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">df_list</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-
-    <span class="c1"># Load data</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Loading data...&quot;</span><span class="p">)</span>
-    <span class="n">df</span> <span class="o">=</span> <span class="n">load_notebook_data</span><span class="p">(</span><span class="n">sheet</span><span class="o">=</span><span class="s1">&#39;RI&#39;</span><span class="p">,</span> <span class="n">years</span><span class="o">=</span><span class="p">[</span><span class="mi">2020</span><span class="p">,</span> <span class="mi">2021</span><span class="p">])</span>
-
-    <span class="c1"># Prepare y (log-transformed RT_Demand) and X (temperature only)</span>
-    <span class="n">df_subset</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s2">&quot;2020&quot;</span><span class="p">:</span><span class="s2">&quot;2021&quot;</span><span class="p">]</span>
-    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">df_subset</span><span class="p">[</span><span class="s2">&quot;RT_Demand&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">values</span>
-    <span class="n">X</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;temp&#39;</span><span class="p">:</span> <span class="n">df_subset</span><span class="p">[</span><span class="s2">&quot;Dry_Bulb&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">},</span> <span class="n">index</span><span class="o">=</span><span class="n">df_subset</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
-
-    <span class="c1"># Multi-periodic configuration for time features</span>
-    <span class="n">multi_periodic_config</span> <span class="o">=</span> <span class="n">TsgamMultiPeriodicConfig</span><span class="p">(</span>
-        <span class="n">num_harmonics</span><span class="o">=</span><span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
-        <span class="n">periods</span><span class="o">=</span><span class="p">[</span><span class="mf">365.2425</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">]</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Spline configuration for temperature (exogenous variable)</span>
-    <span class="n">exog_config</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">TsgamSplineConfig</span><span class="p">(</span>
-            <span class="n">knots</span><span class="o">=</span><span class="p">[],</span>  <span class="c1"># Empty list means knots will be auto-generated from data</span>
-            <span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>  <span class="c1"># Number of knots to generate</span>
-            <span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
-            <span class="n">reg_weight</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span>  <span class="c1"># Regularization weight for coefficients</span>
-            <span class="n">diff_reg_weight</span><span class="o">=</span><span class="mf">1.0</span>  <span class="c1"># Regularization weight for differences between lags</span>
-        <span class="p">)</span>
-    <span class="p">]</span>
-
-    <span class="c1"># No AR model in baseline (AR is added later in the notebook)</span>
-    <span class="n">ar_config</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="c1"># Solver configuration</span>
-    <span class="n">solver_config</span> <span class="o">=</span> <span class="n">TsgamSolverConfig</span><span class="p">(</span>
-        <span class="n">solver</span><span class="o">=</span><span class="s1">&#39;CLARABEL&#39;</span><span class="p">,</span>
-        <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Create main config</span>
-    <span class="n">config</span> <span class="o">=</span> <span class="n">TsgamEstimatorConfig</span><span class="p">(</span>
-        <span class="n">multi_periodic_config</span><span class="o">=</span><span class="n">multi_periodic_config</span><span class="p">,</span>
-        <span class="n">exog_config</span><span class="o">=</span><span class="n">exog_config</span><span class="p">,</span>
-        <span class="n">ar_config</span><span class="o">=</span><span class="n">ar_config</span><span class="p">,</span>
-        <span class="n">solver_config</span><span class="o">=</span><span class="n">solver_config</span><span class="p">,</span>
-        <span class="n">random_state</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">debug</span><span class="o">=</span><span class="kc">False</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Create estimator</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Creating estimator...&quot;</span><span class="p">)</span>
-    <span class="n">estimator</span> <span class="o">=</span> <span class="n">TsgamEstimator</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
-
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Configuration:&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">multi_periodic_config</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Multi-periodic: </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">multi_periodic_config</span><span class="o">.</span><span class="n">num_harmonics</span><span class="si">}</span><span class="s2"> harmonics&quot;</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Periods: </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">multi_periodic_config</span><span class="o">.</span><span class="n">periods</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Exog config: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">)</span><span class="si">}</span><span class="s2"> exogenous variable(s)&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">exog_cfg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span><span class="p">):</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">TsgamSplineConfig</span><span class="p">):</span>
-                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;    [</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2">] Type: Spline&quot;</span><span class="p">)</span>
-                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;        n_knots: </span><span class="si">{</span><span class="n">exog_cfg</span><span class="o">.</span><span class="n">n_knots</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;    [</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2">] Type: Linear&quot;</span><span class="p">)</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;        lags: </span><span class="si">{</span><span class="n">exog_cfg</span><span class="o">.</span><span class="n">lags</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;        reg_weight: </span><span class="si">{</span><span class="n">exog_cfg</span><span class="o">.</span><span class="n">reg_weight</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;        diff_reg_weight: </span><span class="si">{</span><span class="n">exog_cfg</span><span class="o">.</span><span class="n">diff_reg_weight</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Solver: </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="si">}</span><span class="s2"> (verbose=</span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Fit the model</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Fitting model...&quot;</span><span class="p">)</span>
-    <span class="n">estimator</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
-
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Fitting complete!&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Problem status: </span><span class="si">{</span><span class="n">estimator</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">estimator</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;optimal&quot;</span><span class="p">,</span> <span class="s2">&quot;optimal_inaccurate&quot;</span><span class="p">]:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Optimal value: </span><span class="si">{</span><span class="n">estimator</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">value</span><span class="si">:</span><span class="s2">.6e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;TsgamEstimator&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TsgamEstimatorConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TsgamMultiPeriodicConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TsgamSplineConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TsgamLinearConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TsgamArConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TsgamTrendConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TsgamOutlierConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TsgamSolverConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SolverOptionValue&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TrendType&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_recommended_periods&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PERIOD_HOURLY_DAILY&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PERIOD_HOURLY_WEEKLY&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PERIOD_HOURLY_YEARLY&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PERIOD_DAILY_YEARLY&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PERIOD_WEEKLY_YEARLY&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PERIOD_MONTHLY_YEARLY&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PERIOD_QUARTERLY_YEARLY&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PERIOD_YEARLY_YEARLY&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 </pre></div>
 
            </div>
