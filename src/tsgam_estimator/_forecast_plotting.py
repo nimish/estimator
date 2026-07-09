@@ -86,6 +86,13 @@ def _validate_actual(actual: pd.Series) -> pd.Series:
     return actual
 
 
+def _validate_nowcast(nowcast: pd.Series) -> pd.Series:
+    if not isinstance(nowcast, pd.Series):
+        raise TypeError("nowcast must be a pandas Series indexed by forecast origin.")
+    _validate_time_index(nowcast.index, name="nowcast")
+    return nowcast
+
+
 def _normalize_forecasts(
     forecasts: ForecastPredictions,
 ) -> dict[str, pd.DataFrame]:
@@ -126,8 +133,10 @@ def forecast_to_long_dataframe(
     predictions: pd.DataFrame,
     actual: pd.Series | None = None,
     *,
+    nowcast: pd.Series | None = None,
     freq: FrequencyLike | None = None,
     model: str = "Forecast",
+    nowcast_label: str = "Nowcast",
 ) -> pd.DataFrame:
     """Convert origin-indexed horizon columns to target-time plotting data.
 
@@ -138,11 +147,17 @@ def forecast_to_long_dataframe(
         origins and columns are named ``horizon_1``, ``horizon_2``, and so on.
     actual
         Optional observed target series indexed by target time.
+    nowcast
+        Optional horizon-zero predictions indexed by forecast origin. These are
+        typically produced by :class:`TsgamEstimator` using the same base
+        configuration as the forecaster.
     freq
         Forecast grid frequency. It is inferred from ``predictions`` or
         ``actual`` when possible.
     model
         Label stored in the returned ``model`` column.
+    nowcast_label
+        Label stored on the horizon-zero rows.
 
     Returns
     -------
@@ -160,6 +175,20 @@ def forecast_to_long_dataframe(
     offset = _resolve_offset(origins, actual_index, freq)
 
     frames = []
+    if nowcast is not None:
+        nowcast = _validate_nowcast(nowcast)
+        frame = pd.DataFrame(
+            {
+                "model": nowcast_label,
+                "origin_time": origins,
+                "target_time": origins,
+                "horizon": 0,
+                "prediction": nowcast.reindex(origins).to_numpy(),
+            }
+        )
+        if actual is not None:
+            frame["actual"] = actual.reindex(origins).to_numpy()
+        frames.append(frame)
     for horizon, column in horizons:
         target_times = _target_times(origins, horizon, offset)
         frame = pd.DataFrame(
@@ -221,6 +250,8 @@ def plot_forecast_origin(
     forecasts: ForecastPredictions,
     actual: pd.Series,
     *,
+    nowcast: pd.Series | None = None,
+    nowcast_label: str = "Nowcast",
     origin: str | pd.Timestamp | None = None,
     history_steps: int = 48,
     freq: FrequencyLike | None = None,
@@ -243,6 +274,8 @@ def plot_forecast_origin(
     actual_index = cast(pd.DatetimeIndex, actual.index)
     offset = _resolve_offset(origins, actual_index, freq)
     selected_origin = _resolve_origin(origin, origins)
+    if nowcast is not None:
+        nowcast = _validate_nowcast(nowcast)
     max_horizon = max(
         horizon
         for predictions in normalized.values()
@@ -278,6 +311,20 @@ def plot_forecast_origin(
             label="Realized future",
             zorder=3,
         )
+
+    if nowcast is not None:
+        nowcast_value = nowcast.reindex([selected_origin]).iloc[0]
+        if pd.notna(nowcast_value):
+            ax.plot(
+                [selected_origin],
+                [nowcast_value],
+                color="#7a3db8",
+                marker="D",
+                markersize=7.0,
+                linestyle="none",
+                label=nowcast_label,
+                zorder=5,
+            )
 
     markers = ("o", "s", "^", "D")
     for model_index, (label, predictions) in enumerate(normalized.items()):
@@ -326,25 +373,23 @@ def plot_forecast_horizon(
     actual: pd.Series,
     *,
     horizon: int = 1,
+    nowcast: pd.Series | None = None,
+    nowcast_label: str = "Nowcast",
     freq: FrequencyLike | None = None,
     ax: Axes | None = None,
 ) -> Axes:
     """Plot a fixed forecast horizon against observations over target time."""
 
-    if horizon <= 0:
-        raise ValueError("horizon must be positive.")
+    if horizon < 0:
+        raise ValueError("horizon must be non-negative.")
+    if horizon == 0 and nowcast is None:
+        raise ValueError("nowcast must be provided when horizon=0.")
     normalized = _normalize_forecasts(forecasts)
     actual = _validate_actual(actual)
     reference = next(iter(normalized.values()))
     origins = cast(pd.DatetimeIndex, reference.index)
     actual_index = cast(pd.DatetimeIndex, actual.index)
     offset = _resolve_offset(origins, actual_index, freq)
-    column = f"horizon_{horizon}"
-    missing = [label for label, frame in normalized.items() if column not in frame]
-    if missing:
-        raise ValueError(
-            f"{column} is missing from forecast models: {', '.join(missing)}."
-        )
     target_times = _target_times(origins, horizon, offset)
 
     ax = _get_axes(ax, figsize=(11.0, 4.0))
@@ -357,16 +402,33 @@ def plot_forecast_horizon(
             linewidth=2.0,
             label="Actual",
         )
-    markers = ("o", "s", "^", "D")
-    for model_index, (label, predictions) in enumerate(normalized.items()):
+    if horizon == 0:
+        validated_nowcast = _validate_nowcast(cast(pd.Series, nowcast))
         ax.plot(
             target_times,
-            predictions[column].to_numpy(),
+            validated_nowcast.reindex(origins).to_numpy(),
             linewidth=1.8,
-            marker=markers[model_index % len(markers)],
+            marker="D",
             markersize=3.5,
-            label=label,
+            label=nowcast_label,
         )
+    else:
+        column = f"horizon_{horizon}"
+        missing = [label for label, frame in normalized.items() if column not in frame]
+        if missing:
+            raise ValueError(
+                f"{column} is missing from forecast models: {', '.join(missing)}."
+            )
+        markers = ("o", "s", "^", "D")
+        for model_index, (label, predictions) in enumerate(normalized.items()):
+            ax.plot(
+                target_times,
+                predictions[column].to_numpy(),
+                linewidth=1.8,
+                marker=markers[model_index % len(markers)],
+                markersize=3.5,
+                label=label,
+            )
     _finish_axes(
         ax,
         title=f"Horizon {horizon}: forecast and actual over target time",
