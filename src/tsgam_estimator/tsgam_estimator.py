@@ -27,6 +27,11 @@ from ._forecast import (
     TsgamForecastCouplingConfig,
     TsgamForecastEstimator,
 )
+from ._forecast_plotting import (
+    forecast_to_long_dataframe,
+    plot_forecast_horizon,
+    plot_forecast_origin,
+)
 
 __all__ = [
     "TsgamEstimator",
@@ -34,6 +39,9 @@ __all__ = [
     "TsgamEstimatorConfig",
     "TsgamForecastConfig",
     "TsgamForecastCouplingConfig",
+    "forecast_to_long_dataframe",
+    "plot_forecast_origin",
+    "plot_forecast_horizon",
     "TsgamMultiPeriodicConfig",
     "TsgamSplineConfig",
     "TsgamLinearConfig",

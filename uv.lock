@@ -2201,7 +2201,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "ptyprocess" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -3519,6 +3519,11 @@ dependencies = [
     { name = "spcqe" },
 ]
 
+[package.optional-dependencies]
+viz = [
+    { name = "matplotlib" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "altair" },
@@ -3604,12 +3609,14 @@ viz = [
 [package.metadata]
 requires-dist = [
     { name = "cvxpy", specifier = ">=1.7.3,<2" },
+    { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.10.7" },
     { name = "numpy", specifier = ">=2.3.4,<3" },
     { name = "pandas", specifier = ">=2.3.3,<4" },
     { name = "scikit-learn", specifier = ">=1.7.2,<2" },
     { name = "scipy", specifier = ">=1.16.3,<2" },
     { name = "spcqe", specifier = ">=0.3.0,<0.4" },
 ]
+provides-extras = ["viz"]
 
 [package.metadata.requires-dev]
 dev = [

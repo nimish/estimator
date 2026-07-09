@@ -5,10 +5,10 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "altair>=6.0.0",
 #     "clarabel>=0.11.1",
 #     "cvxpy>=1.7.3",
 #     "marimo>=0.23.4",
+#     "matplotlib>=3.10.0",
 #     "numpy>=2.3.0",
 #     "pandas>=2.3.0",
 #     "scikit-learn>=1.7.0",
@@ -45,8 +45,8 @@ def _():
     import sys
     from pathlib import Path
 
-    import altair as alt
     import marimo as mo
+    import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
 
@@ -63,36 +63,8 @@ def _():
         TsgamLinearConfig,
         TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
+        plot_forecast_origin,
     )
-
-    alt.data_transformers.disable_max_rows()
-
-    def style_chart(chart):
-        return (
-            chart.configure_view(stroke="#d9dee8")
-            .configure_axis(
-                domainColor="#c7ccd8",
-                gridColor="#e6e8ef",
-                labelColor="#344054",
-                labelFontSize=11,
-                tickColor="#c7ccd8",
-                titleColor="#1f2937",
-                titleFontSize=12,
-            )
-            .configure_legend(
-                labelColor="#1f2937",
-                labelFontSize=12,
-                orient="top",
-                titleColor="#1f2937",
-                titleFontSize=12,
-            )
-            .configure_title(
-                anchor="start",
-                color="#111827",
-                fontSize=16,
-                fontWeight="bold",
-            )
-        )
 
     return (
         TsgamEstimatorConfig,
@@ -102,11 +74,11 @@ def _():
         TsgamLinearConfig,
         TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
-        alt,
         mo,
         np,
         pd,
-        style_chart,
+        plot_forecast_origin,
+        plt,
     )
 
 
@@ -206,18 +178,6 @@ def _(
         index=_x_eval.index,
     )
     origin_times = _x_eval.index
-    _all_values = np.concatenate(
-        [
-            frame["observed"].to_numpy(),
-            independent_prediction.to_numpy().ravel(),
-            coupled_prediction.to_numpy().ravel(),
-        ]
-    )
-    _padding = max(0.25, 0.08 * (np.nanmax(_all_values) - np.nanmin(_all_values)))
-    y_domain = (
-        float(np.floor(10.0 * (np.nanmin(_all_values) - _padding)) / 10.0),
-        float(np.ceil(10.0 * (np.nanmax(_all_values) + _padding)) / 10.0),
-    )
     return (
         actual,
         coupled_prediction,
@@ -227,7 +187,6 @@ def _(
         history_hours,
         independent_prediction,
         origin_times,
-        y_domain,
     )
 
 
@@ -258,168 +217,26 @@ def _(mo, origin_slider, origin_times):
 
 @app.cell
 def _(
-    actual,
-    alt,
     coupled_prediction,
-    forecast_horizon,
     frame,
     history_hours,
     independent_prediction,
-    np,
-    pd,
+    plot_forecast_origin,
+    plt,
     selected_origin,
-    style_chart,
-    y_domain,
 ):
-    _history_start = selected_origin - pd.Timedelta(hours=history_hours)
-    _history = frame.loc[_history_start:selected_origin, ["observed"]].reset_index(
-        names="timestamp"
-    )
-    _history = _history.rename(columns={"observed": "value"})
-    _history["relative_hour"] = (
-        _history["timestamp"] - selected_origin
-    ).dt.total_seconds() / 3600.0
-    _history["series"] = "Observed history"
-
-    _future = pd.DataFrame(
+    _figure, _axis = plt.subplots(figsize=(12, 5), layout="constrained")
+    plot_forecast_origin(
         {
-            "horizon": np.arange(1, forecast_horizon + 1),
-            "timestamp": selected_origin
-            + pd.to_timedelta(np.arange(1, forecast_horizon + 1), unit="h"),
-            "Actual future targets": actual.loc[selected_origin].to_numpy(),
-            "Independent forecast": independent_prediction.loc[
-                selected_origin
-            ].to_numpy(),
-            "Coupled forecast": coupled_prediction.loc[selected_origin].to_numpy(),
-        }
+            "Independent forecast": independent_prediction,
+            "Coupled forecast": coupled_prediction,
+        },
+        actual=frame["observed"],
+        origin=selected_origin,
+        history_steps=history_hours,
+        ax=_axis,
     )
-    _future_long = _future.melt(
-        id_vars=["horizon", "timestamp"],
-        var_name="series",
-        value_name="value",
-    )
-    _future_long["relative_hour"] = _future_long["horizon"].astype(float)
-    _color = alt.Color(
-        "series:N",
-        legend=alt.Legend(title=None, direction="horizontal"),
-        scale=alt.Scale(
-            domain=[
-                "Observed history",
-                "Actual future targets",
-                "Independent forecast",
-                "Coupled forecast",
-            ],
-            range=["#334155", "#0f766e", "#d97706", "#2563eb"],
-        ),
-    )
-    _x = alt.X(
-        "relative_hour:Q",
-        axis=alt.Axis(values=[-48, -36, -24, -12, 0, 1, 2, 3, 4, 5]),
-        scale=alt.Scale(domain=[-history_hours, forecast_horizon]),
-        title="hours relative to forecast origin",
-    )
-    _y = alt.Y(
-        "value:Q",
-        scale=alt.Scale(domain=y_domain),
-        title="synthetic target",
-    )
-    _history_tooltip = [
-        alt.Tooltip("timestamp:T", format="%a, %b %d %H:%M", title="observed time"),
-        alt.Tooltip("value:Q", format=".3f", title="observed"),
-    ]
-    _future_tooltip = [
-        alt.Tooltip("timestamp:T", format="%a, %b %d %H:%M", title="target time"),
-        alt.Tooltip("horizon:Q", title="horizon"),
-        alt.Tooltip("series:N", title="series"),
-        alt.Tooltip("value:Q", format=".3f", title="value"),
-    ]
-    _prediction_region = (
-        alt.Chart(
-            pd.DataFrame(
-                {
-                    "start": [0.0],
-                    "end": [float(forecast_horizon)],
-                    "low": [y_domain[0]],
-                    "high": [y_domain[1]],
-                }
-            )
-        )
-        .mark_rect(color="#e8f1fb", opacity=0.9)
-        .encode(
-            x=alt.X(
-                "start:Q",
-                axis=None,
-                scale=alt.Scale(domain=[-history_hours, forecast_horizon]),
-            ),
-            x2="end:Q",
-            y=alt.Y("low:Q", axis=None, scale=alt.Scale(domain=y_domain)),
-            y2="high:Q",
-        )
-    )
-    _history_layer = (
-        alt.Chart(_history)
-        .mark_line(strokeWidth=2.6)
-        .encode(x=_x, y=_y, color=_color, tooltip=_history_tooltip)
-    )
-    _actual_layer = (
-        alt.Chart(_future_long.query("series == 'Actual future targets'"))
-        .mark_line(
-            point=alt.OverlayMarkDef(filled=True, size=62),
-            strokeDash=[5, 3],
-            strokeWidth=2.4,
-        )
-        .encode(x=_x, y=_y, color=_color, tooltip=_future_tooltip)
-    )
-    _model_layers = (
-        alt.Chart(_future_long.query("series != 'Actual future targets'"))
-        .mark_line(point=alt.OverlayMarkDef(filled=True, size=62), strokeWidth=2.4)
-        .encode(x=_x, y=_y, color=_color, tooltip=_future_tooltip)
-    )
-    _origin_rule = (
-        alt.Chart(pd.DataFrame({"relative_hour": [0.0]}))
-        .mark_rule(color="#111827", strokeDash=[4, 3], strokeWidth=1.6)
-        .encode(
-            x=alt.X(
-                "relative_hour:Q",
-                axis=None,
-                scale=alt.Scale(domain=[-history_hours, forecast_horizon]),
-            )
-        )
-    )
-    _origin_label = (
-        alt.Chart(
-            pd.DataFrame(
-                {
-                    "relative_hour": [0.35],
-                    "value": [y_domain[1] - 0.05 * (y_domain[1] - y_domain[0])],
-                    "label": ["now / forecast origin"],
-                }
-            )
-        )
-        .mark_text(align="left", baseline="top", color="#111827", dx=4, fontSize=11)
-        .encode(
-            x=alt.X(
-                "relative_hour:Q",
-                axis=None,
-                scale=alt.Scale(domain=[-history_hours, forecast_horizon]),
-            ),
-            y=alt.Y("value:Q", axis=None, scale=alt.Scale(domain=y_domain)),
-            text="label:N",
-        )
-    )
-    _origin_chart = alt.layer(
-        _prediction_region,
-        _history_layer,
-        _actual_layer,
-        _model_layers,
-        _origin_rule,
-        _origin_label,
-    ).properties(
-        height=360,
-        title="Observed history and direct forecast paths from the selected origin",
-        width=850,
-    )
-    style_chart(_origin_chart)
+    _figure
     return
 
 

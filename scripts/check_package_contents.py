@@ -20,6 +20,7 @@ ALLOWED_SDIST_PACKAGE_FILES = {
     "src/tsgam_estimator/_design.py",
     "src/tsgam_estimator/_estimator.py",
     "src/tsgam_estimator/_forecast.py",
+    "src/tsgam_estimator/_forecast_plotting.py",
     "src/tsgam_estimator/_problem.py",
     "src/tsgam_estimator/py.typed",
     "src/tsgam_estimator/tsgam_estimator.py",
@@ -29,6 +30,7 @@ ALLOWED_WHEEL_PACKAGE_FILES = {
     "tsgam_estimator/_design.py",
     "tsgam_estimator/_estimator.py",
     "tsgam_estimator/_forecast.py",
+    "tsgam_estimator/_forecast_plotting.py",
     "tsgam_estimator/_problem.py",
     "tsgam_estimator/py.typed",
     "tsgam_estimator/tsgam_estimator.py",
@@ -45,7 +47,10 @@ def _check_sdist(path: Path) -> list[str]:
         if len(parts) < 2:
             continue
         relative = "/".join(parts[1:])
-        if relative in ALLOWED_SDIST_ROOT_FILES or relative in ALLOWED_SDIST_PACKAGE_FILES:
+        if (
+            relative in ALLOWED_SDIST_ROOT_FILES
+            or relative in ALLOWED_SDIST_PACKAGE_FILES
+        ):
             continue
         errors.append(f"{path.name}: unexpected sdist member {relative}")
     return errors
@@ -73,7 +78,9 @@ def main() -> int:
     sdists = sorted(args.dist.glob("*.tar.gz"))
     wheels = sorted(args.dist.glob("*.whl"))
     if not sdists or not wheels:
-        print(f"expected at least one sdist and one wheel in {args.dist}", file=sys.stderr)
+        print(
+            f"expected at least one sdist and one wheel in {args.dist}", file=sys.stderr
+        )
         return 1
 
     errors: list[str] = []
