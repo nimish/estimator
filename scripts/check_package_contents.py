@@ -17,15 +17,19 @@ ALLOWED_SDIST_ROOT_FILES = {
 }
 ALLOWED_SDIST_PACKAGE_FILES = {
     "src/tsgam_estimator/__init__.py",
+    "src/tsgam_estimator/_design.py",
     "src/tsgam_estimator/_estimator.py",
     "src/tsgam_estimator/_forecast.py",
+    "src/tsgam_estimator/_problem.py",
     "src/tsgam_estimator/py.typed",
     "src/tsgam_estimator/tsgam_estimator.py",
 }
 ALLOWED_WHEEL_PACKAGE_FILES = {
     "tsgam_estimator/__init__.py",
+    "tsgam_estimator/_design.py",
     "tsgam_estimator/_estimator.py",
     "tsgam_estimator/_forecast.py",
+    "tsgam_estimator/_problem.py",
     "tsgam_estimator/py.typed",
     "tsgam_estimator/tsgam_estimator.py",
 }

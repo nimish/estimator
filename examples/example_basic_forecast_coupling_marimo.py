@@ -355,7 +355,6 @@ def _(
                 mode="coupled",
                 coupling_config=TsgamForecastCouplingConfig(
                     roughness_weight=roughness_weight,
-                    roughness_order=2,
                 ),
             )
         ).fit(x_train, y_train)

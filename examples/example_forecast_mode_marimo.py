@@ -1082,10 +1082,7 @@ def _(forecast_coefficients, mo, np, pd):
     for model_name, group in forecast_coefficients.groupby("model"):
         ordered = group.sort_values("horizon")
         coefficients = ordered["coefficient"].to_numpy()
-        if len(coefficients) >= 3:
-            roughness = float(np.sum(np.diff(coefficients, n=2) ** 2))
-        else:
-            roughness = float(np.sum(np.diff(coefficients) ** 2))
+        roughness = float(np.sum(np.diff(coefficients) ** 2))
         roughness_rows.append(
             {
                 "model": model_name,

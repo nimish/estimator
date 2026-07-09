@@ -1,23 +1,54 @@
 # Copyright (c) 2025 Alliance for Sustainable Energy, LLC and Nimish Telang
 # SPDX-License-Identifier: BSD-3-Clause
 
-from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
-from itertools import combinations
-from typing import cast, overload
+from typing import overload
 
 from numpy import ndarray
 import numpy as np
 import cvxpy
 from numpy.random import RandomState
 from scipy import stats, signal
-from scipy.sparse import spdiags, spmatrix
+from scipy.sparse import spmatrix
 from sklearn.base import RegressorMixin, BaseEstimator, check_array, check_is_fitted
 from sklearn.utils import check_X_y, check_random_state
 from spcqe import make_basis_matrix
-from spcqe.functions import initialize_arrays
 import pandas as pd
+
+from ._design import (
+    _build_exog_Hs,
+    _ensure_numeric_prefix,
+    _ensure_sorted_index,
+    _ensure_timestamp_index,
+    _extract_timestamps,
+    _get_zero_lag_H,
+    _infer_frequency_from_differences,
+    _interaction_contribution_from_blocks,
+    _make_offset_H,
+    _make_regularization_matrix,
+    _make_spline_H,
+    _min_samples_required,
+    _normalize_interaction_pairs,
+    _outer_column_product,
+    _process_exog_config,
+    _timestamps_to_indices,
+    _to_pandas_timedelta_frequency,
+    _validate_frequency,
+    build_tsgam_design,
+    infer_fit_frequency,
+    resolve_exog_knots,
+    sort_fit_inputs,
+    sort_predict_X,
+    validate_predict_frequency,
+)
+from ._problem import (
+    evaluate_single_output_prediction,
+    make_single_output_standard_variables,
+    single_output_prediction_expression,
+    solve_problem,
+    weighted_squared_loss,
+)
 
 
 @dataclass
@@ -492,13 +523,6 @@ PERIOD_YEARLY_YEARLY = 1
 # infer frequency of data and then compute values for periods automatically
 
 
-def _to_pandas_timedelta_frequency(freq: str) -> str:
-    """Return a frequency string accepted by ``pd.to_timedelta`` without deprecation warnings."""
-    if freq.lower().endswith("d"):
-        return f"{freq[:-1]}D"
-    return freq
-
-
 def get_recommended_periods(X: pd.DataFrame, include_harmonics: bool = False) -> list[float] | tuple[list[float], list[int]]:
     """
     Get recommended periods for Fourier basis based on data frequency.
@@ -693,521 +717,6 @@ def get_recommended_periods(X: pd.DataFrame, include_harmonics: bool = False) ->
         return periods
 
 
-@dataclass
-class _TsgamDesign:
-    """Internal design matrices for one TSGAM regression target."""
-    timestamps: pd.DatetimeIndex
-    X_array: ndarray
-    y: ndarray | None
-    sample_weight: ndarray | None
-    time_indices: ndarray
-    valid_mask: ndarray
-    exog_Hs: list[list[ndarray]]
-    interaction_Hs: list[ndarray]
-    interaction_pairs: list[tuple[int, int]]
-    fourier_basis: ndarray | None
-
-
-def _extract_timestamps(X: pd.DataFrame) -> pd.DatetimeIndex:
-    """Extract timestamps from supported DataFrame layouts."""
-    if isinstance(X, pd.DataFrame):
-        if isinstance(X.index, pd.DatetimeIndex):
-            return X.index
-        if len(X.columns) > 0 and pd.api.types.is_datetime64_any_dtype(X.iloc[:, 0]):
-            return pd.DatetimeIndex(X.iloc[:, 0])
-        raise ValueError(
-            "X must have DatetimeIndex or first column must be datetime. "
-            "Got DataFrame without datetime index or datetime column."
-        )
-    raise ValueError(
-        "X must be a pandas DataFrame with DatetimeIndex or datetime column. "
-        f"Got {type(X)} instead."
-    )
-
-
-def _ensure_timestamp_index(X: pd.DataFrame) -> tuple[pd.DatetimeIndex, ndarray]:
-    """Return timestamps and the numeric X array without any timestamp column."""
-    timestamps = _extract_timestamps(X)
-    if isinstance(X, pd.DataFrame) and not isinstance(X.index, pd.DatetimeIndex):
-        if pd.api.types.is_datetime64_any_dtype(X.iloc[:, 0]):
-            return timestamps, X.iloc[:, 1:].values
-        return timestamps, X.values
-    return timestamps, X.values if isinstance(X, pd.DataFrame) else X
-
-
-def _ensure_numeric_prefix(freq: str) -> str:
-    """Ensure frequency string has a numeric prefix (e.g. ``'h'`` -> ``'1h'``)."""
-    if freq and not freq[0].isdigit():
-        return f"1{freq}"
-    return freq
-
-
-def _infer_frequency_from_differences(timestamps: pd.DatetimeIndex) -> str:
-    """Infer the intended frequency from the most common timestamp difference."""
-    if len(timestamps) < 2:
-        raise ValueError("Need at least 2 timestamps to infer frequency")
-    diffs = timestamps[1:] - timestamps[:-1]
-    diff_seconds = np.array([d.total_seconds() for d in diffs])
-    diff_seconds_rounded = np.round(diff_seconds).astype(int)
-    unique_diffs, counts = np.unique(diff_seconds_rounded, return_counts=True)
-    most_common_diff_seconds = unique_diffs[np.argmax(counts)]
-    freq_mapping = {
-        60: "1min",
-        300: "5min",
-        900: "15min",
-        3600: "1h",
-        86400: "1D",
-    }
-    if most_common_diff_seconds in freq_mapping:
-        return freq_mapping[most_common_diff_seconds]
-    for diff_sec, freq_str in freq_mapping.items():
-        if abs(most_common_diff_seconds - diff_sec) / diff_sec < 0.01:
-            return freq_str
-    if most_common_diff_seconds < 60:
-        return f"{most_common_diff_seconds}S"
-    if most_common_diff_seconds < 3600:
-        return f"{most_common_diff_seconds // 60}min"
-    if most_common_diff_seconds < 86400:
-        return f"{most_common_diff_seconds // 3600}h"
-    return f"{most_common_diff_seconds // 86400}D"
-
-
-def _validate_frequency(
-    timestamps: pd.DatetimeIndex,
-    expected_freq: str,
-    allow_gaps: bool = False,
-) -> None:
-    """Validate timestamp frequency, optionally allowing gaps."""
-    if len(timestamps) < 2:
-        return
-    inferred_freq = pd.infer_freq(timestamps)
-    if inferred_freq is None:
-        if allow_gaps:
-            inferred_freq = _infer_frequency_from_differences(timestamps)
-        else:
-            raise ValueError(
-                f"Could not infer frequency from timestamps. "
-                f"Timestamps must be regularly spaced with frequency '{expected_freq}'."
-            )
-    normalized_inferred = _ensure_numeric_prefix(inferred_freq).lower()
-    normalized_expected = _ensure_numeric_prefix(expected_freq).lower()
-    if normalized_inferred == normalized_expected:
-        return
-    if allow_gaps:
-        try:
-            inferred_step = pd.Timedelta(pd.tseries.frequencies.to_offset(inferred_freq)).total_seconds()
-            expected_step = pd.Timedelta(pd.tseries.frequencies.to_offset(expected_freq)).total_seconds()
-        except ValueError:
-            inferred_step = expected_step = None
-        if (
-            inferred_step is not None
-            and expected_step is not None
-            and inferred_step >= expected_step
-            and np.isclose(inferred_step % expected_step, 0.0)
-        ):
-            return
-    raise ValueError(
-        f"Timestamps frequency '{inferred_freq}' does not match "
-        f"expected frequency '{expected_freq}'."
-    )
-
-
-def _timestamps_to_indices(
-    timestamps: pd.DatetimeIndex,
-    reference: pd.Timestamp,
-    freq: str | None = None,
-) -> ndarray:
-    """Convert timestamps to integer sample offsets from a reference timestamp."""
-    if freq is None:
-        freq = pd.infer_freq(timestamps)
-        if freq is None:
-            freq = _infer_frequency_from_differences(timestamps)
-    freq = _ensure_numeric_prefix(freq)
-    return (
-        (timestamps - reference)
-        / pd.to_timedelta(_to_pandas_timedelta_frequency(freq))
-    ).astype(int)
-
-
-@overload
-def _ensure_sorted_index(
-    X: pd.DataFrame,
-    *,
-    sort_index: bool,
-    y: ndarray,
-    sample_weight: ndarray | None = None,
-) -> tuple[pd.DataFrame, ndarray, ndarray | None]: ...
-
-
-@overload
-def _ensure_sorted_index(
-    X: pd.DataFrame,
-    *,
-    sort_index: bool,
-    y: None = None,
-    sample_weight: None = None,
-) -> tuple[pd.DataFrame]: ...
-
-
-def _ensure_sorted_index(
-    X: pd.DataFrame,
-    *,
-    sort_index: bool,
-    y: ndarray | None = None,
-    sample_weight: ndarray | None = None,
-) -> tuple[pd.DataFrame, ndarray, ndarray | None] | tuple[pd.DataFrame]:
-    """Sort or validate a timestamp-indexed input frame and aligned arrays."""
-    timestamps = _extract_timestamps(X)
-    if sort_index:
-        sort_idx = np.argsort(timestamps)
-        X = X.iloc[sort_idx]
-        if y is not None:
-            y = np.asarray(y)[sort_idx]
-            sw = (
-                np.asarray(sample_weight)[sort_idx]
-                if sample_weight is not None
-                else None
-            )
-            return X, y, sw
-        return (X,)
-    if not timestamps.is_monotonic_increasing:
-        raise ValueError(
-            "Data index is not sorted chronologically. Sort the DataFrame by "
-            "its datetime index (e.g. X = X.sort_index()) or set "
-            "config.sort_index=True to sort automatically."
-        )
-    if y is not None:
-        sw = np.asarray(sample_weight) if sample_weight is not None else None
-        return X, y, sw
-    return (X,)
-
-
-def _make_regularization_matrix(
-    num_harmonics: list[int],
-    weight: float,
-    periods: list[float],
-    drop_constant: bool = False,
-    standing_wave: bool | list[bool] = False,
-    trend: bool = False,
-    max_cross_k: int | None = None,
-    custom_basis: dict[int, ndarray] | None = None,
-) -> spmatrix:
-    """Create the Fourier coefficient regularization matrix."""
-    sort_idx, Ps, num_harmonics, standing_wave = initialize_arrays(
-        num_harmonics, periods, standing_wave, custom_basis
-    )
-    ls_original = [weight * (2 * np.pi) / np.sqrt(P) for P in Ps]
-    i_value_list = []
-    for ix, nh in enumerate(num_harmonics):
-        if standing_wave[ix]:
-            i_value_list.append(np.arange(1, nh + 1))
-        else:
-            i_value_list.append(np.repeat(np.arange(1, nh + 1), 2))
-    blocks_original = [iv * lx for iv, lx in zip(i_value_list, ls_original)]
-    if custom_basis is not None:
-        for ix, val in custom_basis.items():
-            ixt = np.where(sort_idx == ix)[0][0]
-            blocks_original[ixt] = ls_original[ixt] * np.arange(1, val.shape[1] + 1)
-    if max_cross_k is not None:
-        max_cross_k *= 2
-    blocks_cross = [
-        [l2 for l1 in c[0][:max_cross_k] for l2 in c[1][:max_cross_k]]
-        for c in combinations(blocks_original, 2)
-    ]
-    first_block = [np.zeros(1)] if trend is False else [np.zeros(2)]
-    if drop_constant:
-        first_block = first_block[1:]
-    coeff_i = np.concatenate(first_block + blocks_original + blocks_cross)
-    return spdiags(coeff_i, 0, coeff_i.size, coeff_i.size)
-
-
-def _make_spline_H(x: ndarray, knots: ndarray, include_offset: bool = False) -> ndarray:
-    """Create a natural cubic spline basis matrix."""
-    def d_func(x: ndarray, k: float, k_max: float) -> ndarray:
-        n1 = np.clip(np.power(x - k, 3), 0, np.inf)
-        n2 = np.clip(np.power(x - k_max, 3), 0, np.inf)
-        return (n1 - n2) / (k_max - k)
-
-    nK = len(knots)
-    H = np.ones((len(x), nK), dtype=float)
-    H[:, 1] = x
-    for _i in range(nK - 2):
-        _j = _i + 2
-        H[:, _j] = d_func(x, knots[_i], knots[-1]) - d_func(
-            x, knots[-2], knots[-1]
-        )
-    return H if include_offset else H[:, 1:]
-
-
-def _make_offset_H(H: ndarray, offset: int) -> ndarray:
-    """Create a lead/lag version of a basis matrix."""
-    newH = np.roll(np.copy(H), -offset, axis=0)
-    if offset > 0:
-        newH[-offset:] = np.nan
-    elif offset < 0:
-        newH[:-offset] = np.nan
-    return newH
-
-
-def _build_exog_Hs(
-    exog_cfg: TsgamSplineConfig | TsgamLinearConfig,
-    exog_var: ndarray,
-    knots: ndarray | None = None,
-) -> list[ndarray]:
-    """Build basis matrices for one exogenous variable across configured lags."""
-    Hs = []
-    for lag in exog_cfg.lags:
-        if isinstance(exog_cfg, TsgamSplineConfig):
-            if knots is None:
-                raise ValueError("knots must be provided for TsgamSplineConfig")
-            H0 = _make_spline_H(exog_var, knots, include_offset=False)
-        else:
-            H0 = exog_var.reshape(-1, 1)
-        Hs.append(_make_offset_H(H0, lag))
-    return Hs
-
-
-def _process_exog_config(
-    exog_cfg: TsgamSplineConfig | TsgamLinearConfig,
-    exog_var: ndarray,
-    knots: ndarray | None = None,
-) -> tuple[ndarray, list[ndarray]]:
-    """Build exogenous lag matrices and the boundary-valid sample mask."""
-    if knots is None and isinstance(exog_cfg, TsgamSplineConfig):
-        cfg_knots = np.asarray(exog_cfg.knots) if exog_cfg.knots is not None else np.array([])
-        if len(cfg_knots) == 0:
-            if exog_cfg.n_knots:
-                knots = np.linspace(np.min(exog_var), np.max(exog_var), exog_cfg.n_knots)
-            else:
-                raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
-        else:
-            knots = cfg_knots
-    if knots is not None:
-        knots = np.asarray(knots)
-    Hs = _build_exog_Hs(exog_cfg, exog_var, knots)
-    valid_mask = np.all(np.all(~np.isnan(np.asarray(Hs)), axis=-1), axis=0)
-    return valid_mask, Hs
-
-
-def _get_zero_lag_H(
-    exog_cfg: TsgamSplineConfig | TsgamLinearConfig,
-    Hs: list[ndarray],
-) -> ndarray:
-    """Return the current-index basis block for an exogenous term."""
-    try:
-        zero_lag_ix = exog_cfg.lags.index(0)
-    except ValueError as exc:
-        raise ValueError(
-            "Interaction pairs require each referenced exogenous factor to include lag=0."
-        ) from exc
-    return Hs[zero_lag_ix]
-
-
-def _outer_column_product(arr1: ndarray, arr2: ndarray) -> ndarray:
-    """Build a q*r interaction design block from two response matrices."""
-    return (arr1[:, :, None] * arr2[:, None, :]).reshape(arr1.shape[0], -1)
-
-
-def _interaction_contribution_from_blocks(
-    arr1: ndarray,
-    arr2: ndarray,
-    interaction_coef: ndarray,
-    *,
-    nan_to_zero: bool = False,
-) -> ndarray:
-    """Contract two response matrices against flattened interaction coefficients."""
-    if nan_to_zero:
-        arr1 = np.nan_to_num(arr1, nan=0.0)
-        arr2 = np.nan_to_num(arr2, nan=0.0)
-    coef_matrix = interaction_coef.reshape(arr1.shape[1], arr2.shape[1])
-    return np.sum((arr1 @ coef_matrix) * arr2, axis=1)
-
-
-def _normalize_interaction_pairs(config: TsgamEstimatorConfig) -> list[tuple[int, int]]:
-    """Validate and normalize configured exogenous interaction pairs."""
-    if not config.interaction_pairs:
-        return []
-    if not config.exog_config:
-        raise ValueError("interaction_pairs requires a non-empty exog_config.")
-    normalized_pairs: list[tuple[int, int]] = []
-    seen_pairs: set[tuple[int, int]] = set()
-    n_exog = len(config.exog_config)
-    for pair in config.interaction_pairs:
-        try:
-            left_ix, right_ix = pair
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                "Each interaction pair must contain exactly two exogenous indices."
-            ) from exc
-        left_is_integer_index = (
-            isinstance(left_ix, (int, np.integer)) and not isinstance(left_ix, bool)
-        )
-        right_is_integer_index = (
-            isinstance(right_ix, (int, np.integer)) and not isinstance(right_ix, bool)
-        )
-        if not left_is_integer_index or not right_is_integer_index:
-            raise ValueError("Each interaction pair index must be an integer exogenous index.")
-        if left_ix == right_ix:
-            raise ValueError("interaction_pairs cannot contain self-pairs.")
-        if not 0 <= left_ix < n_exog or not 0 <= right_ix < n_exog:
-            raise ValueError(
-                f"interaction pair {(left_ix, right_ix)} is out of range for "
-                f"{n_exog} exogenous terms."
-            )
-        normalized_pair = (left_ix, right_ix)
-        if right_ix < left_ix:
-            normalized_pair = (right_ix, left_ix)
-        if normalized_pair in seen_pairs:
-            raise ValueError(f"Duplicate interaction pair detected: {normalized_pair}.")
-        for exog_ix in normalized_pair:
-            if 0 not in config.exog_config[exog_ix].lags:
-                raise ValueError(
-                    "Interaction pairs require each referenced exogenous factor "
-                    "to include lag=0."
-                )
-        seen_pairs.add(normalized_pair)
-        normalized_pairs.append(normalized_pair)
-    return normalized_pairs
-
-
-def _min_samples_required(config: TsgamEstimatorConfig) -> int:
-    """Calculate minimum samples required by exogenous and AR lags."""
-    all_exog_lags = []
-    for exog_cfg in config.exog_config or []:
-        all_exog_lags.extend(exog_cfg.lags)
-    max_positive_lag = 0
-    min_negative_lag = 0
-    for lag in all_exog_lags:
-        if lag > 0:
-            max_positive_lag = max(max_positive_lag, lag)
-        elif lag < 0:
-            min_negative_lag = min(min_negative_lag, lag)
-    max_ar_lag = 0
-    if config.ar_config is not None:
-        max_ar_lag = max(config.ar_config.lags) if config.ar_config.lags else 0
-    return max(max_positive_lag, max_ar_lag) + abs(min_negative_lag) + 1
-
-
-def _resolve_exog_knots(
-    config: TsgamEstimatorConfig,
-    X_array: ndarray,
-) -> list[ndarray | None]:
-    """Resolve shared spline knots from a fitting matrix."""
-    if not config.exog_config:
-        return []
-    knots_by_exog: list[ndarray | None] = []
-    for ix, exog_cfg in enumerate(config.exog_config):
-        if isinstance(exog_cfg, TsgamSplineConfig):
-            cfg_knots = np.asarray(exog_cfg.knots) if exog_cfg.knots is not None else np.array([])
-            if len(cfg_knots) == 0:
-                if not exog_cfg.n_knots:
-                    raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
-                knots_by_exog.append(
-                    np.linspace(np.min(X_array[:, ix]), np.max(X_array[:, ix]), exog_cfg.n_knots)
-                )
-            else:
-                knots_by_exog.append(None)
-        else:
-            knots_by_exog.append(None)
-    return knots_by_exog
-
-
-def _build_tsgam_design(
-    config: TsgamEstimatorConfig,
-    X: pd.DataFrame,
-    *,
-    y: ndarray | None = None,
-    sample_weight: ndarray | None = None,
-    knots_by_exog: list[ndarray | None] | None = None,
-    reference: pd.Timestamp | None = None,
-    freq: str | None = None,
-) -> _TsgamDesign:
-    """Build shared TSGAM design matrices for fit or predict paths."""
-    timestamps, X_array = _ensure_timestamp_index(X)
-    if freq is None:
-        freq = pd.infer_freq(timestamps)
-        if freq is None:
-            freq = _infer_frequency_from_differences(timestamps)
-    freq = _ensure_numeric_prefix(freq).lower()
-    if reference is None:
-        reference = timestamps[0]
-    time_indices = _timestamps_to_indices(timestamps, reference, freq)
-    if y is None:
-        X_array = check_array(X_array, ensure_min_features=len(config.exog_config or []))
-        y_array = None
-        valid_mask = np.ones(len(X_array), dtype=bool)
-    else:
-        X_array, y_array = check_X_y(
-            X_array,
-            y,
-            ensure_min_features=len(config.exog_config or []),
-            ensure_min_samples=_min_samples_required(config),
-        )
-        valid_mask = ~np.isnan(y_array)
-        y_array = cast(ndarray, y_array)
-    if knots_by_exog is None:
-        knots_by_exog = _resolve_exog_knots(config, X_array)
-    exog_Hs: list[list[ndarray]] = []
-    interaction_Hs: list[ndarray] = []
-    zero_lag_Hs: dict[int, ndarray] = {}
-    interaction_pairs = _normalize_interaction_pairs(config)
-    interaction_parent_indices = {ix for pair in interaction_pairs for ix in pair}
-    if config.exog_config:
-        for ix, exog_cfg in enumerate(config.exog_config):
-            stored_knots = knots_by_exog[ix] if isinstance(exog_cfg, TsgamSplineConfig) else None
-            exog_valid_mask, Hs = _process_exog_config(
-                exog_cfg, X_array[:, ix], knots=stored_knots
-            )
-            exog_Hs.append(Hs)
-            if y is not None:
-                valid_mask &= exog_valid_mask
-            if ix in interaction_parent_indices:
-                zero_lag_Hs[ix] = _get_zero_lag_H(exog_cfg, Hs)
-        for left_ix, right_ix in interaction_pairs:
-            interaction_H = _outer_column_product(
-                zero_lag_Hs[left_ix],
-                zero_lag_Hs[right_ix],
-            )
-            interaction_Hs.append(interaction_H)
-            if y is not None:
-                valid_mask &= np.all(~np.isnan(interaction_H), axis=1)
-    fourier_basis = None
-    if config.multi_periodic_config:
-        max_idx = int(np.max(time_indices))
-        F_full = make_basis_matrix(
-            num_harmonics=config.multi_periodic_config.num_harmonics,
-            length=max_idx + 1,
-            periods=config.multi_periodic_config.periods,
-        )
-        fourier_basis = F_full[time_indices.astype(int), 1:]
-    weights = None
-    if y_array is not None:
-        if sample_weight is None:
-            weights = np.ones(len(y_array), dtype=float)
-        else:
-            weights = np.asarray(sample_weight, dtype=float)
-            if weights.shape != (len(y_array),):
-                raise ValueError(
-                    f"sample_weight must have shape (n_samples,) = ({len(y_array)},), got {weights.shape}"
-                )
-            if np.any(weights < 0):
-                raise ValueError("sample_weight must be non-negative")
-            if np.sum(weights) <= 0:
-                raise ValueError("sample_weight must have positive sum")
-    return _TsgamDesign(
-        timestamps=timestamps,
-        X_array=X_array,
-        y=y_array,
-        sample_weight=weights,
-        time_indices=time_indices,
-        valid_mask=valid_mask,
-        exog_Hs=exog_Hs,
-        interaction_Hs=interaction_Hs,
-        interaction_pairs=interaction_pairs,
-        fourier_basis=fourier_basis,
-    )
-
-
 class TsgamEstimator(BaseEstimator, RegressorMixin):
     """
     Time Series Generalized Additive Model (TSGAM) Estimator.
@@ -1315,14 +824,6 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     def __init__(self, config: TsgamEstimatorConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.config = config
-
-    @classmethod
-    def _internal_api(
-        cls,
-        config: TsgamEstimatorConfig,
-    ) -> "_TsgamEstimatorInternalApi":
-        """Return the supported internal integration surface for composite estimators."""
-        return _TsgamEstimatorInternalApi(cls, config)
 
     def _extract_timestamps(self, X: pd.DataFrame) -> pd.DatetimeIndex:
         """
@@ -1774,142 +1275,47 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
                 raise ValueError(
                     f"sample_weight must have shape (n_samples,) = ({len(y)},), got {w.shape}"
                 )
-        # Sort by index or require sorted (config.sort_index); reorder y and sample_weight too
-        X, y, sample_weight = self._ensure_sorted_index(X, y, sample_weight)
-
-        # Extract timestamps before check_X_y converts DataFrame to array
-        timestamps, X_array = self._ensure_timestamp_index(X)
-
-        # Try to infer frequency - use gap-tolerant method if regular inference fails
-        inferred_freq = pd.infer_freq(timestamps)
-        if inferred_freq is None:
-            # Infer from time differences (handles gaps)
-            inferred_freq = self._infer_frequency_from_differences(timestamps)
-
-        # Validate frequency (allow gaps)
-        self._validate_frequency(timestamps, inferred_freq, allow_gaps=True)
-
-        # Store frequency and reference timestamp
-        self.freq_ = self._ensure_numeric_prefix(inferred_freq).lower()
+        X, y, sample_weight = sort_fit_inputs(
+            X,
+            sort_index=self.config.sort_index,
+            y=y,
+            sample_weight=sample_weight,
+        )
+        timestamps = _extract_timestamps(X)
+        self.freq_ = infer_fit_frequency(timestamps)
         self.time_reference_ = timestamps[0]
-
-        # Convert timestamps to numeric indices (hours since reference)
-        time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
+        self.exog_knots_ = resolve_exog_knots(self.config, X)
+        design = build_tsgam_design(
+            self.config,
+            X,
+            y,
+            sample_weight,
+            knots_by_exog=self.exog_knots_,
+            reference=self.time_reference_,
+            freq=self.freq_,
+        )
+        assert design.y is not None
+        assert design.sample_weight is not None
+        X_array = design.X_array
+        fit_y = design.y
+        time_indices = design.time_indices
         self.time_indices_ = time_indices
-
-        # Now validate X and y with the array version - check_X_y will reject NaN's
-        X_array, y = check_X_y(X_array, y,
-            ensure_min_features=len(self.config.exog_config or []),
-            ensure_min_samples=self._get_min_samples_required())
-
-        # Validate and store sample weights for weighted least squares (main loss only)
-        if sample_weight is None:
-            self._sample_weight_ = np.ones(len(y), dtype=float)
-        else:
-            w = np.asarray(sample_weight, dtype=float)
-            if w.shape != (len(y),):
-                raise ValueError(
-                    f"sample_weight must have shape (n_samples,) = ({len(y)},), got {w.shape}"
-                )
-            if np.any(w < 0):
-                raise ValueError("sample_weight must be non-negative")
-            if np.sum(w) <= 0:
-                raise ValueError("sample_weight must have positive sum")
-            self._sample_weight_ = w
-
-        self.variables_ = {
-            'constant': cvxpy.Variable(),
-        }
-        self.exog_knots_ = []  # Store knots only when auto-computed from training data
-        self.interaction_pairs_ = []
-        model_term = self.variables_['constant']
-        regularization_term = 0
-        # Start with mask excluding NaN's in y (defensive programming - check_X_y should have rejected them)
-        self.combined_valid_mask_ = ~np.isnan(y)
-        exog_fit_data: list[tuple[ndarray, list[ndarray]]] = []
-        interaction_Hs: list[ndarray] = []
-        self.interaction_pairs_ = self._normalize_interaction_pairs()
-
-        if self.config.exog_config:
-            for ix, exog_cfg in enumerate(self.config.exog_config):
-                valid_mask, Hs = self._process_exog_config(exog_cfg, X_array[:, ix])
-                exog_fit_data.append((valid_mask, Hs))
-
-                # Store knots only if auto-computed (not provided in config)
-                if isinstance(exog_cfg, TsgamSplineConfig):
-                    cfg_knots = np.asarray(exog_cfg.knots) if exog_cfg.knots is not None else np.array([])
-                    if len(cfg_knots) == 0:
-                        if exog_cfg.n_knots:
-                            knots = np.linspace(np.min(X_array[:, ix]), np.max(X_array[:, ix]), exog_cfg.n_knots)
-                            self.exog_knots_.append(knots)
-                        else:
-                            raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
-                    else:
-                        self.exog_knots_.append(None)
-                else:
-                    self.exog_knots_.append(None)
-
-                # Create CVXPY variable for coefficients
-                # Shape: (basis_dim, num_lags)
-                basis_dim = Hs[0].shape[1]
-                num_lags = len(exog_cfg.lags)
-                exog_coef = cvxpy.Variable((basis_dim, num_lags))
-
-                self.variables_[f'exog_coef_{ix}'] = exog_coef
-                regularization_term += cvxpy.sum_squares(exog_coef) * exog_cfg.reg_weight
-                if len(exog_cfg.lags) > 1:
-                    regularization_term += cvxpy.sum_squares(cvxpy.diff(exog_coef, axis=1)) * exog_cfg.diff_reg_weight
-                self.combined_valid_mask_ &= valid_mask
-
-            for pair_ix, (left_ix, right_ix) in enumerate(self.interaction_pairs_):
-                left_cfg = self.config.exog_config[left_ix]
-                right_cfg = self.config.exog_config[right_ix]
-                left_H = self._get_zero_lag_H(left_cfg, exog_fit_data[left_ix][1])
-                right_H = self._get_zero_lag_H(right_cfg, exog_fit_data[right_ix][1])
-                interaction_H = self._outer_column_product(left_H, right_H)
-                self.combined_valid_mask_ &= np.all(~np.isnan(interaction_H), axis=1)
-
-                interaction_coef = cvxpy.Variable(interaction_H.shape[1])
-                self.variables_[f'interaction_coef_{pair_ix}'] = interaction_coef
-                interaction_weight = float(
-                    np.sqrt(left_cfg.reg_weight * right_cfg.reg_weight)
-                )
-                regularization_term += interaction_weight * cvxpy.sum_squares(interaction_coef)
-                interaction_Hs.append(interaction_H)
-
-            for ix, (_, Hs) in enumerate(exog_fit_data):
-                # Sum over lags: H @ exog_coef[:, lag_ix] for each lag
-                model_term += cvxpy.sum(expr=[H[self.combined_valid_mask_] @ self.variables_[f'exog_coef_{ix}'][:, lag_ix] for lag_ix, H in enumerate(Hs)])
-
-            for pair_ix, interaction_H in enumerate(interaction_Hs):
-                model_term += interaction_H[self.combined_valid_mask_] @ self.variables_[f'interaction_coef_{pair_ix}']
-
-
-
-        if self.config.multi_periodic_config:
-            # Generate basis matrix for max index + 1, then index with time_indices
-            # This ensures correct phase alignment (as shown in notebook)
-            max_idx = int(np.max(time_indices))
-            F_full = make_basis_matrix(
-                num_harmonics=self.config.multi_periodic_config.num_harmonics,
-                length=max_idx + 1,
-                periods=self.config.multi_periodic_config.periods
-            )
-            # Index with time_indices to get correct rows
-            F = F_full[time_indices.astype(int), 1:]  # Drop constant column
-
-            Wf = self._make_regularization_matrix(
-                num_harmonics=self.config.multi_periodic_config.num_harmonics,
-                weight=1.0,
-                periods=self.config.multi_periodic_config.periods,
-                drop_constant=True
-            )
-            self.variables_['fourier_coef'] = cvxpy.Variable(F.shape[1])
-            regularization_term += self.config.multi_periodic_config.reg_weight * cvxpy.sum_squares(Wf @ self.variables_['fourier_coef'])
-            model_term += F[self.combined_valid_mask_] @ self.variables_['fourier_coef']
+        self._sample_weight_ = design.sample_weight
+        self.combined_valid_mask_ = design.valid_mask
+        self.interaction_pairs_ = design.interaction_pairs
+        self._fit_design_ = design
+        self.variables_, regularization_term = make_single_output_standard_variables(
+            self.config,
+            design,
+        )
+        model_term = single_output_prediction_expression(
+            self.config,
+            design,
+            self.variables_,
+            self.combined_valid_mask_,
+        )
 
         # Add trend term if configured
-        trend_term = None
         constraints = []
         if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE:
             trend_config = self.config.trend_config
@@ -1926,7 +1332,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
             # Create T matrix: maps each sample to its period
             # T[i, j] = 1 if sample i belongs to period j, else 0
-            T = np.zeros((len(y), n_periods))
+            T = np.zeros((len(fit_y), n_periods))
             # Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i
             T[np.arange(len(period_indices)), period_indices] = 1.0
 
@@ -1978,7 +1384,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
             # Create T matrix: maps each sample to its period
             # T[i, j] = 1 if sample i belongs to period j, else 0
-            T = np.zeros((len(y), n_periods))
+            T = np.zeros((len(fit_y), n_periods))
             # Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i
             T[np.arange(len(period_indices)), period_indices] = 1.0
 
@@ -1996,23 +1402,18 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             regularization_term += outlier_config.reg_weight * cvxpy.norm1(outlier)
 
         # Weighted least squares: sum(w_i * r_i^2) / sum(w_i) on valid samples
-        residual = y[self.combined_valid_mask_] - model_term
+        y_valid = fit_y[self.combined_valid_mask_]
         weight_valid = self._sample_weight_[self.combined_valid_mask_]
-        error = cvxpy.sum_squares(cvxpy.multiply(np.sqrt(weight_valid), residual)) / np.sum(weight_valid)
+        error = weighted_squared_loss(y_valid, model_term, weight_valid)
         self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term), constraints)
-        self.problem_.solve(
-            solver=self.config.solver_config.solver,
-            verbose=self.config.solver_config.verbose,
-            warm_start=self.config.solver_config.warm_start,
-            **self.config.solver_config._solve_kwargs(),
+        solve_problem(
+            self.problem_,
+            self.config.solver_config,
+            failure_message=(
+                "Optimization problem did not converge. "
+                "This may cause NaN predictions. Check your data and model configuration."
+            ),
         )
-
-        # Check convergence
-        if self.problem_.status not in ["optimal", "optimal_inaccurate"]:
-            raise ValueError(
-                f"Optimization problem did not converge. Status: {self.problem_.status}. "
-                f"This may cause NaN predictions. Check your data and model configuration."
-            )
 
         # Check that constant term is valid
         if self.variables_['constant'].value is None or np.isnan(self.variables_['constant'].value):
@@ -2022,7 +1423,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
 
         # Fit AR model if configured
         if self.config.ar_config is not None:
-            self._fit_ar_model(X_array, y, time_indices)
+            self._fit_ar_model(X_array, fit_y, time_indices)
 
         return self
 
@@ -2039,49 +1440,11 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         time_indices : ndarray
             Time indices for Fourier basis.
         """
-        # Get baseline predictions
-        baseline_pred = np.full(len(y), self.variables_['constant'].value)
-
-        # Add exogenous terms if present
-        zero_lag_Hs: dict[int, ndarray] = {}
-        interaction_parent_indices = {
-            exog_ix
-            for pair in getattr(self, 'interaction_pairs_', [])
-            for exog_ix in pair
-        }
-        if self.config.exog_config:
-            for ix, exog_cfg in enumerate(self.config.exog_config):
-                exog_var = X_array[:, ix]
-                stored_knots = self.exog_knots_[ix] if isinstance(exog_cfg, TsgamSplineConfig) else None
-                _, Hs = self._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
-                if ix in interaction_parent_indices:
-                    zero_lag_Hs[ix] = self._get_zero_lag_H(exog_cfg, Hs)
-                exog_coef = self.variables_[f'exog_coef_{ix}'].value
-                if exog_coef is not None:
-                    exog_pred = np.sum([H @ exog_coef[:, lag_ix] for lag_ix, H in enumerate(Hs)], axis=0)
-                    baseline_pred += exog_pred
-
-        for pair_ix, (left_ix, right_ix) in enumerate(getattr(self, 'interaction_pairs_', [])):
-            interaction_coef = self.variables_[f'interaction_coef_{pair_ix}'].value
-            if interaction_coef is not None:
-                baseline_pred += self._interaction_contribution_from_blocks(
-                    zero_lag_Hs[left_ix],
-                    zero_lag_Hs[right_ix],
-                    interaction_coef,
-                )
-
-        # Add Fourier terms if present
-        if self.config.multi_periodic_config:
-            max_idx = int(np.max(time_indices))
-            F_full = make_basis_matrix(
-                num_harmonics=self.config.multi_periodic_config.num_harmonics,
-                length=max_idx + 1,
-                periods=self.config.multi_periodic_config.periods
-            )
-            F = F_full[time_indices.astype(int), 1:]  # Drop constant column
-            fourier_coef = self.variables_['fourier_coef'].value
-            if fourier_coef is not None:
-                baseline_pred += F @ fourier_coef
+        baseline_pred = evaluate_single_output_prediction(
+            self.config,
+            self._fit_design_,
+            self.variables_,
+        )
 
         # Add trend term if present
         if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_:
@@ -2190,177 +1553,26 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         """
         check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
 
-        # Sort by index or require sorted (config.sort_index)
-        (X,) = self._ensure_sorted_index(X)
-
-        # todo: check for nan in predict provided data
-
-        # Extract timestamps and validate
-        timestamps, X_array = self._ensure_timestamp_index(X)
-
-        # Prediction data must be regularly spaced at the fitted frequency.
-        self._validate_frequency(timestamps, self.freq_, allow_gaps=False)
-
-        # Convert timestamps to indices using stored reference
-        time_indices = self._timestamps_to_indices(timestamps, self.time_reference_)
-
-        # Validate X_array shape
-        X_array = check_array(X_array, ensure_min_features=len(self.config.exog_config or []))
-
-        # Initialize prediction with constant term
-        constant_value = self.variables_['constant'].value
-        if constant_value is None or np.isnan(constant_value):
-            raise ValueError(f"Constant term is None or NaN: {constant_value}")
-        predictions = np.full(len(X_array), constant_value)
-
-        # Add exogenous terms if present
-        zero_lag_Hs: dict[int, ndarray] = {}
-        interaction_parent_indices = {
-            exog_ix
-            for pair in getattr(self, 'interaction_pairs_', [])
-            for exog_ix in pair
-        }
-        if self.config.exog_config and not remove_exogenous:
-            for ix, exog_cfg in enumerate(self.config.exog_config):
-                exog_var = X_array[:, ix]
-
-                # Get stored knots if available (auto-computed during fit), otherwise None
-                stored_knots = self.exog_knots_[ix] if isinstance(exog_cfg, TsgamSplineConfig) else None
-
-                # Use _process_exog_config with stored knots (will use config knots if stored_knots is None)
-                valid_mask_pred, Hs_pred = self._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
-                if ix in interaction_parent_indices:
-                    zero_lag_Hs[ix] = self._get_zero_lag_H(exog_cfg, Hs_pred)
-
-                # Check for NaN in input variable (this is a real problem, not just boundary effects)
-                if np.any(np.isnan(exog_var)):
-                    raise ValueError(
-                        f"Exogenous variable {ix} contains NaN values. "
-                        f"NaN count: {np.sum(np.isnan(exog_var))} out of {len(exog_var)}"
-                    )
-
-                # Compute exogenous prediction
-                exog_coef = self.variables_[f'exog_coef_{ix}'].value
-                if exog_coef is None:
-                    raise ValueError(f"Exogenous coefficients for variable {ix} are None. Model may not have converged.")
-                if np.any(np.isnan(exog_coef)):
-                    raise ValueError(f"Exogenous coefficients for variable {ix} contain NaN.")
-
-                # Compute prediction - handle NaN from lead/lag operations gracefully
-                # NaN in basis matrices at boundaries is expected and handled by valid_mask
-                exog_pred = np.zeros(len(exog_var))
-                for lag_ix, H in enumerate(Hs_pred):
-                    # For each lag, compute contribution only for valid samples
-                    # Samples with NaN in basis matrix (from lead/lag boundaries) get 0 contribution
-                    H_clean = np.nan_to_num(H, nan=0.0)  # Replace NaN with 0 for matrix multiplication
-                    lag_contribution = H_clean @ exog_coef[:, lag_ix]
-                    exog_pred += lag_contribution
-
-                # Final check - should not have NaN after this
-                if np.any(np.isnan(exog_pred)):
-                    raise ValueError(
-                        f"Exogenous prediction for variable {ix} contains NaN after computation. "
-                        f"H shapes: {[H.shape for H in Hs_pred]}, exog_coef shape: {exog_coef.shape}, "
-                        f"valid_mask has {np.sum(valid_mask_pred)} valid samples out of {len(exog_var)}"
-                    )
-                predictions += exog_pred
-
-        for pair_ix, (left_ix, right_ix) in enumerate(
-            getattr(self, 'interaction_pairs_', []) if not remove_exogenous else []
-        ):
-            interaction_coef = self.variables_[f'interaction_coef_{pair_ix}'].value
-            if interaction_coef is None:
-                raise ValueError(
-                    f"Interaction coefficients for pair {pair_ix} are None. "
-                    "Model may not have converged."
-                )
-            if np.any(np.isnan(interaction_coef)):
-                raise ValueError(
-                    f"Interaction coefficients for pair {pair_ix} contain NaN."
-                )
-
-            interaction_pred = self._interaction_contribution_from_blocks(
-                zero_lag_Hs[left_ix],
-                zero_lag_Hs[right_ix],
-                interaction_coef,
-                nan_to_zero=True,
-            )
-            if np.any(np.isnan(interaction_pred)):
-                raise ValueError(
-                    f"Interaction prediction for pair {pair_ix} contains NaN. "
-                    f"left_H shape: {zero_lag_Hs[left_ix].shape}, "
-                    f"right_H shape: {zero_lag_Hs[right_ix].shape}, "
-                    f"interaction_coef shape: {interaction_coef.shape}"
-                )
-            predictions += interaction_pred
-
-        # Add Fourier terms if present
-        if self.config.multi_periodic_config and not remove_periodic:
-            # Check for NaN in time_indices
-            if np.any(np.isnan(time_indices)):
-                raise ValueError("Time indices contain NaN. Check timestamp conversion.")
-
-            # Generate basis matrix for max index + 1, then index with time_indices
-            max_idx = int(np.max(time_indices))
-            min_idx = int(np.min(time_indices))
-
-            # Handle negative indices (prediction before fit period)
-            # Generate basis matrix from 0 to max_idx, then adjust indices
-            if min_idx < 0:
-                # Generate enough basis matrix to cover negative indices
-                # We'll shift indices to be non-negative
-                offset = -min_idx
-                adjusted_indices = time_indices.astype(int) + offset
-                basis_length = max_idx + offset + 1
-            else:
-                adjusted_indices = time_indices.astype(int)
-                basis_length = max_idx + 1
-
-            # Validate indices are within bounds
-            if np.any(adjusted_indices < 0) or np.any(adjusted_indices >= basis_length):
-                raise ValueError(
-                    f"Adjusted indices out of bounds: min={adjusted_indices.min()}, "
-                    f"max={adjusted_indices.max()}, basis_length={basis_length}"
-                )
-
-            F_full = make_basis_matrix(
-                num_harmonics=self.config.multi_periodic_config.num_harmonics,
-                length=basis_length,
-                periods=self.config.multi_periodic_config.periods
-            )
-
-            # Check for NaN in basis matrix
-            if np.any(np.isnan(F_full)):
-                raise ValueError(
-                    f"Basis matrix contains NaN. basis_length={basis_length}, "
-                    f"F_full shape: {F_full.shape}, "
-                    f"time_indices range: [{min_idx}, {max_idx}]"
-                )
-
-            # Index with adjusted_indices to get correct rows
-            F = F_full[adjusted_indices, 1:]  # Drop constant column
-
-            # Check for NaN in indexed basis matrix
-            if np.any(np.isnan(F)):
-                raise ValueError(
-                    f"Indexed basis matrix F contains NaN. "
-                    f"F shape: {F.shape}, adjusted_indices range: [{adjusted_indices.min()}, {adjusted_indices.max()}]"
-                )
-
-            fourier_coef = self.variables_['fourier_coef'].value
-            if fourier_coef is None:
-                raise ValueError("Fourier coefficients are None. Model may not have converged.")
-
-            # Check for NaN in Fourier contribution
-            fourier_contrib = F @ fourier_coef
-            if np.any(np.isnan(fourier_contrib)):
-                raise ValueError(
-                    f"Fourier contribution contains NaN. F shape: {F.shape}, "
-                    f"fourier_coef shape: {fourier_coef.shape}, "
-                    f"adjusted_indices range: [{adjusted_indices.min()}, {adjusted_indices.max()}]"
-                )
-
-            predictions += fourier_contrib
+        X = sort_predict_X(X, sort_index=self.config.sort_index)
+        timestamps = _extract_timestamps(X)
+        validate_predict_frequency(timestamps, self.freq_)
+        design = build_tsgam_design(
+            self.config,
+            X,
+            y=None,
+            sample_weight=None,
+            knots_by_exog=self.exog_knots_,
+            reference=self.time_reference_,
+            freq=self.freq_,
+        )
+        time_indices = design.time_indices
+        predictions = evaluate_single_output_prediction(
+            self.config,
+            design,
+            self.variables_,
+            remove_periodic=remove_periodic,
+            remove_exogenous=remove_exogenous,
+        )
 
         # Add trend term if present
         if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_:
@@ -2568,168 +1780,6 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             ar_noise = ar_noise[-length:]
             samples[i] = baseline_pred + ar_noise
         return samples
-
-
-@dataclass(frozen=True)
-class _TsgamEstimatorInternalApi:
-    """Supported internal surface for estimators composed from TSGAM pieces."""
-
-    estimator_cls: type[TsgamEstimator]
-    config: TsgamEstimatorConfig
-
-    def new_estimator(self) -> TsgamEstimator:
-        return self.estimator_cls(deepcopy(self.config))
-
-    def normalize_X(self, X: pd.DataFrame) -> pd.DataFrame:
-        timestamps, X_array = _ensure_timestamp_index(X)
-        if isinstance(X.index, pd.DatetimeIndex):
-            columns = list(X.columns)
-        else:
-            columns = list(X.columns[1:])
-        return pd.DataFrame(X_array, index=timestamps, columns=columns)
-
-    def sort_fit_inputs(
-        self,
-        X: pd.DataFrame,
-        y: ndarray,
-        sample_weight: ndarray | None,
-    ) -> tuple[pd.DataFrame, ndarray, ndarray | None]:
-        return _ensure_sorted_index(
-            X,
-            sort_index=self.config.sort_index,
-            y=y,
-            sample_weight=sample_weight,
-        )
-
-    def sort_predict_X(self, X: pd.DataFrame) -> pd.DataFrame:
-        (X,) = _ensure_sorted_index(
-            X,
-            sort_index=self.config.sort_index,
-        )
-        return X
-
-    def infer_fit_frequency(self, timestamps: pd.DatetimeIndex) -> str:
-        inferred_freq = pd.infer_freq(timestamps)
-        if inferred_freq is None:
-            inferred_freq = _infer_frequency_from_differences(timestamps)
-        _validate_frequency(timestamps, inferred_freq, allow_gaps=True)
-        return _ensure_numeric_prefix(inferred_freq).lower()
-
-    def validate_predict_frequency(
-        self,
-        timestamps: pd.DatetimeIndex,
-        expected_freq: str,
-    ) -> None:
-        _validate_frequency(timestamps, expected_freq, allow_gaps=False)
-
-
-    @staticmethod
-    def step_timedelta(freq: str) -> pd.Timedelta:
-        return pd.to_timedelta(_to_pandas_timedelta_frequency(freq))
-
-    def resolve_exog_knots(self, X: pd.DataFrame) -> list[ndarray | None]:
-        if not self.config.exog_config:
-            return []
-        _, X_array = _ensure_timestamp_index(X)
-        return _resolve_exog_knots(self.config, X_array)
-
-    def build_design(
-        self,
-        X: pd.DataFrame,
-        y: ndarray | None = None,
-        sample_weight: ndarray | None = None,
-        *,
-        knots_by_exog: list[ndarray | None],
-        reference: pd.Timestamp,
-        freq: str,
-    ) -> _TsgamDesign:
-        return _build_tsgam_design(
-            self.config,
-            X,
-            y=y,
-            sample_weight=sample_weight,
-            knots_by_exog=knots_by_exog,
-            reference=reference,
-            freq=freq,
-        )
-
-    def make_regularization_matrix(self) -> spmatrix:
-        if self.config.multi_periodic_config is None:
-            raise ValueError("multi_periodic_config is required for Fourier regularization.")
-        return _make_regularization_matrix(
-            num_harmonics=self.config.multi_periodic_config.num_harmonics,
-            weight=1.0,
-            periods=self.config.multi_periodic_config.periods,
-            drop_constant=True,
-        )
-
-    def prediction_expression(
-        self,
-        design: _TsgamDesign,
-        variables: dict[str, cvxpy.Variable | list[cvxpy.Variable]],
-        horizon_ix: int,
-        valid_mask: ndarray,
-    ) -> cvxpy.Expression:
-        constant = cast(cvxpy.Variable, variables["constant"])
-        model_term = constant[horizon_ix]
-        if self.config.exog_config:
-            for ix, Hs in enumerate(design.exog_Hs):
-                exog_coefs = cast(list[cvxpy.Variable], variables[f"exog_coef_{ix}"])
-                exog_coef = exog_coefs[horizon_ix]
-                model_term += cvxpy.sum(
-                    expr=[
-                        H[valid_mask] @ exog_coef[:, lag_ix]
-                        for lag_ix, H in enumerate(Hs)
-                    ]
-                )
-        if self.config.multi_periodic_config:
-            assert design.fourier_basis is not None
-            fourier_coef = cast(cvxpy.Variable, variables["fourier_coef"])
-            model_term += design.fourier_basis[valid_mask] @ fourier_coef[:, horizon_ix]
-        for pair_ix, interaction_H in enumerate(design.interaction_Hs):
-            interaction_coef = cast(
-                cvxpy.Variable,
-                variables[f"interaction_coef_{pair_ix}"],
-            )
-            model_term += interaction_H[valid_mask] @ interaction_coef[:, horizon_ix]
-        return model_term
-
-    def evaluate_prediction(
-        self,
-        design: _TsgamDesign,
-        variables: dict[str, cvxpy.Variable | list[cvxpy.Variable]],
-        horizon_ix: int,
-    ) -> ndarray:
-        constant = cast(cvxpy.Variable, variables["constant"])
-        constant_values = cast(ndarray, constant.value)
-        predictions = np.full(
-            len(design.timestamps),
-            constant_values[horizon_ix],
-        )
-        if self.config.exog_config:
-            for ix, Hs in enumerate(design.exog_Hs):
-                exog_coefs = cast(list[cvxpy.Variable], variables[f"exog_coef_{ix}"])
-                exog_values = cast(ndarray, exog_coefs[horizon_ix].value)
-                for lag_ix, H in enumerate(Hs):
-                    predictions += np.nan_to_num(H, nan=0.0) @ exog_values[:, lag_ix]
-        if self.config.multi_periodic_config:
-            assert design.fourier_basis is not None
-            fourier_coef = cast(cvxpy.Variable, variables["fourier_coef"])
-            fourier_values = cast(ndarray, fourier_coef.value)
-            predictions += design.fourier_basis @ fourier_values[:, horizon_ix]
-        for pair_ix, interaction_H in enumerate(design.interaction_Hs):
-            interaction_coef = cast(
-                cvxpy.Variable,
-                variables[f"interaction_coef_{pair_ix}"],
-            )
-            interaction_values = cast(ndarray, interaction_coef.value)
-            predictions += (
-                np.nan_to_num(interaction_H, nan=0.0)
-                @ interaction_values[:, horizon_ix]
-            )
-        if np.any(np.isnan(predictions)):
-            raise ValueError("Forecast predictions contain NaN values.")
-        return predictions
 
 
 __all__ = [
