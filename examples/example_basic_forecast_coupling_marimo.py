@@ -396,11 +396,7 @@ def _(
             .melt(id_vars=["timestamp"], var_name="component", value_name="value")
         )
 
-    def driver_contribution_frame(
-        frame: pd.DataFrame,
-        horizon: int,
-    ) -> pd.DataFrame:
-        del horizon
+    def driver_contribution_frame(frame: pd.DataFrame) -> pd.DataFrame:
         contribution_columns = [
             "driver contribution",
             *[f"driver contribution lag {lag}" for lag in driver_lags()],
@@ -413,12 +409,11 @@ def _(
             .melt(id_vars=["timestamp"], var_name="component", value_name="value")
         )
 
-    def driver_response_frame(
-        results: dict[str, object],
-        horizon: int,
-    ) -> pd.DataFrame:
+    def driver_response_frame(results: dict[str, object]) -> pd.DataFrame:
         response_rows = []
         lags = driver_lags()
+        independent = results["independent"]
+        horizons = independent.horizons_
         true_weights = (
             driver_generation_weights()
             if results["use_driver"]
@@ -442,9 +437,8 @@ def _(
             )
 
         if results["use_driver"]:
-            independent = results["independent"]
             coupled = results["coupled"]
-            for response_horizon in independent.horizons_:
+            for response_horizon in horizons:
                 coupled_horizon_ix = coupled.horizons_.index(response_horizon)
                 independent_child = independent.forecast_estimators_[response_horizon]
                 for lag_ix, lag in enumerate(lags):
@@ -469,12 +463,12 @@ def _(
                         ),
                     )
         else:
-            for response_horizon in range(horizon + 1):
+            for response_horizon in horizons:
                 for lag in lags:
                     append_coefficient(response_horizon, lag, "independent", 0.0)
                     append_coefficient(response_horizon, lag, "coupled", 0.0)
 
-        for response_horizon in range(horizon + 1):
+        for response_horizon in horizons:
             for lag in lags:
                 append_coefficient(response_horizon, lag, "true", true_weights[lag])
         return pd.DataFrame(response_rows)
@@ -640,16 +634,10 @@ def _(
 ):
     train_stop = forecast_results["train_stop"]
     component_plot_data = component_frame(periodic_data)
-    driver_contribution_plot_data = driver_contribution_frame(
-        periodic_data,
-        horizon=len(forecast_results["actual"].columns),
-    )
+    driver_contribution_plot_data = driver_contribution_frame(periodic_data)
     metric_plot_data = metric_frame(forecast_results)
     model_difference_plot_data = model_difference_frame(forecast_results)
-    driver_response_plot_data = driver_response_frame(
-        forecast_results,
-        horizon=len(forecast_results["actual"].columns),
-    )
+    driver_response_plot_data = driver_response_frame(forecast_results)
     driver_linear_function_plot_data = driver_linear_function_frame(
         driver_response_plot_data,
         periodic_data,
@@ -770,6 +758,7 @@ def _(alt, driver_contribution_plot_data, mo, settings, style_chart):
 @app.cell
 def _(forecast_results, mo):
     max_origin_offset = min(96, len(forecast_results["x_eval"]) - 1)
+    max_horizon = max(forecast_results["independent"].horizons_)
     origin_slider = mo.ui.slider(
         start=0,
         stop=max_origin_offset,
@@ -779,10 +768,10 @@ def _(forecast_results, mo):
         full_width=True,
     )
     horizon_slider = mo.ui.slider(
-        start=1,
-        stop=len(forecast_results["actual"].columns),
+        start=0,
+        stop=max_horizon,
         step=1,
-        value=1,
+        value=min(1, max_horizon),
         label="Horizon to plot over evaluation time",
         full_width=True,
     )
