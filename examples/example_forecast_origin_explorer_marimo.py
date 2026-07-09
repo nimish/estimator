@@ -56,7 +56,6 @@ def _():
         sys.path.insert(0, str(src_dir))
 
     from tsgam_estimator import (
-        TsgamEstimator,
         TsgamEstimatorConfig,
         TsgamForecastConfig,
         TsgamForecastCouplingConfig,
@@ -68,7 +67,6 @@ def _():
     )
 
     return (
-        TsgamEstimator,
         TsgamEstimatorConfig,
         TsgamForecastConfig,
         TsgamForecastCouplingConfig,
@@ -86,7 +84,6 @@ def _():
 
 @app.cell
 def _(
-    TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamForecastConfig,
     TsgamForecastCouplingConfig,
@@ -163,7 +160,6 @@ def _(
             mode="independent",
         )
     ).fit(_x_train, _y_train)
-    _nowcast = TsgamEstimator(config=_base_config()).fit(_x_train, _y_train)
     _coupled = TsgamForecastEstimator(
         TsgamForecastConfig(
             horizon=forecast_horizon,
@@ -174,11 +170,6 @@ def _(
     ).fit(_x_train, _y_train)
     independent_prediction = _independent.predict(_x_eval)
     coupled_prediction = _coupled.predict(_x_eval)
-    nowcast_prediction = pd.Series(
-        _nowcast.predict(_x_eval),
-        index=_x_eval.index,
-        name="Nowcast",
-    )
     actual = pd.DataFrame(
         {
             f"horizon_{_horizon}": frame["observed"].shift(-_horizon).loc[_x_eval.index]
@@ -195,7 +186,6 @@ def _(
         frame,
         history_hours,
         independent_prediction,
-        nowcast_prediction,
         origin_times,
     )
 
@@ -231,7 +221,6 @@ def _(
     frame,
     history_hours,
     independent_prediction,
-    nowcast_prediction,
     plot_forecast_origin,
     plt,
     selected_origin,
@@ -243,7 +232,6 @@ def _(
             "Coupled forecast": coupled_prediction,
         },
         actual=frame["observed"],
-        nowcast=nowcast_prediction,
         origin=selected_origin,
         history_steps=history_hours,
         ax=_axis,

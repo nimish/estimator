@@ -65,7 +65,7 @@ def _manual_shifted_fit(
     y: np.ndarray,
     horizon: int,
 ) -> TsgamEstimator:
-    shifted_X = X.iloc[:-horizon].copy()
+    shifted_X = X.copy() if horizon == 0 else X.iloc[:-horizon].copy()
     shifted_X.index = shifted_X.index + pd.Timedelta(hours=horizon)
     estimator = TsgamEstimator(config=_base_config())
     estimator.fit(shifted_X, y[horizon:])
@@ -90,9 +90,14 @@ def test_independent_forecast_predict_returns_dataframe_columns():
     predictions = estimator.predict(X.iloc[-10:])
 
     assert isinstance(predictions, pd.DataFrame)
-    assert predictions.shape == (10, 3)
+    assert predictions.shape == (10, 4)
     assert predictions.index.equals(X.index[-10:])
-    assert list(predictions.columns) == ["horizon_1", "horizon_2", "horizon_3"]
+    assert list(predictions.columns) == [
+        "horizon_0",
+        "horizon_1",
+        "horizon_2",
+        "horizon_3",
+    ]
 
 
 def test_independent_forecast_aligns_child_models_to_target_time():
@@ -117,7 +122,7 @@ def test_independent_forecast_matches_manual_shifted_regressions():
     forecast_estimator.fit(X, y)
     forecast_predictions = forecast_estimator.predict(X_future)
 
-    for horizon_ix in range(1, horizon + 1):
+    for horizon_ix in range(horizon + 1):
         independent = _manual_shifted_fit(X, y, horizon_ix)
         expected = _predict_from_origin(independent, X_future, horizon_ix)
         np.testing.assert_allclose(
@@ -137,7 +142,7 @@ def test_coupled_zero_roughness_matches_manual_shifted_regressions():
     forecast_estimator.fit(X, y)
     forecast_predictions = forecast_estimator.predict(X.iloc[-8:])
 
-    for horizon_ix in (1, 2):
+    for horizon_ix in (0, 1, 2):
         independent = _manual_shifted_fit(X, y, horizon_ix)
         expected = _predict_from_origin(independent, X.iloc[-8:], horizon_ix)
         np.testing.assert_allclose(
@@ -173,7 +178,7 @@ def test_coupled_forecast_uses_shared_design_module(monkeypatch):
         config=_forecast_config(horizon=2, mode="coupled", roughness_weight=0.0)
     ).fit(X, y)
 
-    assert len(calls) == 2
+    assert len(calls) == 3
 
 
 def test_coupled_roughness_smooths_horizon_coefficients():
@@ -220,8 +225,25 @@ def test_coupled_forecast_rejects_irregular_predict_origins():
 
 
 def test_forecast_horizon_validation():
-    with pytest.raises(ValueError, match="horizon must be positive"):
-        TsgamForecastConfig(horizon=0, base_config=_base_config())
+    config = TsgamForecastConfig(horizon=0, base_config=_base_config())
+    assert config.horizon == 0
+
+    with pytest.raises(ValueError, match="horizon must be non-negative"):
+        TsgamForecastConfig(horizon=-1, base_config=_base_config())
+
+
+@pytest.mark.parametrize("mode", ["independent", "coupled"])
+def test_horizon_zero_fits_nowcast_only(mode):
+    X, y = _make_data()
+    estimator = TsgamForecastEstimator(
+        config=_forecast_config(horizon=0, mode=mode, roughness_weight=1.0)
+    ).fit(X, y)
+
+    predictions = estimator.predict(X.iloc[-8:])
+
+    assert estimator.horizons_ == [0]
+    assert list(predictions.columns) == ["horizon_0"]
+    assert predictions.index.equals(X.index[-8:])
 
 
 def test_coupled_forecast_rejects_outlier_config():

@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 from tsgam_estimator import (
-    TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamForecastConfig,
     TsgamForecastEstimator,
@@ -70,7 +69,6 @@ def nowcast_evaluation() -> tuple[
     X_train = X.iloc[:_TRAIN_SAMPLES]
     y_train = y.iloc[:_TRAIN_SAMPLES].to_numpy()
 
-    nowcast_model = TsgamEstimator(config=_base_config()).fit(X_train, y_train)
     forecast_model = TsgamForecastEstimator(
         TsgamForecastConfig(
             horizon=_HORIZON,
@@ -83,21 +81,12 @@ def nowcast_evaluation() -> tuple[
     # prediction history for lag=-1, not an additional scored origin.
     common_origins = X.index[_TRAIN_SAMPLES : _N_SAMPLES - _HORIZON]
     prediction_X = X.iloc[_TRAIN_SAMPLES - 1 : _N_SAMPLES - _HORIZON]
-    nowcast_predictions = pd.Series(
-        nowcast_model.predict(prediction_X),
-        index=prediction_X.index,
-        name="prediction",
-    ).loc[common_origins]
     forecast_predictions = forecast_model.predict(prediction_X).loc[common_origins]
 
     rows = []
     for horizon in range(_HORIZON + 1):
         target_times = common_origins + horizon * pd.Timedelta(hours=1)
-        predictions = (
-            nowcast_predictions.to_numpy()
-            if horizon == 0
-            else forecast_predictions[f"horizon_{horizon}"].to_numpy()
-        )
+        predictions = forecast_predictions[f"horizon_{horizon}"].to_numpy()
         rows.append(
             pd.DataFrame(
                 {
@@ -118,8 +107,7 @@ def nowcast_evaluation() -> tuple[
 def test_nowcast_and_forecasts_use_identical_valid_origins(nowcast_evaluation):
     evaluation, common_origins, target, forecast_columns = nowcast_evaluation
 
-    assert forecast_columns == [f"horizon_{h}" for h in range(1, _HORIZON + 1)]
-    assert "horizon_0" not in forecast_columns
+    assert forecast_columns == [f"horizon_{h}" for h in range(_HORIZON + 1)]
 
     for horizon, horizon_rows in evaluation.groupby("horizon", sort=True):
         pd.testing.assert_index_equal(

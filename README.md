@@ -59,19 +59,14 @@ uv add "tsgam-estimator[viz]"
 ```
 
 ```python
-import pandas as pd
-
-from tsgam_estimator import TsgamEstimator, plot_forecast_horizon, plot_forecast_origin
+from tsgam_estimator import plot_forecast_horizon, plot_forecast_origin
 
 predictions = forecaster.predict(X_test)
-nowcast = TsgamEstimator(config=base_config).fit(X_train, y_train).predict(X_test)
-nowcast = pd.Series(nowcast, index=X_test.index)
 
 # One path with its horizon-zero nowcast and horizon 1..H forecasts.
 plot_forecast_origin(
     predictions,
     actual=y,
-    nowcast=nowcast,
     origin=predictions.index[24],
 )
 
@@ -79,7 +74,7 @@ plot_forecast_origin(
 plot_forecast_horizon(predictions, actual=y, horizon=6)
 
 # The horizon-zero baseline over time.
-plot_forecast_horizon(predictions, actual=y, horizon=0, nowcast=nowcast)
+plot_forecast_horizon(predictions, actual=y, horizon=0)
 ```
 
 Both functions also accept a mapping of labels to prediction DataFrames for
