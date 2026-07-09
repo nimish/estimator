@@ -86,6 +86,23 @@ def test_forecast_to_long_dataframe_accepts_explicit_single_origin_frequency():
     ]
 
 
+def test_forecast_to_long_dataframe_prefers_actual_target_frequency():
+    actual, predictions, _ = _plot_data()
+    sparse = predictions.iloc[[0, -1]].copy()
+    sparse.index = pd.DatetimeIndex(
+        [predictions.index[0], predictions.index[0] + pd.Timedelta(days=1)]
+    )
+
+    long = forecast_to_long_dataframe(sparse, actual)
+
+    horizon_one = long[long["horizon"] == 1]
+    expected = sparse.index + pd.Timedelta(hours=1)
+    pd.testing.assert_index_equal(
+        pd.DatetimeIndex(horizon_one["target_time"]),
+        expected.rename("target_time"),
+    )
+
+
 def test_plot_forecast_origin_separates_history_and_future():
     actual, independent, coupled = _plot_data()
 
@@ -175,6 +192,10 @@ def test_forecast_plotting_rejects_invalid_prediction_shapes():
             {"first": predictions, "second": predictions.iloc[1:]},
             actual,
         )
+
+    noncontiguous = predictions.drop(columns="horizon_1")
+    with pytest.raises(ValueError, match="contiguous from horizon_0"):
+        forecast_to_long_dataframe(noncontiguous, actual)
 
 
 def test_public_forecast_plotting_imports_are_available():

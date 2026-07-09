@@ -173,7 +173,7 @@ def _(
     actual = pd.DataFrame(
         {
             f"horizon_{_horizon}": frame["observed"].shift(-_horizon).loc[_x_eval.index]
-            for _horizon in range(1, forecast_horizon + 1)
+            for _horizon in range(forecast_horizon + 1)
         },
         index=_x_eval.index,
     )
@@ -241,15 +241,7 @@ def _(
 
 
 @app.cell
-def _(
-    actual,
-    exog_lags,
-    forecast_horizon,
-    frame,
-    mo,
-    pd,
-    selected_origin,
-):
+def _(actual, exog_lags, forecast_horizon, frame, mo, pd, selected_origin):
     _feature_rows = []
     for _lag in exog_lags:
         _source_time = selected_origin + pd.Timedelta(hours=_lag)

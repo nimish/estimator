@@ -65,7 +65,6 @@ def _():
     )
 
     alt.data_transformers.disable_max_rows()
-
     return (
         TsgamEstimatorConfig,
         TsgamForecastConfig,
@@ -168,17 +167,12 @@ def _(np, pd):
         return pd.DataFrame(
             {
                 f"horizon_{step}": target_series.shift(-step).loc[origin_index]
-                for step in range(1, horizon + 1)
+                for step in range(horizon + 1)
             },
             index=origin_index,
         )
 
-    return (
-        FORECAST_HORIZON,
-        TRUE_WEATHER_EFFECT,
-        build_actual_targets,
-        make_simple_problem,
-    )
+    return FORECAST_HORIZON, build_actual_targets, make_simple_problem
 
 
 @app.cell
@@ -220,7 +214,7 @@ def _(FORECAST_HORIZON, mo, pd, true_weather_effect):
         ]
     )
     target_formula_view
-    return (truth_table,)
+    return
 
 
 @app.cell
@@ -425,7 +419,6 @@ def _(
         X_eval,
         learned_coefficients,
         simple_actuals,
-        simple_forecast_model,
         simple_metrics,
         simple_predictions,
         train_stop,
@@ -433,7 +426,7 @@ def _(
 
 
 @app.cell
-def _(mo, simple_problem_frame, train_stop):
+def _(mo, train_stop):
     split_view = mo.md(
         "## 4. Fit `TsgamForecastEstimator`\n\n"
         f"The first `{train_stop}` rows are made available to fitting. Horizon "
@@ -603,11 +596,21 @@ def _(FORECAST_HORIZON, learned_coefficients, pd, true_weather_effect):
             },
         ]
     )
-    return coefficient_comparison, coefficient_error_table, prediction_shape_table
+    return (
+        coefficient_comparison,
+        coefficient_error_table,
+        prediction_shape_table,
+    )
 
 
 @app.cell
-def _(alt, coefficient_comparison, coefficient_error_table, mo, prediction_shape_table):
+def _(
+    alt,
+    coefficient_comparison,
+    coefficient_error_table,
+    mo,
+    prediction_shape_table,
+):
     coefficient_chart = (
         alt.Chart(coefficient_comparison)
         .mark_line(point=True)
@@ -717,7 +720,7 @@ def _(alt, forecast_path_data, mo, selected_origin_time):
         [
             mo.md(
                 f"At forecast origin `{selected_origin_time}`, `predict` "
-                "returns one row with `horizon_1`, `horizon_2`, and "
+                "returns one row with `horizon_0`, `horizon_1`, `horizon_2`, and "
                 "`horizon_3`. The chart unwraps that row into target time."
             ),
             forecast_path_chart,

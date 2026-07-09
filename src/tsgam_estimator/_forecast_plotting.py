@@ -31,23 +31,44 @@ def _validate_time_index(index: pd.Index, *, name: str) -> pd.DatetimeIndex:
         raise ValueError(f"{name} index must contain unique timestamps.")
     if not index.is_monotonic_increasing:
         raise ValueError(f"{name} index must be sorted in increasing time order.")
+    if index.empty:
+        raise ValueError(f"{name} index must not be empty.")
     return index
 
 
 def _horizon_columns(predictions: pd.DataFrame) -> list[tuple[int, str]]:
+    if not isinstance(predictions, pd.DataFrame):
+        raise TypeError("forecast predictions must be a pandas DataFrame.")
     if not predictions.columns.is_unique:
         raise ValueError("forecast prediction columns must be unique.")
     columns = []
     for column in predictions.columns:
         match = _HORIZON_COLUMN.fullmatch(str(column))
-        if match:
-            horizon = int(match.group(1))
-            columns.append((horizon, str(column)))
+        if match is None:
+            raise ValueError(
+                f"invalid forecast prediction column {column!r}; expected horizon_0, "
+                "horizon_1, ..."
+            )
+        horizon = int(match.group(1))
+        canonical = f"horizon_{horizon}"
+        if column != canonical:
+            raise ValueError(
+                f"invalid forecast prediction column {column!r}; use {canonical!r}."
+            )
+        columns.append((horizon, canonical))
     if not columns:
         raise ValueError(
             "forecast predictions must contain columns named horizon_0, horizon_1, ..."
         )
-    return sorted(columns)
+    columns.sort()
+    horizons = [horizon for horizon, _ in columns]
+    expected = list(range(horizons[-1] + 1))
+    if horizons != expected:
+        raise ValueError(
+            "forecast prediction columns must be contiguous from horizon_0; "
+            f"got {horizons}."
+        )
+    return columns
 
 
 def _infer_offset(index: pd.DatetimeIndex) -> BaseOffset | None:
@@ -67,9 +88,11 @@ def _resolve_offset(
 ) -> BaseOffset:
     if freq is not None:
         return to_offset(freq)
-    offset = _infer_offset(origins)
-    if offset is None and actual_index is not None:
+    offset = None
+    if actual_index is not None:
         offset = _infer_offset(actual_index)
+    if offset is None:
+        offset = _infer_offset(origins)
     if offset is None:
         raise ValueError(
             "Could not infer forecast frequency. Pass freq explicitly, for example "

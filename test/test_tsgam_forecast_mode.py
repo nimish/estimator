@@ -197,15 +197,31 @@ def test_coupled_roughness_smooths_horizon_coefficients():
     ).fit(X, y)
 
     unsmoothed_coefs = np.array(
-        [coef.value[0, 0] for coef in unsmoothed.variables_["exog_coef_0"]]
+        [coef.value[0, 0] for coef in unsmoothed.variables_["exog_coef_0"]][1:]
     )
     smoothed_coefs = np.array(
-        [coef.value[0, 0] for coef in smoothed.variables_["exog_coef_0"]]
+        [coef.value[0, 0] for coef in smoothed.variables_["exog_coef_0"]][1:]
     )
 
     assert np.sum(np.diff(smoothed_coefs) ** 2) < np.sum(
         np.diff(unsmoothed_coefs) ** 2
     )
+
+
+def test_coupling_does_not_bias_horizon_zero_nowcast():
+    X, y = _make_data(n_samples=120)
+    independent = TsgamForecastEstimator(
+        config=_forecast_config(horizon=4, mode="independent")
+    ).fit(X, y)
+    coupled = TsgamForecastEstimator(
+        config=_forecast_config(horizon=4, mode="coupled", roughness_weight=100.0)
+    ).fit(X, y)
+
+    X_eval = X.iloc[-12:]
+    independent_h0 = independent.predict(X_eval)["horizon_0"]
+    coupled_h0 = coupled.predict(X_eval)["horizon_0"]
+
+    np.testing.assert_allclose(coupled_h0, independent_h0, rtol=1e-5, atol=1e-5)
 
 
 def test_public_forecast_imports_are_available():
@@ -230,6 +246,31 @@ def test_forecast_horizon_validation():
 
     with pytest.raises(ValueError, match="horizon must be non-negative"):
         TsgamForecastConfig(horizon=-1, base_config=_base_config())
+
+
+def test_forecast_config_rejects_ignored_or_invalid_coupling_config():
+    coupling = TsgamForecastCouplingConfig()
+
+    with pytest.raises(ValueError, match="only valid when mode='coupled'"):
+        TsgamForecastConfig(
+            horizon=1,
+            base_config=_base_config(),
+            mode="independent",
+            coupling_config=coupling,
+        )
+    with pytest.raises(TypeError, match="TsgamForecastCouplingConfig"):
+        TsgamForecastConfig(
+            horizon=1,
+            base_config=_base_config(),
+            mode="coupled",
+            coupling_config={"roughness_weight": 1.0},  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize("roughness_order", [True, 0, 3, 1.5, None])
+def test_forecast_coupling_rejects_invalid_roughness_order(roughness_order):
+    with pytest.raises(ValueError, match="roughness_order must be 1 or 2"):
+        TsgamForecastCouplingConfig(roughness_order=roughness_order)
 
 
 @pytest.mark.parametrize("mode", ["independent", "coupled"])
