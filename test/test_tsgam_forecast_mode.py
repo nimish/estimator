@@ -6,6 +6,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+import tsgam_estimator._forecast as forecast_module
 
 from tsgam_estimator import (
     TsgamEstimator,
@@ -147,22 +148,22 @@ def test_coupled_zero_roughness_matches_manual_shifted_regressions():
         )
 
 
-def test_coupled_forecast_uses_estimator_internal_api(monkeypatch):
+def test_coupled_forecast_uses_shared_design_module(monkeypatch):
     X, y = _make_data()
-    original_internal_api = TsgamEstimator._internal_api.__func__
+    original_build_design = forecast_module.build_tsgam_design
     calls = []
 
-    def tracking_internal_api(cls, config):
+    def tracking_build_design(config, *args, **kwargs):
         calls.append(config)
-        return original_internal_api(cls, config)
+        return original_build_design(config, *args, **kwargs)
 
     def fail_private_helper(*args, **kwargs):
-        raise AssertionError("coupled forecast should not call estimator private helpers")
+        raise AssertionError("coupled forecast should use shared design functions")
 
     monkeypatch.setattr(
-        TsgamEstimator,
-        "_internal_api",
-        classmethod(tracking_internal_api),
+        forecast_module,
+        "build_tsgam_design",
+        tracking_build_design,
     )
     monkeypatch.setattr(TsgamEstimator, "_process_exog_config", fail_private_helper)
     monkeypatch.setattr(TsgamEstimator, "_normalize_interaction_pairs", fail_private_helper)
@@ -172,7 +173,7 @@ def test_coupled_forecast_uses_estimator_internal_api(monkeypatch):
         config=_forecast_config(horizon=2, mode="coupled", roughness_weight=0.0)
     ).fit(X, y)
 
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_coupled_roughness_smooths_horizon_coefficients():
@@ -197,8 +198,8 @@ def test_coupled_roughness_smooths_horizon_coefficients():
         [coef.value[0, 0] for coef in smoothed.variables_["exog_coef_0"]]
     )
 
-    assert np.sum(np.diff(smoothed_coefs, n=2) ** 2) < np.sum(
-        np.diff(unsmoothed_coefs, n=2) ** 2
+    assert np.sum(np.diff(smoothed_coefs) ** 2) < np.sum(
+        np.diff(unsmoothed_coefs) ** 2
     )
 
 

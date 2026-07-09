@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Alliance for Sustainable Energy, LLC and Nimish Telang
 # SPDX-License-Identifier: BSD-3-Clause
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal
 
@@ -10,10 +11,27 @@ import pandas as pd
 from numpy import ndarray
 from sklearn.base import BaseEstimator, RegressorMixin, check_is_fitted
 
+from ._design import (
+    build_tsgam_design,
+    infer_fit_frequency,
+    normalize_X,
+    resolve_exog_knots,
+    sort_fit_inputs,
+    sort_predict_X,
+    step_timedelta,
+    validate_predict_frequency,
+)
 from ._estimator import (
     TrendType,
     TsgamEstimator,
     TsgamEstimatorConfig,
+)
+from ._problem import (
+    evaluate_horizon_prediction,
+    horizon_prediction_expression,
+    make_horizon_standard_variables,
+    solve_problem,
+    weighted_squared_loss,
 )
 
 _ForecastVariable = cvxpy.Variable | list[cvxpy.Variable]
@@ -29,8 +47,8 @@ class TsgamForecastCouplingConfig:
     roughness_weight : float, default=1.0
         Weight for coefficient roughness penalties across forecast horizons.
     roughness_order : int or None, default=None
-        Difference order across horizons. If None, uses 2 when horizon >= 3 and
-        1 when horizon == 2.
+        Difference order across horizons. If None, uses first differences.
+        Supported values are 1 and 2.
     """
 
     roughness_weight: float = 1.0
@@ -83,7 +101,6 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
                 f"config must be a TsgamForecastConfig, got {type(config).__name__}."
             )
         self.config = config
-        self._model_api = TsgamEstimator._internal_api(config.base_config)
 
     def _target_time_X(self, X: pd.DataFrame, horizon: int) -> pd.DataFrame:
         shifted = X.copy()
@@ -115,19 +132,24 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
         y: ndarray,
         sample_weight: ndarray | None,
     ) -> tuple[pd.DataFrame, ndarray, ndarray | None]:
-        X = self._model_api.normalize_X(X)
+        X = normalize_X(X)
         if sample_weight is not None:
             weight = np.asarray(sample_weight)
             if weight.ndim != 1 or weight.shape[0] != len(y):
                 raise ValueError(
                     f"sample_weight must have shape (n_samples,) = ({len(y)},), got {weight.shape}"
                 )
-        X, y, sample_weight = self._model_api.sort_fit_inputs(X, y, sample_weight)
+        X, y, sample_weight = sort_fit_inputs(
+            X,
+            sort_index=self.config.base_config.sort_index,
+            y=y,
+            sample_weight=sample_weight,
+        )
         timestamps = X.index
         if not isinstance(timestamps, pd.DatetimeIndex):
             raise TypeError("Forecast inputs must have a DatetimeIndex after normalization.")
-        self.freq_ = self._model_api.infer_fit_frequency(timestamps)
-        self.step_ = self._model_api.step_timedelta(self.freq_)
+        self.freq_ = infer_fit_frequency(timestamps)
+        self.step_ = step_timedelta(self.freq_)
         self.time_reference_ = timestamps[0]
         self.origin_index_ = timestamps
         return X, np.asarray(y), sample_weight
@@ -156,7 +178,7 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             X_horizon, y_horizon, weight_horizon = self._fit_data_for_horizon(
                 X, y, sample_weight, horizon
             )
-            estimator = self._model_api.new_estimator()
+            estimator = TsgamEstimator(deepcopy(self.config.base_config))
             estimator.fit(X_horizon, y_horizon, sample_weight=weight_horizon)
             self.forecast_estimators_[horizon] = estimator
         return self
@@ -184,7 +206,7 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
         coupling = self.config.coupling_config or TsgamForecastCouplingConfig()
         roughness_order = coupling.roughness_order
         if roughness_order is None:
-            roughness_order = 2 if self.config.horizon >= 3 else 1
+            roughness_order = 1
         if self.config.horizon <= roughness_order:
             roughness_order = 1
 
@@ -198,13 +220,14 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
                 cvxpy.diff(coef_by_horizon, k=roughness_order, axis=1)
             )
 
-        self.exog_knots_ = self._model_api.resolve_exog_knots(X)
+        self.exog_knots_ = resolve_exog_knots(base_config, X)
         horizon_data = [
             self._fit_data_for_horizon(X, y, sample_weight, horizon)
             for horizon in self.horizons_
         ]
         designs = [
-            self._model_api.build_design(
+            build_tsgam_design(
+                base_config,
                 X_horizon,
                 y_horizon,
                 weight_horizon,
@@ -215,83 +238,17 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             for X_horizon, y_horizon, weight_horizon in horizon_data
         ]
 
-        n_horizons = len(self.horizons_)
-        self.variables_: dict[str, _ForecastVariable] = {
-            "constant": cvxpy.Variable(n_horizons)
-        }
-        regularization_term = cvxpy.Constant(0.0)
-        losses = []
-
-        if base_config.exog_config:
-            for ix, exog_cfg in enumerate(base_config.exog_config):
-                basis_dim = designs[0].exog_Hs[ix][0].shape[1]
-                num_lags = len(exog_cfg.lags)
-                horizon_vars = [
-                    cvxpy.Variable((basis_dim, num_lags))
-                    for _ in self.horizons_
-                ]
-                self.variables_[f"exog_coef_{ix}"] = horizon_vars
-                for exog_coef in horizon_vars:
-                    regularization_term += exog_cfg.reg_weight * cvxpy.sum_squares(exog_coef)
-                    if num_lags > 1:
-                        regularization_term += (
-                            exog_cfg.diff_reg_weight
-                            * cvxpy.sum_squares(cvxpy.diff(exog_coef, axis=1))
-                        )
-                flattened = cvxpy.hstack(
-                    [
-                        cvxpy.reshape(exog_coef, (basis_dim * num_lags, 1), order="F")
-                        for exog_coef in horizon_vars
-                    ]
-                )
-                regularization_term = add_horizon_roughness(
-                    regularization_term,
-                    flattened,
-                )
-
-        if base_config.multi_periodic_config:
-            assert designs[0].fourier_basis is not None
-            fourier_dim = designs[0].fourier_basis.shape[1]
-            fourier_coef = cvxpy.Variable((fourier_dim, n_horizons))
-            self.variables_["fourier_coef"] = fourier_coef
-            fourier_regularizer = self._model_api.make_regularization_matrix()
-            for horizon_ix in range(n_horizons):
-                regularization_term += (
-                    base_config.multi_periodic_config.reg_weight
-                    * cvxpy.sum_squares(fourier_regularizer @ fourier_coef[:, horizon_ix])
-                )
-            regularization_term = add_horizon_roughness(
-                regularization_term,
-                fourier_coef,
-            )
-
-        interaction_pairs = designs[0].interaction_pairs
-        exog_config = base_config.exog_config
-        for pair_ix, (left_ix, right_ix) in enumerate(interaction_pairs):
-            assert exog_config is not None
-            interaction_dim = designs[0].interaction_Hs[pair_ix].shape[1]
-            interaction_coef = cvxpy.Variable((interaction_dim, n_horizons))
-            self.variables_[f"interaction_coef_{pair_ix}"] = interaction_coef
-            left_cfg = exog_config[left_ix]
-            right_cfg = exog_config[right_ix]
-            interaction_weight = float(np.sqrt(left_cfg.reg_weight * right_cfg.reg_weight))
-            for horizon_ix in range(n_horizons):
-                regularization_term += interaction_weight * cvxpy.sum_squares(
-                    interaction_coef[:, horizon_ix]
-                )
-            regularization_term = add_horizon_roughness(
-                regularization_term,
-                interaction_coef,
-            )
-
-        regularization_term = add_horizon_roughness(
-            regularization_term,
-            cvxpy.reshape(self.variables_["constant"], (1, n_horizons), order="F"),
+        self.variables_, regularization_term = make_horizon_standard_variables(
+            base_config,
+            designs,
+            horizon_regularizer=add_horizon_roughness,
         )
+        losses = []
 
         for horizon_ix, design in enumerate(designs):
             valid_mask = design.valid_mask
-            model_term = self._model_api.prediction_expression(
+            model_term = horizon_prediction_expression(
+                base_config,
                 design,
                 self.variables_,
                 horizon_ix,
@@ -301,25 +258,16 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             assert design.sample_weight is not None
             y_valid = design.y[valid_mask]
             weight_valid = design.sample_weight[valid_mask]
-            residual = y_valid - model_term
-            losses.append(
-                cvxpy.sum_squares(cvxpy.multiply(np.sqrt(weight_valid), residual))
-                / np.sum(weight_valid)
-            )
+            losses.append(weighted_squared_loss(y_valid, model_term, weight_valid))
 
         self.problem_ = cvxpy.Problem(
             cvxpy.Minimize(cvxpy.sum(losses) + regularization_term),
         )
-        self.problem_.solve(
-            solver=base_config.solver_config.solver,
-            verbose=base_config.solver_config.verbose,
-            warm_start=base_config.solver_config.warm_start,
-            **base_config.solver_config._solve_kwargs(),
+        solve_problem(
+            self.problem_,
+            base_config.solver_config,
+            failure_message="Optimization problem did not converge.",
         )
-        if self.problem_.status not in ["optimal", "optimal_inaccurate"]:
-            raise ValueError(
-                f"Optimization problem did not converge. Status: {self.problem_.status}."
-            )
         return self
 
     def predict(
@@ -331,12 +279,12 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
     ) -> pd.DataFrame:
         """Predict all configured forecast horizons for each forecast origin."""
         check_is_fitted(self, ["horizons_", "freq_", "step_"])
-        X = self._model_api.normalize_X(X)
-        X = self._model_api.sort_predict_X(X)
+        X = normalize_X(X)
+        X = sort_predict_X(X, sort_index=self.config.base_config.sort_index)
         origin_index = X.index
         if not isinstance(origin_index, pd.DatetimeIndex):
             raise TypeError("Forecast inputs must have a DatetimeIndex after normalization.")
-        self._model_api.validate_predict_frequency(origin_index, self.freq_)
+        validate_predict_frequency(origin_index, self.freq_)
 
         columns: dict[str, ndarray] = {}
         if self.config.mode == "independent":
@@ -357,7 +305,8 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             )
             for horizon_ix, horizon in enumerate(self.horizons_):
                 X_horizon = self._target_time_X(X, horizon)
-                design = self._model_api.build_design(
+                design = build_tsgam_design(
+                    self.config.base_config,
                     X_horizon,
                     y=None,
                     sample_weight=None,
@@ -365,7 +314,8 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
                     reference=self.time_reference_,
                     freq=self.freq_,
                 )
-                columns[f"horizon_{horizon}"] = self._model_api.evaluate_prediction(
+                columns[f"horizon_{horizon}"] = evaluate_horizon_prediction(
+                    self.config.base_config,
                     design,
                     self.variables_,
                     horizon_ix,
