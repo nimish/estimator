@@ -70,9 +70,11 @@ class TsgamForecastConfig:
     """
     Configuration for direct multi-horizon forecast mode.
 
-    Forecast mode trains one direct regression per horizon. For horizon ``h``,
+    Forecast mode trains one direct regression per horizon, including the
+    horizon-zero nowcast. For horizon ``h``,
     each row uses exogenous data available at the forecast origin and the target
-    at ``origin + h``. ``predict`` returns one column per horizon.
+    at ``origin + h``. ``horizon`` is the largest requested horizon, so
+    ``predict`` returns ``horizon_0`` through ``horizon_H``.
     """
 
     horizon: int
@@ -82,9 +84,9 @@ class TsgamForecastConfig:
 
     def __post_init__(self) -> None:
         if not isinstance(self.horizon, (int, np.integer)) or isinstance(self.horizon, bool):
-            raise ValueError(f"horizon must be a positive integer, got {self.horizon!r}.")
-        if self.horizon < 1:
-            raise ValueError(f"horizon must be positive, got {self.horizon!r}.")
+            raise ValueError(f"horizon must be a non-negative integer, got {self.horizon!r}.")
+        if self.horizon < 0:
+            raise ValueError(f"horizon must be non-negative, got {self.horizon!r}.")
         if self.mode not in ("independent", "coupled"):
             raise ValueError(f"mode must be 'independent' or 'coupled', got {self.mode!r}.")
         if self.mode == "coupled" and self.coupling_config is None:
@@ -114,6 +116,8 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
         sample_weight: ndarray | None,
         horizon: int,
     ) -> tuple[pd.DataFrame, ndarray, ndarray | None]:
+        if horizon == 0:
+            return X.copy(), np.asarray(y), sample_weight
         if len(y) <= horizon:
             raise ValueError(
                 f"Need more samples than forecast horizon; got {len(y)} samples "
@@ -160,9 +164,9 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
         y: ndarray,
         sample_weight: ndarray | None = None,
     ) -> "TsgamForecastEstimator":
-        """Fit direct forecast models for horizons 1 through ``config.horizon``."""
+        """Fit direct models for horizons 0 through ``config.horizon``."""
         X, y, sample_weight = self._prepare_fit_inputs(X, y, sample_weight)
-        self.horizons_ = list(range(1, int(self.config.horizon) + 1))
+        self.horizons_ = list(range(int(self.config.horizon) + 1))
         if self.config.mode == "independent":
             return self._fit_independent(X, y, sample_weight)
         return self._fit_coupled(X, y, sample_weight)
@@ -207,14 +211,15 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
         roughness_order = coupling.roughness_order
         if roughness_order is None:
             roughness_order = 1
-        if self.config.horizon <= roughness_order:
+        n_horizons = len(self.horizons_)
+        if n_horizons <= roughness_order:
             roughness_order = 1
 
         def add_horizon_roughness(
             term: cvxpy.Expression,
             coef_by_horizon: cvxpy.Expression,
         ) -> cvxpy.Expression:
-            if coupling.roughness_weight == 0 or self.config.horizon < 2:
+            if coupling.roughness_weight == 0 or n_horizons < 2:
                 return term
             return term + coupling.roughness_weight * cvxpy.sum_squares(
                 cvxpy.diff(coef_by_horizon, k=roughness_order, axis=1)
