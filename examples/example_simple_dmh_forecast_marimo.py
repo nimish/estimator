@@ -30,10 +30,10 @@ def _(mo):
     walkthrough_intro = mo.md(
         "# A Simple Direct Multi-Horizon Forecast\n\n"
         "This notebook builds the smallest useful forecast-mode example: one "
-        "known driver, one target series, and three direct forecast horizons. "
+        "known driver, one target series, a nowcast, and three forecast horizons. "
         "It keeps the synthetic data small so the core contract is visible: "
         "`fit(X, y)` learns `demand[t + h]` from information at origin `t`, "
-        "and `predict(X_future)` returns one column per horizon.\n\n"
+        "and `predict(X_future)` returns `horizon_0` through `horizon_H`.\n\n"
         "The target is generated so that the weather value at a forecast "
         "origin has a different effect at each future horizon."
     )
@@ -308,7 +308,7 @@ def _(FORECAST_HORIZON, pd, simple_problem_frame):
     example_origin_position = 8
     example_origin_time = simple_problem_frame.index[example_origin_position]
     alignment_rows = []
-    for alignment_step in range(1, FORECAST_HORIZON + 1):
+    for alignment_step in range(FORECAST_HORIZON + 1):
         alignment_target_time = simple_problem_frame.index[
             example_origin_position + alignment_step
         ]
@@ -325,7 +325,11 @@ def _(FORECAST_HORIZON, pd, simple_problem_frame):
                     float(simple_problem_frame.loc[alignment_target_time, "demand"]),
                     3,
                 ),
-                "array slice": f"X[:-{alignment_step}] -> y[{alignment_step}:]",
+                "array slice": (
+                    "X -> y"
+                    if alignment_step == 0
+                    else f"X[:-{alignment_step}] -> y[{alignment_step}:]"
+                ),
             }
         )
     alignment_table = pd.DataFrame(alignment_rows)
@@ -339,10 +343,10 @@ def _(alignment_table, mo):
             mo.md(
                 "## 3. Direct multi-horizon alignment\n\n"
                 "For every forecast origin, direct multi-horizon forecasting "
-                "creates one target per future step. Horizon 1 predicts the "
-                "next row, horizon 2 predicts two rows ahead, and horizon 3 "
-                "predicts three rows ahead.\n\n"
-                "This is why the training slices are `X[:-1] -> y[1:]`, "
+                "creates a target at every supported offset. Horizon 0 is the "
+                "origin-time nowcast, horizon 1 predicts the next row, and so on.\n\n"
+                "The nowcast uses `X -> y`; the future training slices are "
+                "`X[:-1] -> y[1:]`, "
                 "`X[:-2] -> y[2:]`, and `X[:-3] -> y[3:]`."
             ),
             mo.ui.table(alignment_table, pagination=False),
@@ -394,7 +398,7 @@ def _(
     )
     metric_rows = []
     coefficient_rows = []
-    for metric_step in range(1, FORECAST_HORIZON + 1):
+    for metric_step in range(FORECAST_HORIZON + 1):
         metric_column = f"horizon_{metric_step}"
         forecast_error = simple_predictions[metric_column] - simple_actuals[metric_column]
         metric_rows.append(
@@ -404,15 +408,16 @@ def _(
                 "mae": float(np.mean(np.abs(forecast_error))),
             }
         )
-        child_model = simple_forecast_model.forecast_estimators_[metric_step]
-        coefficient_rows.append(
-            {
-                "horizon": metric_step,
-                "learned coefficient": float(
-                    child_model.variables_["exog_coef_0"].value[0, 0]
-                ),
-            }
-        )
+        if metric_step > 0:
+            child_model = simple_forecast_model.forecast_estimators_[metric_step]
+            coefficient_rows.append(
+                {
+                    "horizon": metric_step,
+                    "learned coefficient": float(
+                        child_model.variables_["exog_coef_0"].value[0, 0]
+                    ),
+                }
+            )
     simple_metrics = pd.DataFrame(metric_rows)
     learned_coefficients = pd.DataFrame(coefficient_rows)
     return (
@@ -436,8 +441,8 @@ def _(mo, train_stop):
         "also drops the dataset tail that cannot provide all future targets.\n\n"
         "The model receives a normal single-output `TsgamEstimatorConfig`, then "
         "`TsgamForecastConfig(horizon=3, mode=\"independent\")` turns it into "
-        "three direct forecast regressions with output columns `horizon_1`, "
-        "`horizon_2`, and `horizon_3`."
+        "four direct regressions: the `horizon_0` nowcast plus forecast "
+        "columns `horizon_1`, `horizon_2`, and `horizon_3`."
     )
     split_view
     return
@@ -586,7 +591,7 @@ def _(FORECAST_HORIZON, learned_coefficients, pd, true_weather_effect):
                 "object": "predictions",
                 "rows": "one per evaluation origin",
                 "columns": ", ".join(
-                    f"horizon_{step}" for step in range(1, FORECAST_HORIZON + 1)
+                    f"horizon_{step}" for step in range(FORECAST_HORIZON + 1)
                 ),
             },
             {
@@ -650,7 +655,7 @@ def _(FORECAST_HORIZON, X_eval, mo):
         full_width=True,
     )
     horizon_to_plot = mo.ui.slider(
-        start=1,
+        start=0,
         stop=FORECAST_HORIZON,
         step=1,
         value=1,
@@ -714,7 +719,10 @@ def _(alt, forecast_path_data, mo, selected_origin_time):
                 alt.Tooltip("value:Q", title="value", format=".3f"),
             ],
         )
-        .properties(height=300, title="One forecast origin gives three targets")
+        .properties(
+            height=300,
+            title="One forecast origin: nowcast plus future targets",
+        )
     )
     forecast_path_view = mo.vstack(
         [
@@ -778,7 +786,7 @@ def _(alt, horizon_prediction_frame, horizon_to_plot):
 @app.cell
 def _(FORECAST_HORIZON, pd, simple_actuals, simple_predictions):
     calibration_rows = []
-    for calibration_horizon in range(1, FORECAST_HORIZON + 1):
+    for calibration_horizon in range(FORECAST_HORIZON + 1):
         calibration_column = f"horizon_{calibration_horizon}"
         for calibration_origin_time in simple_predictions.index:
             calibration_rows.append(
@@ -809,7 +817,7 @@ def _(alt, forecast_calibration_frame, mo):
         alt.Chart()
         .mark_circle(size=35, opacity=0.45)
         .encode(
-            x=alt.X("actual:Q", title="actual future demand"),
+            x=alt.X("actual:Q", title="actual demand"),
             y=alt.Y("forecast:Q", title="forecast demand"),
             color=alt.Color("horizon:N", title=None),
             tooltip=[
@@ -840,8 +848,8 @@ def _(alt, forecast_calibration_frame, mo):
         [
             mo.md(
                 "Calibration is the simplest held-out sanity check: points on "
-                "a tight line mean the forecast tracks the actual future "
-                "target. Faceting by horizon shows whether one direct model is "
+                "a tight line mean the fitted value tracks the actual target. "
+                "Faceting by horizon shows whether one direct model is "
                 "biased, noisy, or has the wrong slope."
             ),
             calibration_chart,
@@ -967,7 +975,7 @@ def _(alt, forecast_error_frame, mo, rolling_error_frame, simple_metrics):
             mo.md(
                 "## 6. Performance\n\n"
                 "The error charts compare the forecast output against the "
-                "future-target table created with the same horizon columns. "
+                "nowcast-and-future target table with the same horizon columns. "
                 "The bar chart gives the summary, the heatmap shows when "
                 "misses happen, and the residual charts show spread and bias."
             ),

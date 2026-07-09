@@ -330,11 +330,11 @@ def _(
                 "why it matters": "origins where predictions are scored",
             },
             {
-                "piece": "evaluation targets",
-                "rows": eval_stop - eval_start,
-                "first timestamp": frame.index[eval_start + 1],
+                "piece": "evaluation target table",
+                "rows": f"{eval_stop - eval_start} origins x {horizon + 1} horizons",
+                "first timestamp": frame.index[eval_start],
                 "last timestamp": frame.index[eval_stop - 1 + horizon],
-                "why it matters": "future target values used only for scoring",
+                "why it matters": "origin-time nowcasts and future values used only for scoring",
             },
             {
                 "piece": "tail held out",
@@ -624,7 +624,7 @@ def _(
         return pd.DataFrame(
             [
                 {
-                    "object": "actual future targets",
+                    "object": "actual nowcast and future targets",
                     "rows": actual.shape[0],
                     "columns": ", ".join(actual.columns),
                     "index meaning": "forecast origin timestamp",
@@ -811,9 +811,9 @@ def _(
                 "vector. Evaluation uses later origins shared by every horizon, "
                 "and the final `horizon` rows are not used as origins because "
                 "their full future demand window is unavailable.\n\n"
-                "Each horizon has its own supervised training table: horizon 1 "
-                "fits `X[:-1] -> y[1:]`, horizon 2 fits `X[:-2] -> y[2:]`, "
-                "and so on."
+                "Each horizon has its own supervised training table: horizon 0 "
+                "fits `X -> y`, horizon 1 fits `X[:-1] -> y[1:]`, horizon 2 "
+                "fits `X[:-2] -> y[2:]`, and so on."
             ),
             mo.ui.table(split_summary, pagination=False),
             mo.md("### Per-horizon supervised training rows"),
@@ -829,7 +829,7 @@ def _(horizon_count, mo, pd, problem_frame):
     origin_position = min(24, len(problem_frame) - horizon_count.value - 1)
     origin_time = problem_frame.index[origin_position]
     alignment_rows = []
-    for horizon in range(1, horizon_count.value + 1):
+    for horizon in range(horizon_count.value + 1):
         target_time = problem_frame.index[origin_position + horizon]
         alignment_rows.append(
             {
@@ -933,9 +933,9 @@ def _(forecast_results, forecast_shape_frame, mo):
             mo.md(
                 "## 5. What `predict` returns\n\n"
                 "Forecast mode returns one row per forecast origin. Each column "
-                "is a forecast horizon. The actual future-target table is built "
-                "with the same shape so the two prediction modes can be scored "
-                "horizon by horizon."
+                "is a target offset: `horizon_0` is the nowcast and positive "
+                "horizons are forecasts. The actual target table has the same "
+                "shape so the two prediction modes can be scored horizon by horizon."
             ),
             mo.ui.table(shape_summary, pagination=False),
         ]
@@ -994,10 +994,10 @@ def _(alt, displayed_forecast_path, mo):
     path_view = mo.vstack(
         [
             mo.md(
-                f"Forecast origin `{_forecast_origin_time}` produces one value for each "
-                "future target time. This is the shape users consume in "
-                "`predict`: the row is the origin, while each horizon column is "
-                "a different future target."
+                f"Forecast origin `{_forecast_origin_time}` produces its `horizon_0` "
+                "nowcast at the origin and one value for each future target time. "
+                "This is the shape users consume in `predict`: the row is the "
+                "origin, while each horizon column identifies a target offset."
             ),
             forecast_path_chart,
         ]
@@ -1039,8 +1039,9 @@ def _(estimator_mechanics_frame, horizon_count, mo, roughness_weight):
                 "a separate supervised target for each horizon.\n\n"
                 "Independent mode is equivalent to:\n\n"
                 "```python\n"
-                "for h in range(1, T + 1):\n"
-                "    X_h = X_train.iloc[:-h]\n"
+                "for h in range(T + 1):\n"
+                "    stop = None if h == 0 else -h\n"
+                "    X_h = X_train.iloc[:stop].copy()\n"
                 "    X_h.index = X_h.index + h * freq  # target-time features\n"
                 "    y_h = y_train[h:]\n"
                 "    child_model[h].fit(X_h, y_h)\n"
@@ -1049,7 +1050,8 @@ def _(estimator_mechanics_frame, horizon_count, mo, roughness_weight):
                 "then returns a DataFrame indexed by the original forecast "
                 "origins. Coupled mode builds those same `X_h, y_h` designs, "
                 "then solves one joint optimization problem with a roughness "
-                "penalty across the horizon-specific coefficients. Increase "
+                "penalty across the positive-horizon coefficients; the h=0 "
+                "nowcast remains an uncoupled diagnostic baseline. Increase "
                 "the coupling weight only when a smooth horizon response is a "
                 "reasonable modeling assumption."
             ),
@@ -1156,8 +1158,8 @@ def _(alt, forecast_metrics, mo):
     metric_view = mo.vstack(
         [
             mo.md(
-                "Held-out error is computed against the future target table "
-                "with the same origin-by-horizon shape as `predict`. The line "
+                "Held-out error is computed against the nowcast-and-future target "
+                "table with the same origin-by-horizon shape as `predict`. The line "
                 "chart shows whether errors grow with horizon. The table makes "
                 "the coupling tradeoff explicit: negative delta means coupling "
                 "reduced RMSE for that horizon."
