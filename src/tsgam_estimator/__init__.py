@@ -26,6 +26,7 @@ from ._estimator import (
     get_recommended_periods,
 )
 from ._forecast import (
+    TsgamForecastArConfig,
     TsgamForecastConfig,
     TsgamForecastCouplingConfig,
     TsgamForecastEstimator,
@@ -47,6 +48,7 @@ __all__ = [
     "TsgamForecastEstimator",
     "TsgamEstimatorConfig",
     "TsgamForecastConfig",
+    "TsgamForecastArConfig",
     "TsgamForecastCouplingConfig",
     "forecast_to_long_dataframe",
     "plot_forecast_origin",

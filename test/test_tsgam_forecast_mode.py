@@ -11,6 +11,8 @@ import tsgam_estimator._forecast as forecast_module
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
+    TsgamArConfig,
+    TsgamForecastArConfig,
     TsgamForecastConfig,
     TsgamForecastCouplingConfig,
     TsgamForecastEstimator,
@@ -19,6 +21,7 @@ from tsgam_estimator import (
     TsgamSolverConfig,
 )
 from tsgam_estimator.tsgam_estimator import (
+    TsgamForecastArConfig as ShimForecastArConfig,
     TsgamForecastEstimator as ShimForecastEstimator,
 )
 
@@ -29,6 +32,20 @@ def _make_data(n_samples: int = 80) -> tuple[pd.DataFrame, np.ndarray]:
     x = np.sin(step / 6.0) + 0.1 * np.cos(step / 3.0)
     X = pd.DataFrame({"x": x}, index=timestamps)
     y = 2.0 + 1.5 * x + 0.05 * step
+    return X, y
+
+
+def _make_ar_data(
+    n_samples: int = 500,
+    coefficient: float = 0.72,
+) -> tuple[pd.DataFrame, np.ndarray]:
+    rng = np.random.default_rng(42)
+    timestamps = pd.date_range("2020-01-01", periods=n_samples, freq="1h")
+    X = pd.DataFrame({"x": rng.normal(size=n_samples)}, index=timestamps)
+    y = np.zeros(n_samples)
+    innovations = rng.normal(scale=0.15, size=n_samples)
+    for sample in range(1, n_samples):
+        y[sample] = coefficient * y[sample - 1] + innovations[sample]
     return X, y
 
 
@@ -46,6 +63,7 @@ def _forecast_config(
     mode: str = "independent",
     roughness_weight: float = 0.0,
     base_config: TsgamEstimatorConfig | None = None,
+    forecast_ar_config: TsgamForecastArConfig | None = None,
 ) -> TsgamForecastConfig:
     coupling_config = None
     if mode == "coupled":
@@ -57,6 +75,7 @@ def _forecast_config(
         base_config=base_config or _base_config(),
         mode=mode,
         coupling_config=coupling_config,
+        forecast_ar_config=forecast_ar_config,
     )
 
 
@@ -226,6 +245,174 @@ def test_coupling_does_not_bias_horizon_zero_nowcast():
 
 def test_public_forecast_imports_are_available():
     assert ShimForecastEstimator is TsgamForecastEstimator
+    assert ShimForecastArConfig is TsgamForecastArConfig
+
+
+def test_direct_forecast_ar_recovers_planted_coefficient():
+    X, y = _make_ar_data()
+    estimator = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=2,
+            forecast_ar_config=TsgamForecastArConfig(
+                lags=[0],
+                reg_weight=1.0e-8,
+            ),
+        )
+    ).fit(X, y)
+
+    assert estimator.forecast_ar_coefficients_.loc[0, "lag_0"] == 0.0
+    assert estimator.forecast_ar_coefficients_.loc[1, "lag_0"] == pytest.approx(
+        0.72,
+        abs=0.08,
+    )
+    predictions = estimator.predict(
+        X.iloc[-12:],
+        y_history=pd.Series(y, index=X.index),
+    )
+    assert list(predictions) == ["horizon_0", "horizon_1", "horizon_2"]
+    assert np.all(np.isfinite(predictions.to_numpy()))
+
+
+def test_direct_forecast_ar_does_not_change_horizon_zero():
+    X, y = _make_ar_data(n_samples=180)
+    baseline = TsgamForecastEstimator(
+        config=_forecast_config(horizon=2)
+    ).fit(X, y)
+    autoregressive = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=2,
+            forecast_ar_config=TsgamForecastArConfig(lags=[0, 1, 2]),
+        )
+    ).fit(X, y)
+
+    X_eval = X.iloc[-10:]
+    expected = baseline.predict(X_eval)["horizon_0"]
+    actual = autoregressive.predict(
+        X_eval,
+        y_history=pd.Series(y, index=X.index),
+    )["horizon_0"]
+    np.testing.assert_allclose(actual, expected, rtol=1e-8, atol=1e-8)
+
+
+def test_direct_forecast_ar_history_lookup_is_causal_per_origin():
+    X, y = _make_ar_data(n_samples=160)
+    estimator = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=2,
+            forecast_ar_config=TsgamForecastArConfig(lags=[0, 2]),
+        )
+    ).fit(X, y)
+    origins = X.index[-12:-6]
+    X_eval = X.loc[origins]
+    history = pd.Series(y, index=X.index)
+    altered_future = history.copy()
+    altered_future.loc[altered_future.index > origins.max()] += 10_000.0
+
+    expected = estimator.predict(X_eval, y_history=history)
+    actual = estimator.predict(X_eval, y_history=altered_future)
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-10, atol=1e-10)
+
+
+def test_zero_coupling_forecast_ar_matches_independent_fit():
+    X, y = _make_ar_data(n_samples=220)
+    ar_config = TsgamForecastArConfig(lags=[0, 1], reg_weight=1.0e-6)
+    independent = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=3,
+            forecast_ar_config=ar_config,
+        )
+    ).fit(X, y)
+    coupled = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=3,
+            mode="coupled",
+            roughness_weight=0.0,
+            forecast_ar_config=ar_config,
+        )
+    ).fit(X, y)
+    X_eval = X.iloc[-12:]
+    history = pd.Series(y, index=X.index)
+
+    np.testing.assert_allclose(
+        coupled.predict(X_eval, y_history=history),
+        independent.predict(X_eval, y_history=history),
+        rtol=2e-5,
+        atol=2e-5,
+    )
+    np.testing.assert_allclose(
+        coupled.forecast_ar_coefficients_,
+        independent.forecast_ar_coefficients_,
+        rtol=2e-5,
+        atol=2e-5,
+    )
+
+
+def test_coupling_smooths_direct_forecast_ar_coefficients():
+    X, y = _make_ar_data(n_samples=120)
+    ar_config = TsgamForecastArConfig(lags=[0], reg_weight=1.0e-8)
+    uncoupled = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=6,
+            mode="coupled",
+            roughness_weight=0.0,
+            forecast_ar_config=ar_config,
+        )
+    ).fit(X, y)
+    smoothed = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=6,
+            mode="coupled",
+            roughness_weight=10.0,
+            forecast_ar_config=ar_config,
+        )
+    ).fit(X, y)
+
+    uncoupled_coefs = uncoupled.forecast_ar_standardized_coefficients_.loc[
+        1:, "lag_0"
+    ]
+    smoothed_coefs = smoothed.forecast_ar_standardized_coefficients_.loc[
+        1:, "lag_0"
+    ]
+    assert np.sum(np.diff(smoothed_coefs) ** 2) < np.sum(
+        np.diff(uncoupled_coefs) ** 2
+    )
+
+
+def test_forecast_ar_requires_sufficient_prediction_history():
+    X, y = _make_ar_data(n_samples=120)
+    estimator = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=1,
+            forecast_ar_config=TsgamForecastArConfig(lags=[0, 3]),
+        )
+    ).fit(X, y)
+    X_eval = X.iloc[-5:]
+
+    with pytest.raises(ValueError, match="y_history is required"):
+        estimator.predict(X_eval)
+    with pytest.raises(ValueError, match="enough causal history"):
+        estimator.predict(
+            X_eval,
+            y_history=pd.Series(y[-5:], index=X_eval.index),
+        )
+
+
+def test_forecast_config_rejects_generative_residual_ar():
+    base_config = _base_config()
+    base_config.ar_config = TsgamArConfig(lags=[1])
+
+    with pytest.raises(ValueError, match="stochastic sampling"):
+        TsgamForecastConfig(horizon=1, base_config=base_config)
+
+
+@pytest.mark.parametrize(
+    "lags",
+    [[], [-1], [0, 0], [True], [1.5]],
+)
+def test_forecast_ar_rejects_invalid_lags(lags):
+    with pytest.raises(ValueError, match="lags"):
+        TsgamForecastArConfig(lags=lags)
 
 
 def test_coupled_forecast_rejects_irregular_predict_origins():
