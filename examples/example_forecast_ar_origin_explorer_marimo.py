@@ -90,8 +90,10 @@ def _():
 
 @app.cell
 def _(mo):
-    ar_order_control = mo.ui.dropdown(
-        options=[1, 2, 3, 4, 5, 6],
+    ar_order_control = mo.ui.slider(
+        start=1,
+        stop=6,
+        step=1,
         value=1,
         label="AR order (number of observed target lags)",
         full_width=True,
