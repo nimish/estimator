@@ -31,15 +31,16 @@ def _(mo):
     # Direct autoregressive multi-horizon forecasting
 
     This example isolates the forecasting AR feature added to
-    `TsgamForecastEstimator`. The synthetic target has two parts:
+    `TsgamForecastEstimator`. The synthetic target has three parts:
 
-    The target is $y_t = s_t + r_t$, where $s_t$ is the daily and weekly
-    baseline and $r_t = 0.72r_{t-1} + \epsilon_t$ is an AR(1)
-    residual process.
+    The target is $y_t = s_t + 0.60x_t + r_t$, where $s_t$ is the daily and
+    weekly baseline, $x_t$ is a persistent exogenous driver, and
+    $r_t = 0.72r_{t-1} + \epsilon_t$ is an AR(1) residual process.
 
-    The periodic TSGAM features recover \(s_t\). The direct AR forecast uses target
-    values observed at each forecast origin to predict horizons 1 through 12. It
-    never recursively feeds one prediction into the next.
+    The base TSGAM features recover the periodic and linear exogenous terms. The
+    direct AR forecast additionally uses target values observed at each forecast
+    origin to predict horizons 1 through 12. It never recursively feeds one
+    prediction into the next.
     """)
     return
 
@@ -66,6 +67,7 @@ def _():
         TsgamForecastConfig,
         TsgamForecastCouplingConfig,
         TsgamForecastEstimator,
+        TsgamLinearConfig,
         TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
         plot_forecast_origin,
@@ -78,6 +80,7 @@ def _():
         TsgamForecastConfig,
         TsgamForecastCouplingConfig,
         TsgamForecastEstimator,
+        TsgamLinearConfig,
         TsgamMultiPeriodicConfig,
         TsgamSolverConfig,
         mo,
@@ -118,6 +121,7 @@ def _(
     TsgamForecastConfig,
     TsgamForecastCouplingConfig,
     TsgamForecastEstimator,
+    TsgamLinearConfig,
     TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
     ar_order_control,
@@ -144,18 +148,27 @@ def _(
     ar_residual = np.zeros(total_samples)
     for index in range(1, total_samples):
         ar_residual[index] = 0.72 * ar_residual[index - 1] + innovation[index]
-    observed = periodic_truth + ar_residual
+
+    driver = np.zeros(total_samples)
+    driver_noise = rng.normal(scale=0.35, size=total_samples)
+    for index in range(1, total_samples):
+        driver[index] = 0.88 * driver[index - 1] + driver_noise[index]
+    driver = (driver - driver.mean()) / driver.std()
+    exogenous_truth = 0.60 * driver
+    observed = periodic_truth + exogenous_truth + ar_residual
 
     frame = pd.DataFrame(
         {
             "observed": observed,
             "periodic truth": periodic_truth,
+            "driver": driver,
+            "linear exogenous contribution": exogenous_truth,
             "AR residual": ar_residual,
             "innovation": innovation,
         },
         index=timestamps,
     )
-    X = pd.DataFrame(index=timestamps)
+    X = frame[["driver"]]
     X_train = X.iloc[:train_samples]
     y_train = frame["observed"].iloc[:train_samples].to_numpy()
     X_eval = X.iloc[train_samples:-forecast_horizon]
@@ -168,7 +181,13 @@ def _(
                 periods=[24, 168],
                 reg_weight=1.0e-5,
             ),
-            exog_config=None,
+            exog_config=[
+                TsgamLinearConfig(
+                    lags=[0],
+                    reg_weight=1.0e-5,
+                    diff_reg_weight=0.0,
+                )
+            ],
             solver_config=TsgamSolverConfig(solver="CLARABEL", verbose=False),
         )
 
@@ -252,9 +271,9 @@ def _(frame, mo, selected_ar_order, train_samples):
 @app.cell
 def _(frame, plt, train_samples):
     figure_components, axes_components = plt.subplots(
-        3,
+        4,
         1,
-        figsize=(12, 7),
+        figsize=(12, 9),
         sharex=True,
         layout="constrained",
     )
@@ -262,11 +281,17 @@ def _(frame, plt, train_samples):
     axes_components[0].plot(frame.index, frame["periodic truth"], color="#6f42c1")
     axes_components[0].set_ylabel("periodic")
     axes_components[0].set_title("Known components of the synthetic target", loc="left")
-    axes_components[1].plot(frame.index, frame["AR residual"], color="#2878b5")
-    axes_components[1].set_ylabel("AR residual")
-    axes_components[2].plot(frame.index, frame["observed"], color="#222222")
-    axes_components[2].set_ylabel("observed target")
-    axes_components[2].set_xlabel("time")
+    axes_components[1].plot(
+        frame.index,
+        frame["linear exogenous contribution"],
+        color="#2a9d8f",
+    )
+    axes_components[1].set_ylabel("0.60 x driver")
+    axes_components[2].plot(frame.index, frame["AR residual"], color="#2878b5")
+    axes_components[2].set_ylabel("AR residual")
+    axes_components[3].plot(frame.index, frame["observed"], color="#222222")
+    axes_components[3].set_ylabel("observed target")
+    axes_components[3].set_xlabel("time")
     for component_axis in axes_components:
         component_axis.axvline(split_time, color="#d1495b", linestyle="--")
         component_axis.grid(axis="y", alpha=0.25)
@@ -319,7 +344,7 @@ def _(
     )
     plot_forecast_origin(
         {
-            "Periodicity only": periodic_prediction,
+            "TSGAM without target AR": periodic_prediction,
             "Independent AR": independent_prediction,
             "Coupled AR": coupled_prediction,
         },
@@ -353,12 +378,12 @@ def _(
     )
     selected_actual = frame["observed"].reindex(selected_target_times).to_numpy()
     selected_predictions = {
-        "Periodicity only": periodic_prediction,
+        "TSGAM without target AR": periodic_prediction,
         "Independent AR": independent_prediction,
         "Coupled AR": coupled_prediction,
     }
     selected_error_styles = {
-        "Periodicity only": ("#666666", ":"),
+        "TSGAM without target AR": ("#666666", ":"),
         "Independent AR": ("#d1495b", "--"),
         "Coupled AR": ("#2878b5", "-"),
     }
@@ -401,24 +426,31 @@ def _(
 
 @app.cell
 def _(frame, mo, pd, selected_origin, target_lags):
-    known_rows = []
+    known_rows = [
+        {
+            "forecast feature": "linear driver at origin",
+            "source time": selected_origin.strftime("%a, %b %d %H:%M"),
+            "feature value": round(float(frame.loc[selected_origin, "driver"]), 4),
+            "role": "exogenous",
+        }
+    ]
     for lag in target_lags:
         source_time = selected_origin - pd.Timedelta(hours=lag)
         known_rows.append(
             {
                 "forecast feature": f"target lag {lag}",
                 "source time": source_time.strftime("%a, %b %d %H:%M"),
-                "observed value": round(float(frame.loc[source_time, "observed"]), 4),
-                "available at origin": "yes",
+                "feature value": round(float(frame.loc[source_time, "observed"]), 4),
+                "role": "target history",
             }
         )
     mo.vstack(
         [
             mo.md(
-                "### Target history supplied to every positive horizon\n\n"
-                "Lag 0 is the target observed at the selected origin; higher lags "
-                "are preceding observations. Horizon 0 is constrained not to use "
-                "this history, avoiding the tautology `y[t] = y[t]`."
+                "### Origin-known inputs supplied to the direct forecasts\n\n"
+                "The linear driver is observed at the origin. Lag 0 is the target "
+                "at the origin; higher target lags are preceding observations. "
+                "Horizon 0 cannot use target history, avoiding `y[t] = y[t]`."
             ),
             mo.ui.table(pd.DataFrame(known_rows), pagination=False),
         ]
@@ -512,7 +544,7 @@ def _(
 ):
     metric_rows = []
     prediction_sets = {
-        "Periodicity only": periodic_prediction,
+        "TSGAM without target AR": periodic_prediction,
         "Independent AR": independent_prediction,
         "Coupled AR": coupled_prediction,
     }
@@ -539,7 +571,7 @@ def _(horizon_metrics, plt):
         layout="constrained",
     )
     metric_styles = {
-        "Periodicity only": ("#666666", ":"),
+        "TSGAM without target AR": ("#666666", ":"),
         "Independent AR": ("#d1495b", "--"),
         "Coupled AR": ("#2878b5", "-"),
     }
@@ -566,7 +598,8 @@ def _(mo):
     mo.md(r"""
     ## What to look for
 
-    - **Periodicity only** cannot react to the latest residual state.
+    - **TSGAM without target AR** uses periodic structure and the linear driver at
+      the origin, but cannot react to the latest unexplained residual state.
     - **Independent AR** estimates each horizon separately, so its coefficient path
       can be visibly jagged with limited training data.
     - **Coupled AR** solves one joint problem and penalizes first differences between
