@@ -89,6 +89,27 @@ def _():
 
 
 @app.cell
+def _(mo):
+    ar_order_control = mo.ui.dropdown(
+        options=[1, 2, 3, 4, 5, 6],
+        value=1,
+        label="AR order (number of observed target lags)",
+        full_width=True,
+    )
+    mo.vstack(
+        [
+            mo.md(
+                "## Model order\n\n"
+                "Selecting order $p$ supplies target lags $0, 1, \\ldots, p-1$ "
+                "to every positive forecast horizon and refits both AR models."
+            ),
+            ar_order_control,
+        ]
+    )
+    return (ar_order_control,)
+
+
+@app.cell
 def _(
     TsgamEstimatorConfig,
     TsgamForecastArConfig,
@@ -97,11 +118,13 @@ def _(
     TsgamForecastEstimator,
     TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
+    ar_order_control,
     np,
     pd,
 ):
     forecast_horizon = 12
-    target_lags = [0]
+    selected_ar_order = int(ar_order_control.value)
+    target_lags = list(range(selected_ar_order))
     train_samples = 720
     total_samples = 1008
 
@@ -201,13 +224,14 @@ def _(
         independent_prediction,
         origin_times,
         periodic_prediction,
+        selected_ar_order,
         target_lags,
         train_samples,
     )
 
 
 @app.cell
-def _(frame, mo, train_samples):
+def _(frame, mo, selected_ar_order, train_samples):
     mo.md(
         f"""
         ## The generated problem
@@ -215,6 +239,9 @@ def _(frame, mo, train_samples):
         The first **{train_samples} hours** are used for fitting. Everything after
         the vertical split is a sequential evaluation period. At each evaluation
         origin, the model may use target observations at or before that origin.
+
+        The selected **AR({selected_ar_order})** model uses target lags
+        **0 through {selected_ar_order - 1}** at each positive horizon.
         """
     )
     return
@@ -320,8 +347,9 @@ def _(frame, mo, pd, selected_origin, target_lags):
         [
             mo.md(
                 "### Target history supplied to every positive horizon\n\n"
-                "Lag 0 is the target observed at the selected origin. Horizon 0 is "
-                "constrained not to use it, avoiding the tautology `y[t] = y[t]`."
+                "Lag 0 is the target observed at the selected origin; higher lags "
+                "are preceding observations. Horizon 0 is constrained not to use "
+                "this history, avoiding the tautology `y[t] = y[t]`."
             ),
             mo.ui.table(pd.DataFrame(known_rows), pagination=False),
         ]
@@ -330,54 +358,75 @@ def _(frame, mo, pd, selected_origin, target_lags):
 
 
 @app.cell
-def _(coupled_model, forecast_horizon, independent_model, np, pd):
+def _(forecast_horizon, np, pd, target_lags):
     phi = 0.72
     true_lag_0 = np.array(
         [0.0] + [phi**horizon for horizon in range(1, forecast_horizon + 1)]
     )
+    true_data = {
+        f"lag_{_lag}": (
+            true_lag_0 if _lag == 0 else np.zeros(forecast_horizon + 1)
+        )
+        for _lag in target_lags
+    }
     true_coefficients = pd.DataFrame(
-        {"lag_0": true_lag_0},
+        true_data,
         index=pd.Index(range(forecast_horizon + 1), name="horizon"),
     )
     return (true_coefficients,)
 
 
 @app.cell
-def _(coupled_model, independent_model, plt, true_coefficients):
-    figure_coefficients, axis_coefficients = plt.subplots(
-        figsize=(10, 4),
+def _(coupled_model, independent_model, np, plt, target_lags, true_coefficients):
+    coefficient_columns = min(3, len(target_lags))
+    coefficient_rows = int(np.ceil(len(target_lags) / coefficient_columns))
+    figure_coefficients, coefficient_axes_grid = plt.subplots(
+        coefficient_rows,
+        coefficient_columns,
+        figsize=(12, 3.5 * coefficient_rows),
+        sharex=True,
         layout="constrained",
     )
-    axis_coefficients.plot(
-        true_coefficients.index[1:],
-        true_coefficients.loc[1:, "lag_0"],
-        color="#111111",
-        marker="o",
-        label="True direct coefficient",
+    coefficient_axes = np.atleast_1d(coefficient_axes_grid).ravel()
+    for _lag, coefficient_axis in zip(
+        target_lags,
+        coefficient_axes,
+        strict=False,
+    ):
+        lag_column = f"lag_{_lag}"
+        coefficient_axis.plot(
+            true_coefficients.index[1:],
+            true_coefficients.loc[1:, lag_column],
+            color="#111111",
+            marker="o",
+            label="Population coefficient",
+        )
+        coefficient_axis.plot(
+            independent_model.forecast_ar_coefficients_.index[1:],
+            independent_model.forecast_ar_coefficients_.loc[1:, lag_column],
+            color="#d1495b",
+            linestyle="--",
+            marker="o",
+            label="Independent AR",
+        )
+        coefficient_axis.plot(
+            coupled_model.forecast_ar_coefficients_.index[1:],
+            coupled_model.forecast_ar_coefficients_.loc[1:, lag_column],
+            color="#2878b5",
+            marker="o",
+            label="Coupled AR",
+        )
+        coefficient_axis.set_title(f"Target lag {_lag}")
+        coefficient_axis.set_xlabel("forecast horizon")
+        coefficient_axis.set_ylabel("coefficient")
+        coefficient_axis.axhline(0, color="0.6", linewidth=1)
+    for unused_axis in coefficient_axes[len(target_lags):]:
+        unused_axis.set_visible(False)
+    coefficient_axes[0].legend(frameon=False)
+    figure_coefficients.suptitle(
+        "Direct target-history coefficients across horizon",
+        fontweight="bold",
     )
-    axis_coefficients.plot(
-        independent_model.forecast_ar_coefficients_.index[1:],
-        independent_model.forecast_ar_coefficients_.loc[1:, "lag_0"],
-        color="#d1495b",
-        linestyle="--",
-        marker="o",
-        label="Independent AR",
-    )
-    axis_coefficients.plot(
-        coupled_model.forecast_ar_coefficients_.index[1:],
-        coupled_model.forecast_ar_coefficients_.loc[1:, "lag_0"],
-        color="#2878b5",
-        marker="o",
-        label="Coupled AR",
-    )
-    axis_coefficients.set_title(
-        "Direct coefficient on the target observed at the origin",
-        loc="left",
-    )
-    axis_coefficients.set_xlabel("forecast horizon")
-    axis_coefficients.set_ylabel("coefficient")
-    axis_coefficients.axhline(0, color="0.6", linewidth=1)
-    axis_coefficients.legend(frameon=False)
     figure_coefficients
     return
 
