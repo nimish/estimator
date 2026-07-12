@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from copy import deepcopy
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field
+from typing import Literal, cast
 
 import cvxpy
 import numpy as np
@@ -25,6 +25,7 @@ from ._estimator import (
     TrendType,
     TsgamEstimator,
     TsgamEstimatorConfig,
+    TsgamLinearConfig,
 )
 from ._problem import (
     evaluate_horizon_prediction,
@@ -77,6 +78,54 @@ class TsgamForecastCouplingConfig:
 
 
 @dataclass
+class TsgamForecastArConfig:
+    """Configuration for direct target-history forecast features.
+
+    This is distinct from :class:`TsgamArConfig`, which models residuals for
+    stochastic sample generation. Here, ``lag=0`` is the target observed at the
+    forecast origin, ``lag=1`` is one sample before the origin, and so on.
+
+    Parameters
+    ----------
+    lags : list[int], default=[0]
+        Non-negative target lookbacks available at every forecast origin.
+    reg_weight : float, default=1e-4
+        L2 regularization applied to the direct forecast coefficients.
+    """
+
+    lags: list[int] = field(default_factory=lambda: [0])
+    reg_weight: float = 1.0e-4
+
+    def __post_init__(self) -> None:
+        if not self.lags:
+            raise ValueError("lags must contain at least one target lookback.")
+        if any(
+            isinstance(lag, (bool, np.bool_))
+            or not isinstance(lag, (int, np.integer))
+            or lag < 0
+            for lag in self.lags
+        ):
+            raise ValueError(
+                f"lags must contain only non-negative integers, got {self.lags!r}."
+            )
+        if len(set(self.lags)) != len(self.lags):
+            raise ValueError(f"lags must be unique, got {self.lags!r}.")
+        self.lags = sorted(int(lag) for lag in self.lags)
+        if (
+            isinstance(self.reg_weight, (bool, np.bool_))
+            or not isinstance(
+                self.reg_weight,
+                (int, float, np.integer, np.floating),
+            )
+            or not np.isfinite(self.reg_weight)
+            or self.reg_weight < 0
+        ):
+            raise ValueError(
+                f"reg_weight must be non-negative and finite, got {self.reg_weight!r}."
+            )
+
+
+@dataclass
 class TsgamForecastConfig:
     """
     Configuration for direct multi-horizon forecast mode.
@@ -92,6 +141,7 @@ class TsgamForecastConfig:
     base_config: TsgamEstimatorConfig
     mode: Literal["independent", "coupled"] = "independent"
     coupling_config: TsgamForecastCouplingConfig | None = None
+    forecast_ar_config: TsgamForecastArConfig | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.base_config, TsgamEstimatorConfig):
@@ -105,6 +155,20 @@ class TsgamForecastConfig:
             raise ValueError(f"horizon must be non-negative, got {self.horizon!r}.")
         if self.mode not in ("independent", "coupled"):
             raise ValueError(f"mode must be 'independent' or 'coupled', got {self.mode!r}.")
+        if self.base_config.ar_config is not None:
+            raise ValueError(
+                "base_config.ar_config models residuals for stochastic sampling and "
+                "is not supported by forecast mode. Use forecast_ar_config for "
+                "direct target-history forecasting."
+            )
+        if self.forecast_ar_config is not None and not isinstance(
+            self.forecast_ar_config,
+            TsgamForecastArConfig,
+        ):
+            raise TypeError(
+                "forecast_ar_config must be a TsgamForecastArConfig or None, got "
+                f"{type(self.forecast_ar_config).__name__}."
+            )
         if self.mode == "independent":
             if self.coupling_config is not None:
                 raise ValueError(
@@ -130,6 +194,121 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             )
         self.config = config
 
+    @property
+    def _uses_forecast_ar(self) -> bool:
+        return self.config.forecast_ar_config is not None and self.config.horizon > 0
+
+    def _forecast_ar_column(self, lag: int) -> str:
+        return f"__tsgam_target_history_lag_{lag}"
+
+    def _model_config(self) -> TsgamEstimatorConfig:
+        model_config = deepcopy(self.config.base_config)
+        if not self._uses_forecast_ar:
+            return model_config
+        ar_config = self.config.forecast_ar_config
+        assert ar_config is not None
+        history_configs = [
+            TsgamLinearConfig(lags=[0], reg_weight=ar_config.reg_weight)
+            for _ in ar_config.lags
+        ]
+        model_config.exog_config = list(model_config.exog_config or []) + history_configs
+        return model_config
+
+    def _target_history_frame(
+        self,
+        origins: pd.DatetimeIndex,
+        history: pd.Series,
+    ) -> pd.DataFrame:
+        ar_config = self.config.forecast_ar_config
+        assert ar_config is not None
+        if not isinstance(history, pd.Series):
+            raise TypeError("y_history must be a pandas Series with a DatetimeIndex.")
+        if not isinstance(history.index, pd.DatetimeIndex):
+            raise TypeError("y_history must have a DatetimeIndex.")
+        if history.index.has_duplicates:
+            raise ValueError("y_history index must not contain duplicate timestamps.")
+        history = history.sort_index().astype(float)
+        if not np.all(np.isfinite(history.to_numpy())):
+            raise ValueError("y_history must contain only finite values.")
+
+        earliest = origins.min() - max(ar_config.lags) * self.step_
+        latest = origins.max()
+        regular_index = pd.date_range(earliest, latest, freq=self.freq_)
+        filled = history.reindex(history.index.union(regular_index)).sort_index().ffill()
+        columns: dict[str, ndarray] = {}
+        for lag in ar_config.lags:
+            required = origins - lag * self.step_
+            values = filled.reindex(required)
+            if values.isna().any():
+                first_missing = required[values.isna().to_numpy()][0]
+                raise ValueError(
+                    "y_history does not contain enough causal history for "
+                    f"lag={lag}; no value is available at or before {first_missing}."
+                )
+            columns[self._forecast_ar_column(lag)] = (
+                values.to_numpy() - self.forecast_ar_center_
+            ) / self.forecast_ar_scale_
+        return pd.DataFrame(columns, index=origins)
+
+    def _augment_with_target_history(
+        self,
+        X: pd.DataFrame,
+        history: pd.Series,
+    ) -> pd.DataFrame:
+        ar_config = self.config.forecast_ar_config
+        assert ar_config is not None
+        conflicts = {
+            self._forecast_ar_column(lag)
+            for lag in ar_config.lags
+        }.intersection(X.columns)
+        if conflicts:
+            raise ValueError(
+                "X contains reserved forecast target-history columns: "
+                f"{sorted(conflicts)!r}."
+            )
+        return X.join(
+            self._target_history_frame(pd.DatetimeIndex(X.index), history)
+        )
+
+    def _prepare_forecast_ar_fit_data(
+        self,
+        X: pd.DataFrame,
+        y: ndarray,
+        sample_weight: ndarray | None,
+    ) -> tuple[pd.DataFrame, ndarray, ndarray | None]:
+        if not self._uses_forecast_ar:
+            self.model_config_ = deepcopy(self.config.base_config)
+            return X, y, sample_weight
+        if not np.all(np.isfinite(y)):
+            raise ValueError("Forecast AR requires finite target values during fit.")
+        self.forecast_ar_center_ = float(np.median(y))
+        self.forecast_ar_scale_ = float(np.mean(np.abs(y - self.forecast_ar_center_)))
+        if not np.isfinite(self.forecast_ar_scale_) or self.forecast_ar_scale_ <= 0:
+            self.forecast_ar_scale_ = 1.0
+        self.model_config_ = self._model_config()
+        history = pd.Series(y, index=X.index)
+        ar_config = self.config.forecast_ar_config
+        assert ar_config is not None
+        max_lag = max(ar_config.lags)
+        first_usable = X.index[0] + max_lag * self.step_
+        usable = X.index >= first_usable
+        if not np.any(usable):
+            raise ValueError(
+                "Forecast AR lags leave no training samples; "
+                f"maximum lag is {max_lag} for {len(X)} observations."
+            )
+        history_frame = pd.DataFrame(
+            0.0,
+            index=X.index,
+            columns=[self._forecast_ar_column(lag) for lag in ar_config.lags],
+        )
+        usable_index = X.index[usable]
+        history_frame.loc[usable_index] = self._target_history_frame(
+            usable_index,
+            history,
+        )
+        return X.join(history_frame), y, sample_weight
+
     def _target_time_X(self, X: pd.DataFrame, horizon: int) -> pd.DataFrame:
         shifted = X.copy()
         shifted.index = shifted.index + horizon * self.step_
@@ -144,6 +323,15 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
     ) -> tuple[pd.DataFrame, ndarray, ndarray | None]:
         if horizon == 0:
             return X.copy(), np.asarray(y), sample_weight
+        if self._uses_forecast_ar:
+            ar_config = self.config.forecast_ar_config
+            assert ar_config is not None
+            first_usable = X.index[0] + max(ar_config.lags) * self.step_
+            usable = X.index >= first_usable
+            X = X.loc[usable]
+            y = np.asarray(y)[usable]
+            if sample_weight is not None:
+                sample_weight = np.asarray(sample_weight)[usable]
         if len(y) <= horizon:
             raise ValueError(
                 f"Need more samples than forecast horizon; got {len(y)} samples "
@@ -191,10 +379,18 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
     ) -> "TsgamForecastEstimator":
         """Fit direct models for horizons 0 through ``config.horizon``."""
         X, y, sample_weight = self._prepare_fit_inputs(X, y, sample_weight)
+        X, y, sample_weight = self._prepare_forecast_ar_fit_data(
+            X,
+            y,
+            sample_weight,
+        )
         self.horizons_ = list(range(int(self.config.horizon) + 1))
         if self.config.mode == "independent":
-            return self._fit_independent(X, y, sample_weight)
-        return self._fit_coupled(X, y, sample_weight)
+            self._fit_independent(X, y, sample_weight)
+        else:
+            self._fit_coupled(X, y, sample_weight)
+        self._store_forecast_ar_coefficients()
+        return self
 
     def _fit_independent(
         self,
@@ -207,10 +403,54 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             X_horizon, y_horizon, weight_horizon = self._fit_data_for_horizon(
                 X, y, sample_weight, horizon
             )
-            estimator = TsgamEstimator(deepcopy(self.config.base_config))
+            estimator_config = (
+                self.config.base_config
+                if horizon == 0
+                else self.model_config_
+            )
+            estimator = TsgamEstimator(deepcopy(estimator_config))
+            if horizon == 0 and self._uses_forecast_ar:
+                base_columns = len(self.config.base_config.exog_config or [])
+                X_horizon = X_horizon.iloc[:, :base_columns]
             estimator.fit(X_horizon, y_horizon, sample_weight=weight_horizon)
             self.forecast_estimators_[horizon] = estimator
         return self
+
+    def _store_forecast_ar_coefficients(self) -> None:
+        if not self._uses_forecast_ar:
+            return
+        ar_config = self.config.forecast_ar_config
+        assert ar_config is not None
+        first_ar_ix = len(self.config.base_config.exog_config or [])
+        standardized = np.zeros((len(self.horizons_), len(ar_config.lags)))
+        if self.config.mode == "independent":
+            for horizon in self.horizons_[1:]:
+                estimator = self.forecast_estimators_[horizon]
+                for lag_ix in range(len(ar_config.lags)):
+                    value = estimator.variables_[f"exog_coef_{first_ar_ix + lag_ix}"].value
+                    if value is None:
+                        raise ValueError("Forecast AR coefficients are unavailable.")
+                    standardized[horizon, lag_ix] = float(value[0, 0])
+        else:
+            for lag_ix in range(len(ar_config.lags)):
+                horizon_variables = cast(
+                    list[cvxpy.Variable],
+                    self.variables_[f"exog_coef_{first_ar_ix + lag_ix}"],
+                )
+                for horizon, variable in enumerate(horizon_variables):
+                    if variable.value is None:
+                        raise ValueError("Forecast AR coefficients are unavailable.")
+                    standardized[horizon, lag_ix] = float(variable.value[0, 0])
+        columns = [f"lag_{lag}" for lag in ar_config.lags]
+        index = pd.Index(self.horizons_, name="horizon")
+        self.forecast_ar_standardized_coefficients_ = pd.DataFrame(
+            standardized,
+            index=index,
+            columns=columns,
+        )
+        self.forecast_ar_coefficients_ = (
+            self.forecast_ar_standardized_coefficients_ / self.forecast_ar_scale_
+        )
 
     def _validate_coupled_config(self) -> None:
         base_config = self.config.base_config
@@ -231,7 +471,7 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
         sample_weight: ndarray | None,
     ) -> "TsgamForecastEstimator":
         self._validate_coupled_config()
-        base_config = self.config.base_config
+        base_config = self.model_config_
         coupling = self.config.coupling_config
         assert coupling is not None
         roughness_order = coupling.roughness_order
@@ -291,8 +531,20 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             weight_valid = design.sample_weight[valid_mask]
             losses.append(weighted_squared_loss(y_valid, model_term, weight_valid))
 
+        constraints = []
+        if self._uses_forecast_ar:
+            first_ar_ix = len(self.config.base_config.exog_config or [])
+            ar_config = self.config.forecast_ar_config
+            assert ar_config is not None
+            for lag_ix in range(len(ar_config.lags)):
+                horizon_variables = cast(
+                    list[cvxpy.Variable],
+                    self.variables_[f"exog_coef_{first_ar_ix + lag_ix}"],
+                )
+                constraints.append(horizon_variables[0] == 0)
         self.problem_ = cvxpy.Problem(
             cvxpy.Minimize(cvxpy.sum(losses) + regularization_term),
+            constraints,
         )
         solve_problem(
             self.problem_,
@@ -304,9 +556,11 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
     def predict(
         self,
         X: pd.DataFrame,
+        y_history: pd.Series | None = None,
         remove_periodic: bool = False,
         remove_exogenous: bool = False,
         remove_trend: bool = False,
+        remove_forecast_ar: bool = False,
     ) -> pd.DataFrame:
         """Predict all configured forecast horizons for each forecast origin."""
         check_is_fitted(self, ["horizons_", "freq_", "step_"])
@@ -317,11 +571,32 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             raise TypeError("Forecast inputs must have a DatetimeIndex after normalization.")
         validate_predict_frequency(origin_index, self.freq_)
 
+        model_X = X
+        if self._uses_forecast_ar:
+            if remove_forecast_ar:
+                ar_config = self.config.forecast_ar_config
+                assert ar_config is not None
+                history_columns = {
+                    self._forecast_ar_column(lag): np.zeros(len(X))
+                    for lag in ar_config.lags
+                }
+                model_X = X.join(pd.DataFrame(history_columns, index=origin_index))
+            else:
+                if y_history is None:
+                    raise ValueError(
+                        "y_history is required when forecast_ar_config is enabled."
+                    )
+                model_X = self._augment_with_target_history(X, y_history)
+
         columns: dict[str, ndarray] = {}
         if self.config.mode == "independent":
             check_is_fitted(self, ["forecast_estimators_"])
             for horizon in self.horizons_:
-                X_horizon = self._target_time_X(X, horizon)
+                horizon_X = model_X
+                if horizon == 0 and self._uses_forecast_ar:
+                    base_columns = len(self.config.base_config.exog_config or [])
+                    horizon_X = X.iloc[:, :base_columns]
+                X_horizon = self._target_time_X(horizon_X, horizon)
                 columns[f"horizon_{horizon}"] = self.forecast_estimators_[horizon].predict(
                     X_horizon,
                     remove_periodic=remove_periodic,
@@ -335,9 +610,9 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
                     "Component removal is not supported for coupled forecast predictions yet."
             )
             for horizon_ix, horizon in enumerate(self.horizons_):
-                X_horizon = self._target_time_X(X, horizon)
+                X_horizon = self._target_time_X(model_X, horizon)
                 design = build_tsgam_design(
-                    self.config.base_config,
+                    self.model_config_,
                     X_horizon,
                     y=None,
                     sample_weight=None,
@@ -346,7 +621,7 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
                     freq=self.freq_,
                 )
                 columns[f"horizon_{horizon}"] = evaluate_horizon_prediction(
-                    self.config.base_config,
+                    self.model_config_,
                     design,
                     self.variables_,
                     horizon_ix,
