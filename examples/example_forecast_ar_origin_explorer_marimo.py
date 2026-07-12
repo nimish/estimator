@@ -236,15 +236,25 @@ def _(
         X_eval,
         y_history=observed_history,
     )
+    independent_without_target_history = independent_model.predict(
+        X_eval,
+        remove_forecast_ar=True,
+    )
+    coupled_without_target_history = coupled_model.predict(
+        X_eval,
+        remove_forecast_ar=True,
+    )
     origin_times = X_eval.index
     return (
         X_eval,
         coupled_model,
         coupled_prediction,
+        coupled_without_target_history,
         forecast_horizon,
         frame,
         independent_model,
         independent_prediction,
+        independent_without_target_history,
         origin_times,
         periodic_prediction,
         selected_ar_order,
@@ -461,76 +471,65 @@ def _(frame, mo, pd, selected_origin, target_lags):
 
 
 @app.cell
-def _(forecast_horizon, np, pd, target_lags):
-    phi = 0.72
-    true_lag_0 = np.array(
-        [0.0] + [phi**horizon for horizon in range(1, forecast_horizon + 1)]
-    )
-    true_data = {
-        f"lag_{_lag}": (
-            true_lag_0 if _lag == 0 else np.zeros(forecast_horizon + 1)
-        )
-        for _lag in target_lags
+def _(
+    coupled_prediction,
+    coupled_without_target_history,
+    forecast_horizon,
+    independent_prediction,
+    independent_without_target_history,
+    np,
+    plt,
+    selected_origin,
+):
+    contribution_horizons = np.arange(forecast_horizon + 1)
+    contribution_models = {
+        "Independent AR": (
+            independent_prediction,
+            independent_without_target_history,
+            "#d1495b",
+            "--",
+        ),
+        "Coupled AR": (
+            coupled_prediction,
+            coupled_without_target_history,
+            "#2878b5",
+            "-",
+        ),
     }
-    true_coefficients = pd.DataFrame(
-        true_data,
-        index=pd.Index(range(forecast_horizon + 1), name="horizon"),
-    )
-    return (true_coefficients,)
-
-
-@app.cell
-def _(coupled_model, independent_model, np, plt, target_lags, true_coefficients):
-    coefficient_columns = min(3, len(target_lags))
-    coefficient_rows = int(np.ceil(len(target_lags) / coefficient_columns))
-    figure_coefficients, coefficient_axes_grid = plt.subplots(
-        coefficient_rows,
-        coefficient_columns,
-        figsize=(12, 3.5 * coefficient_rows),
-        sharex=True,
+    figure_contribution, axis_contribution = plt.subplots(
+        figsize=(10, 3.5),
         layout="constrained",
     )
-    coefficient_axes = np.atleast_1d(coefficient_axes_grid).ravel()
-    for _lag, coefficient_axis in zip(
-        target_lags,
-        coefficient_axes,
-        strict=False,
-    ):
-        lag_column = f"lag_{_lag}"
-        coefficient_axis.plot(
-            true_coefficients.index[1:],
-            true_coefficients.loc[1:, lag_column],
-            color="#111111",
+    for contribution_label, (
+        full_prediction,
+        no_history_prediction,
+        contribution_color,
+        contribution_style,
+    ) in contribution_models.items():
+        full_path = full_prediction.loc[selected_origin].to_numpy()
+        no_history_path = no_history_prediction.loc[selected_origin].to_numpy()
+        history_adjustment = full_path - no_history_path
+        mean_adjustment = float(np.mean(np.abs(history_adjustment)))
+        axis_contribution.plot(
+            contribution_horizons,
+            history_adjustment,
+            color=contribution_color,
+            linestyle=contribution_style,
             marker="o",
-            label="Population coefficient",
+            label=(
+                f"{contribution_label} "
+                f"(mean absolute adjustment {mean_adjustment:.3f})"
+            ),
         )
-        coefficient_axis.plot(
-            independent_model.forecast_ar_coefficients_.index[1:],
-            independent_model.forecast_ar_coefficients_.loc[1:, lag_column],
-            color="#d1495b",
-            linestyle="--",
-            marker="o",
-            label="Independent AR",
-        )
-        coefficient_axis.plot(
-            coupled_model.forecast_ar_coefficients_.index[1:],
-            coupled_model.forecast_ar_coefficients_.loc[1:, lag_column],
-            color="#2878b5",
-            marker="o",
-            label="Coupled AR",
-        )
-        coefficient_axis.set_title(f"Target lag {_lag}")
-        coefficient_axis.set_xlabel("forecast horizon")
-        coefficient_axis.set_ylabel("coefficient")
-        coefficient_axis.axhline(0, color="0.6", linewidth=1)
-    for unused_axis in coefficient_axes[len(target_lags):]:
-        unused_axis.set_visible(False)
-    coefficient_axes[0].legend(frameon=False)
-    figure_coefficients.suptitle(
-        "Direct target-history coefficients across horizon",
-        fontweight="bold",
+    axis_contribution.axhline(0, color="#111111", linewidth=1)
+    axis_contribution.set_title(
+        "How target history changes the selected forecast",
+        loc="left",
     )
-    figure_coefficients
+    axis_contribution.set_xlabel("forecast horizon")
+    axis_contribution.set_ylabel("forecast with history minus forecast without it")
+    axis_contribution.legend(frameon=False)
+    figure_contribution
     return
 
 
@@ -602,11 +601,14 @@ def _(mo):
 
     - **TSGAM without target AR** uses periodic structure and the linear driver at
       the origin, but cannot react to the latest unexplained residual state.
-    - **Independent AR** estimates each horizon separately, so its coefficient path
-      can be visibly jagged with limited training data.
-    - **Coupled AR** solves one joint problem and penalizes first differences between
-      adjacent positive-horizon coefficients.
-    - The AR contribution naturally decays with horizon because the planted AR(1)
+    - The **target-history adjustment** is the amount target history raises or lowers
+      the selected forecast relative to the same fitted model with that contribution
+      removed.
+    - **Independent AR** estimates each horizon separately, so this adjustment can be
+      less stable across adjacent horizons with limited training data.
+    - **Coupled AR** smooths the underlying horizon coefficients, which generally
+      makes the resulting forecast adjustment more consistent across horizons.
+    - The adjustment should usually decay with horizon because the planted AR(1)
       process gradually forgets its current state.
 
     `TsgamArConfig` is not involved here. That older configuration models residuals
