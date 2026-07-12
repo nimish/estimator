@@ -92,7 +92,7 @@ def _():
 def _(mo):
     ar_order_control = mo.ui.slider(
         start=1,
-        stop=6,
+        stop=8,
         step=1,
         value=1,
         label="AR order (number of observed target lags)",
@@ -329,6 +329,73 @@ def _(
         ax=axis_origin,
     )
     figure_origin
+    return
+
+
+@app.cell
+def _(
+    coupled_prediction,
+    forecast_horizon,
+    frame,
+    independent_prediction,
+    np,
+    pd,
+    periodic_prediction,
+    plt,
+    selected_origin,
+):
+    selected_horizons = np.arange(forecast_horizon + 1)
+    selected_target_times = pd.DatetimeIndex(
+        [
+            selected_origin + pd.Timedelta(hours=int(_horizon))
+            for _horizon in selected_horizons
+        ]
+    )
+    selected_actual = frame["observed"].reindex(selected_target_times).to_numpy()
+    selected_predictions = {
+        "Periodicity only": periodic_prediction,
+        "Independent AR": independent_prediction,
+        "Coupled AR": coupled_prediction,
+    }
+    selected_error_styles = {
+        "Periodicity only": ("#666666", ":"),
+        "Independent AR": ("#d1495b", "--"),
+        "Coupled AR": ("#2878b5", "-"),
+    }
+    figure_selected_error, axis_selected_error = plt.subplots(
+        figsize=(10, 3.5),
+        layout="constrained",
+    )
+    for error_model, error_prediction in selected_predictions.items():
+        predicted_path = np.array(
+            [
+                error_prediction.loc[
+                    selected_origin,
+                    f"horizon_{int(_horizon)}",
+                ]
+                for _horizon in selected_horizons
+            ]
+        )
+        path_error = predicted_path - selected_actual
+        path_mae = float(np.mean(np.abs(path_error)))
+        error_color, error_style = selected_error_styles[error_model]
+        axis_selected_error.plot(
+            selected_horizons,
+            path_error,
+            color=error_color,
+            linestyle=error_style,
+            marker="o",
+            label=f"{error_model} (path MAE {path_mae:.3f})",
+        )
+    axis_selected_error.axhline(0, color="#111111", linewidth=1)
+    axis_selected_error.set_title(
+        "Selected-origin forecast error: prediction minus actual",
+        loc="left",
+    )
+    axis_selected_error.set_xlabel("forecast horizon")
+    axis_selected_error.set_ylabel("signed error")
+    axis_selected_error.legend(frameon=False, ncols=2)
+    figure_selected_error
     return
 
 
