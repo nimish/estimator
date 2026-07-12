@@ -34,7 +34,8 @@ def _(mo):
     `TsgamForecastEstimator`. The synthetic target has three parts:
 
     The target is $y_t = s_t + 0.60x_t + r_t$, where $s_t$ is the daily and
-    weekly baseline, $x_t$ is a persistent exogenous driver, and
+    weekly baseline, $x_t$ is the standardized AR(1) driver used in the
+    forecast-plotting explorer, and
     $r_t = 0.72r_{t-1} + \epsilon_t$ is an AR(1) residual process.
 
     The base TSGAM features recover the periodic and linear exogenous terms. The
@@ -149,10 +150,11 @@ def _(
     for index in range(1, total_samples):
         ar_residual[index] = 0.72 * ar_residual[index - 1] + innovation[index]
 
-    driver = np.zeros(total_samples)
-    driver_noise = rng.normal(scale=0.35, size=total_samples)
+    driver_rng = np.random.default_rng(23)
+    driver = np.empty(total_samples)
+    driver[0] = driver_rng.normal()
     for index in range(1, total_samples):
-        driver[index] = 0.88 * driver[index - 1] + driver_noise[index]
+        driver[index] = 0.55 * driver[index - 1] + driver_rng.normal(scale=0.8)
     driver = (driver - driver.mean()) / driver.std()
     exogenous_truth = 0.60 * driver
     observed = periodic_truth + exogenous_truth + ar_residual
