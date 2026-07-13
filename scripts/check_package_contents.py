@@ -22,6 +22,7 @@ ALLOWED_SDIST_PACKAGE_FILES = {
     "src/tsgam_estimator/_forecast.py",
     "src/tsgam_estimator/_forecast_plotting.py",
     "src/tsgam_estimator/_problem.py",
+    "src/tsgam_estimator/_sklearn.py",
     "src/tsgam_estimator/py.typed",
     "src/tsgam_estimator/tsgam_estimator.py",
 }
@@ -32,6 +33,7 @@ ALLOWED_WHEEL_PACKAGE_FILES = {
     "tsgam_estimator/_forecast.py",
     "tsgam_estimator/_forecast_plotting.py",
     "tsgam_estimator/_problem.py",
+    "tsgam_estimator/_sklearn.py",
     "tsgam_estimator/py.typed",
     "tsgam_estimator/tsgam_estimator.py",
 }
