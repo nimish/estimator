@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import Field
 from typing import ClassVar, Self, cast
 
@@ -13,6 +14,10 @@ class SklearnConfigMixin:
     """Expose dataclass fields through scikit-learn's parameter protocol."""
 
     __dataclass_fields__: ClassVar[dict[str, Field[object]]]
+
+    def __sklearn_clone__(self) -> Self:
+        """Clone config value objects without rerunning dataclass normalization."""
+        return deepcopy(self)
 
     def get_params(self, deep: bool = True) -> dict[str, object]:
         params = {
