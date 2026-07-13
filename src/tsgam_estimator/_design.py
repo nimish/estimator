@@ -4,17 +4,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import combinations
 from typing import TYPE_CHECKING, TypeGuard, cast, overload
 
 import numpy as np
 import pandas as pd
 from numpy import ndarray
-from scipy.sparse import spdiags, spmatrix
+from scipy.sparse import csr_matrix, spmatrix
 from sklearn.base import check_array
 from sklearn.utils import check_X_y
-from spcqe import make_basis_matrix
-from spcqe.functions import initialize_arrays
+from spcqe import make_basis_matrix, make_regularization_matrix
 
 if TYPE_CHECKING:
     from ._estimator import (
@@ -266,33 +264,22 @@ def _make_regularization_matrix(
     max_cross_k: int | None = None,
     custom_basis: dict[int, ndarray] | None = None,
 ) -> spmatrix:
-    """Create the Fourier coefficient regularization matrix."""
-    sort_idx, Ps, num_harmonics, standing_wave = initialize_arrays(
-        num_harmonics, periods, standing_wave, custom_basis
+    """Wrap SPCQE's Fourier regularizer with optional intercept removal."""
+    regularization_matrix = cast(
+        spmatrix,
+        make_regularization_matrix(
+            num_harmonics=num_harmonics,
+            weight=weight,
+            periods=periods,
+            standing_wave=standing_wave,
+            trend=trend,
+            max_cross_k=max_cross_k,
+            custom_basis=custom_basis,
+        ),
     )
-    ls_original = [weight * (2 * np.pi) / np.sqrt(P) for P in Ps]
-    i_value_list = []
-    for ix, nh in enumerate(num_harmonics):
-        if standing_wave[ix]:
-            i_value_list.append(np.arange(1, nh + 1))
-        else:
-            i_value_list.append(np.repeat(np.arange(1, nh + 1), 2))
-    blocks_original = [iv * lx for iv, lx in zip(i_value_list, ls_original)]
-    if custom_basis is not None:
-        for ix, val in custom_basis.items():
-            ixt = np.where(sort_idx == ix)[0][0]
-            blocks_original[ixt] = ls_original[ixt] * np.arange(1, val.shape[1] + 1)
-    if max_cross_k is not None:
-        max_cross_k *= 2
-    blocks_cross = [
-        [l2 for l1 in c[0][:max_cross_k] for l2 in c[1][:max_cross_k]]
-        for c in combinations(blocks_original, 2)
-    ]
-    first_block = [np.zeros(1)] if trend is False else [np.zeros(2)]
     if drop_constant:
-        first_block = first_block[1:]
-    coeff_i = np.concatenate(first_block + blocks_original + blocks_cross)
-    return spdiags(coeff_i, 0, coeff_i.size, coeff_i.size)
+        return csr_matrix(regularization_matrix)[1:, 1:]
+    return regularization_matrix
 
 
 def _make_spline_H(x: ndarray, knots: ndarray, include_offset: bool = False) -> ndarray:
