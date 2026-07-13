@@ -18,13 +18,15 @@ from spcqe import make_basis_matrix
 from spcqe.functions import initialize_arrays
 import pandas as pd
 
+from ._sklearn import SklearnConfigMixin
+
 try:
     __version__ = version("tsgam-estimator")
 except PackageNotFoundError:
     __version__ = "0.1.0"
 
 @dataclass
-class TsgamMultiPeriodicConfig:
+class TsgamMultiPeriodicConfig(SklearnConfigMixin):
     """
     Configuration for multi-periodic Fourier basis functions.
 
@@ -81,7 +83,7 @@ class TsgamMultiPeriodicConfig:
                 )
 
 @dataclass
-class TsgamSplineConfig:
+class TsgamSplineConfig(SklearnConfigMixin):
     """
     Configuration for cubic spline basis functions for exogenous variables.
 
@@ -128,7 +130,7 @@ class TsgamSplineConfig:
     knots: ndarray | list[float] = field(default_factory=list)
 
 @dataclass
-class TsgamLinearConfig:
+class TsgamLinearConfig(SklearnConfigMixin):
     """
     Configuration for linear basis functions for exogenous variables.
 
@@ -159,7 +161,7 @@ class TsgamLinearConfig:
     diff_reg_weight: float = 1.0
 
 @dataclass
-class TsgamArConfig:
+class TsgamArConfig(SklearnConfigMixin):
     """
     Configuration for autoregressive (AR) residual modeling.
 
@@ -198,7 +200,7 @@ class TrendType(StrEnum):
     NONLINEAR_INC = 'nonlinear_increasing'
 
 @dataclass
-class TsgamTrendConfig:
+class TsgamTrendConfig(SklearnConfigMixin):
     """
     Configuration for trend term in the model.
 
@@ -240,7 +242,7 @@ class TsgamTrendConfig:
     reg_weight: float = 10.0
 
 @dataclass
-class TsgamOutlierConfig:
+class TsgamOutlierConfig(SklearnConfigMixin):
     """
     Configuration for the outlier detector component.
 
@@ -337,7 +339,7 @@ class TsgamOutlierConfig:
 type SolverOptionValue = int | float | bool | str | dict[str, SolverOptionValue]
 
 @dataclass
-class TsgamSolverConfig:
+class TsgamSolverConfig(SklearnConfigMixin):
     """
     Configuration for the CVXPY solver used in optimization.
 
@@ -400,7 +402,7 @@ class TsgamSolverConfig:
         return opts
 
 @dataclass
-class TsgamEstimatorConfig:
+class TsgamEstimatorConfig(SklearnConfigMixin):
     """
     Main configuration for TsgamEstimator.
 
@@ -690,7 +692,7 @@ def get_recommended_periods(X: pd.DataFrame, include_harmonics: bool = False) ->
         return periods
 
 
-class TsgamEstimator(BaseEstimator, RegressorMixin):
+class TsgamEstimator(RegressorMixin, BaseEstimator):
     """
     Time Series Generalized Additive Model (TSGAM) Estimator.
 
@@ -794,8 +796,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     ...                       index=pd.date_range('2021-01-01', periods=100, freq='h'))
     >>> predictions = estimator.predict(X_pred)
     """
-    def __init__(self, config: TsgamEstimatorConfig, **kwargs) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, config: TsgamEstimatorConfig) -> None:
         self.config = config
 
     def _extract_timestamps(self, X: pd.DataFrame) -> pd.DatetimeIndex:
@@ -1582,6 +1583,16 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
         X_array, y = check_X_y(X_array, y,
             ensure_min_features=len(self.config.exog_config or []),
             ensure_min_samples=self._get_min_samples_required())
+        self.n_features_in_ = X_array.shape[1]
+        if isinstance(X, pd.DataFrame) and all(
+            isinstance(column, str) for column in X.columns
+        ):
+            feature_columns = (
+                X.columns
+                if isinstance(X.index, pd.DatetimeIndex)
+                else X.columns[1:]
+            )
+            self.feature_names_in_ = np.asarray(feature_columns, dtype=object)
 
         # Validate and store sample weights for weighted least squares (main loss only)
         if sample_weight is None:
