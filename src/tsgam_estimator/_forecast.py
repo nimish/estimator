@@ -34,9 +34,10 @@ from ._problem import (
     solve_problem,
     weighted_squared_loss,
 )
+from ._sklearn import SklearnConfigMixin
 
 @dataclass
-class TsgamForecastCouplingConfig:
+class TsgamForecastCouplingConfig(SklearnConfigMixin):
     """
     Configuration for coupled direct multi-horizon forecasts.
 
@@ -78,7 +79,7 @@ class TsgamForecastCouplingConfig:
 
 
 @dataclass
-class TsgamForecastArConfig:
+class TsgamForecastArConfig(SklearnConfigMixin):
     """Configuration for direct target-history forecast features.
 
     This is distinct from :class:`TsgamArConfig`, which models residuals for
@@ -126,7 +127,7 @@ class TsgamForecastArConfig:
 
 
 @dataclass
-class TsgamForecastConfig:
+class TsgamForecastConfig(SklearnConfigMixin):
     """
     Configuration for direct multi-horizon forecast mode.
 
@@ -183,11 +184,10 @@ class TsgamForecastConfig:
             )
 
 
-class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
+class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
     """Direct multi-horizon forecast estimator built on the TSGAM model API."""
 
-    def __init__(self, config: TsgamForecastConfig, **kwargs) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, config: TsgamForecastConfig) -> None:
         if not isinstance(config, TsgamForecastConfig):
             raise TypeError(
                 f"config must be a TsgamForecastConfig, got {type(config).__name__}."
@@ -363,6 +363,9 @@ class TsgamForecastEstimator(BaseEstimator, RegressorMixin):
             y=y,
             sample_weight=sample_weight,
         )
+        self.n_features_in_ = X.shape[1]
+        if all(isinstance(column, str) for column in X.columns):
+            self.feature_names_in_ = np.asarray(X.columns, dtype=object)
         timestamps = X.index
         if not isinstance(timestamps, pd.DatetimeIndex):
             raise TypeError("Forecast inputs must have a DatetimeIndex after normalization.")

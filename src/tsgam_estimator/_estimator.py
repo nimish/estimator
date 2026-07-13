@@ -11,9 +11,8 @@ import cvxpy
 from numpy.random import RandomState
 from scipy import stats, signal
 from scipy.sparse import spmatrix
-from sklearn.base import RegressorMixin, BaseEstimator, check_array, check_is_fitted
-from sklearn.utils import check_X_y, check_random_state
-from spcqe import make_basis_matrix
+from sklearn.base import RegressorMixin, BaseEstimator, check_is_fitted
+from sklearn.utils import check_random_state
 import pandas as pd
 
 from ._design import (
@@ -49,10 +48,11 @@ from ._problem import (
     solve_problem,
     weighted_squared_loss,
 )
+from ._sklearn import SklearnConfigMixin
 
 
 @dataclass
-class TsgamMultiPeriodicConfig:
+class TsgamMultiPeriodicConfig(SklearnConfigMixin):
     """
     Configuration for multi-periodic Fourier basis functions.
 
@@ -109,7 +109,7 @@ class TsgamMultiPeriodicConfig:
                 )
 
 @dataclass
-class TsgamSplineConfig:
+class TsgamSplineConfig(SklearnConfigMixin):
     """
     Configuration for cubic spline basis functions for exogenous variables.
 
@@ -156,7 +156,7 @@ class TsgamSplineConfig:
     knots: ndarray | list[float] = field(default_factory=list)
 
 @dataclass
-class TsgamLinearConfig:
+class TsgamLinearConfig(SklearnConfigMixin):
     """
     Configuration for linear basis functions for exogenous variables.
 
@@ -187,7 +187,7 @@ class TsgamLinearConfig:
     diff_reg_weight: float = 1.0
 
 @dataclass
-class TsgamArConfig:
+class TsgamArConfig(SklearnConfigMixin):
     """
     Configuration for autoregressive (AR) residual modeling.
 
@@ -226,7 +226,7 @@ class TrendType(StrEnum):
     NONLINEAR_INC = 'nonlinear_increasing'
 
 @dataclass
-class TsgamTrendConfig:
+class TsgamTrendConfig(SklearnConfigMixin):
     """
     Configuration for trend term in the model.
 
@@ -268,7 +268,7 @@ class TsgamTrendConfig:
     reg_weight: float = 10.0
 
 @dataclass
-class TsgamOutlierConfig:
+class TsgamOutlierConfig(SklearnConfigMixin):
     """
     Configuration for the outlier detector component.
 
@@ -364,7 +364,7 @@ class TsgamOutlierConfig:
 type SolverOptionValue = int | float | bool | str | dict[str, SolverOptionValue]
 
 @dataclass
-class TsgamSolverConfig:
+class TsgamSolverConfig(SklearnConfigMixin):
     """
     Configuration for the CVXPY solver used in optimization.
 
@@ -427,7 +427,7 @@ class TsgamSolverConfig:
         return opts
 
 @dataclass
-class TsgamEstimatorConfig:
+class TsgamEstimatorConfig(SklearnConfigMixin):
     """
     Main configuration for TsgamEstimator.
 
@@ -717,7 +717,7 @@ def get_recommended_periods(X: pd.DataFrame, include_harmonics: bool = False) ->
         return periods
 
 
-class TsgamEstimator(BaseEstimator, RegressorMixin):
+class TsgamEstimator(RegressorMixin, BaseEstimator):
     """
     Time Series Generalized Additive Model (TSGAM) Estimator.
 
@@ -821,8 +821,7 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
     ...                       index=pd.date_range('2021-01-01', periods=100, freq='h'))
     >>> predictions = estimator.predict(X_pred)
     """
-    def __init__(self, config: TsgamEstimatorConfig, **kwargs) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, config: TsgamEstimatorConfig) -> None:
         self.config = config
 
     def _extract_timestamps(self, X: pd.DataFrame) -> pd.DatetimeIndex:
@@ -1281,6 +1280,9 @@ class TsgamEstimator(BaseEstimator, RegressorMixin):
             y=y,
             sample_weight=sample_weight,
         )
+        self.n_features_in_ = X.shape[1]
+        if all(isinstance(column, str) for column in X.columns):
+            self.feature_names_in_ = np.asarray(X.columns, dtype=object)
         timestamps = _extract_timestamps(X)
         self.freq_ = infer_fit_frequency(timestamps)
         self.time_reference_ = timestamps[0]
