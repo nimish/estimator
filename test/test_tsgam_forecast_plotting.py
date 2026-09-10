@@ -122,6 +122,8 @@ def test_plot_forecast_origin_separates_history_and_future():
         "Forecast origin",
     }
     assert len(ax.patches) == 1
+    assert len(ax.collections) == 2
+    assert {text.get_text() for text in ax.texts} == {"now"}
     assert ax.get_xlabel() == "Target time"
     assert ax.get_ylabel() == "load"
     plt.close(ax.figure)
@@ -160,6 +162,16 @@ def test_forecast_to_long_dataframe_includes_aligned_nowcast_rows():
     np.testing.assert_allclose(horizon_zero["prediction"], predictions["horizon_0"])
 
 
+def test_forecast_to_long_dataframe_accepts_predictions_without_nowcast():
+    actual, predictions, _ = _plot_data()
+    predictions = predictions.drop(columns="horizon_0")
+
+    long = forecast_to_long_dataframe(predictions, actual)
+
+    assert sorted(long["horizon"].unique()) == [1, 2]
+    assert len(long) == 2 * len(predictions)
+
+
 def test_plot_forecast_horizon_zero_uses_forecast_predictions():
     actual, independent, coupled = _plot_data()
 
@@ -194,7 +206,7 @@ def test_forecast_plotting_rejects_invalid_prediction_shapes():
         )
 
     noncontiguous = predictions.drop(columns="horizon_1")
-    with pytest.raises(ValueError, match="contiguous from horizon_0"):
+    with pytest.raises(ValueError, match="contiguous from their first horizon"):
         forecast_to_long_dataframe(noncontiguous, actual)
 
 

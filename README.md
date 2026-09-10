@@ -69,6 +69,7 @@ forecaster = TsgamForecastEstimator(
     TsgamForecastConfig(
         horizon=24,
         base_config=base_config,
+        include_nowcast=False,
         forecast_ar_config=TsgamForecastArConfig(
             lags=[0, 1, 2, 24],
             reg_weight=1e-4,
@@ -83,7 +84,8 @@ predictions = forecaster.predict(
 ```
 
 Lag `0` is the target observed at the origin, lag `1` is the previous sample,
-and so on. The horizon-zero nowcast never uses target history, avoiding the
+and so on. Set `include_nowcast=True` (the default) to additionally fit and
+return `horizon_0`; that nowcast never uses target history, avoiding the
 tautological prediction `y[t] = y[t]`. Fitted coefficients in original target
 units are available in `forecast_ar_coefficients_`; the internally standardized
 coefficients are in `forecast_ar_standardized_coefficients_`.
