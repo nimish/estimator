@@ -31,6 +31,7 @@ from ._estimator import (
 from ._problem import (
     evaluate_single_output_prediction,
     build_single_output_decomposition,
+    legacy_variable_views,
     solve_problem,
 )
 from ._sklearn import SklearnConfigMixin
@@ -420,6 +421,8 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
         sample_weight: ndarray | None,
     ) -> "TsgamForecastEstimator":
         self.forecast_estimators_ = {}
+        for attribute in ("variables_", "horizon_values_", "problem_"):
+            self.__dict__.pop(attribute, None)
         for horizon in self.horizons_:
             X_horizon, y_horizon, weight_horizon = self._fit_data_for_horizon(
                 X, y, sample_weight, horizon
@@ -570,6 +573,16 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
             }
             for values in variables
         ]
+        # Inspection-only compatibility views; all solving stays in SignalDecomp.
+        horizon_views = [legacy_variable_views(base_config, values) for values in variables]
+        self.variables_: dict[str, cvxpy.Expression | list[cvxpy.Expression]] = {}
+        for role in horizon_views[0]:
+            expressions = [views[role] for views in horizon_views]
+            self.variables_[role] = (
+                expressions if role.startswith("exog_coef_")
+                else cvxpy.hstack(expressions) if role == "constant"
+                else cvxpy.vstack([cvxpy.vec(expr, order="F") for expr in expressions]).T
+            )
         return self
 
     def predict(

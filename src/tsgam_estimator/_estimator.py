@@ -27,6 +27,7 @@ from ._design import (
 from ._problem import (
     evaluate_single_output_prediction,
     build_single_output_decomposition,
+    legacy_variable_views,
 )
 from ._sklearn import SklearnConfigMixin
 
@@ -732,6 +733,13 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
     decomposition_ : dict
         Native SignalDecomp solve result. Fitted components and coefficients are
         available by role under ``decomposition_["values"]``.
+    variables_ : dict
+        Historical coefficient names and shapes as CVXPY expression views.
+        Supports inspection through ``.value``; prediction uses native results.
+    output_ : dict
+        Alias of ``decomposition_`` (no separate result schema).
+    problem_ : cvxpy.Problem
+        The native optimization problem.
     exog_knots_ : list
         List of knot locations for spline exogenous variables (auto-computed
         during fit, reused during predict).
@@ -892,6 +900,9 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
             **self.config.solver_config._solve_kwargs(),
         )
         self.decomposition_ = decomposition
+        self.output_ = decomposition
+        self.problem_ = decomposition["problem"]
+        self.variables_ = legacy_variable_views(self.config, decomposition["variables"])
         values = cast(dict[str, ndarray | float], decomposition["values"])
         metadata = cast(dict[str, dict[str, object]], decomposition["component_metadata"])
         self.exog_knots_ = [
