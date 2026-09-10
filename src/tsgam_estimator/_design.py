@@ -9,10 +9,11 @@ from typing import TYPE_CHECKING, TypeGuard, cast, overload
 import numpy as np
 import pandas as pd
 from numpy import ndarray
-from scipy.sparse import csr_matrix, spmatrix
+from signaldecomp import make_offset_basis
+from signaldecomp.spline import make_spline_basis
 from sklearn.base import check_array
 from sklearn.utils import check_X_y
-from spcqe import make_basis_matrix, make_regularization_matrix
+from signaldecomp.basis import cross_bases, make_basis_matrix
 
 if TYPE_CHECKING:
     from ._estimator import (
@@ -254,100 +255,29 @@ def sort_predict_X(X: pd.DataFrame, *, sort_index: bool) -> pd.DataFrame:
     return X
 
 
-def _make_regularization_matrix(
-    num_harmonics: list[int],
-    weight: float,
-    periods: list[float],
-    drop_constant: bool = False,
-    standing_wave: bool | list[bool] = False,
-    trend: bool = False,
-    max_cross_k: int | None = None,
-    custom_basis: dict[int, ndarray] | None = None,
-) -> spmatrix:
-    """Wrap SPCQE's Fourier regularizer with optional intercept removal."""
-    regularization_matrix = cast(
-        spmatrix,
-        make_regularization_matrix(
-            num_harmonics=num_harmonics,
-            weight=weight,
-            periods=periods,
-            standing_wave=standing_wave,
-            trend=trend,
-            max_cross_k=max_cross_k,
-            custom_basis=custom_basis,
-        ),
-    )
-    if drop_constant:
-        return csr_matrix(regularization_matrix)[1:, 1:]
-    return regularization_matrix
-
-
-def _make_spline_H(x: ndarray, knots: ndarray, include_offset: bool = False) -> ndarray:
-    """Create a natural cubic spline basis matrix."""
-    def d_func(x: ndarray, k: float, k_max: float) -> ndarray:
-        n1 = np.clip(np.power(x - k, 3), 0, np.inf)
-        n2 = np.clip(np.power(x - k_max, 3), 0, np.inf)
-        return (n1 - n2) / (k_max - k)
-
-    nK = len(knots)
-    H = np.ones((len(x), nK), dtype=float)
-    H[:, 1] = x
-    for _i in range(nK - 2):
-        _j = _i + 2
-        H[:, _j] = d_func(x, knots[_i], knots[-1]) - d_func(
-            x, knots[-2], knots[-1]
-        )
-    return H if include_offset else H[:, 1:]
-
-
-def _make_offset_H(H: ndarray, offset: int) -> ndarray:
-    """Create a lead/lag version of a basis matrix."""
-    newH = np.roll(np.copy(H), -offset, axis=0)
-    if offset > 0:
-        newH[-offset:] = np.nan
-    elif offset < 0:
-        newH[:-offset] = np.nan
-    return newH
-
-
-def _build_exog_Hs(
-    exog_cfg: TsgamSplineConfig | TsgamLinearConfig,
-    exog_var: ndarray,
-    knots: ndarray | None = None,
-) -> list[ndarray]:
-    """Build basis matrices for one exogenous variable across configured lags."""
-    Hs = []
-    for lag in exog_cfg.lags:
-        if _is_spline_config(exog_cfg):
-            if knots is None:
-                raise ValueError("knots must be provided for TsgamSplineConfig")
-            H0 = _make_spline_H(exog_var, knots, include_offset=False)
-        else:
-            H0 = exog_var.reshape(-1, 1)
-        Hs.append(_make_offset_H(H0, lag))
-    return Hs
-
-
 def _process_exog_config(
     exog_cfg: TsgamSplineConfig | TsgamLinearConfig,
     exog_var: ndarray,
     knots: ndarray | None = None,
 ) -> tuple[ndarray, list[ndarray]]:
     """Build exogenous lag matrices and the boundary-valid sample mask."""
-    if knots is None and _is_spline_config(exog_cfg):
-        cfg_knots = np.asarray(exog_cfg.knots) if exog_cfg.knots is not None else np.array([])
-        if len(cfg_knots) == 0:
-            if exog_cfg.n_knots:
-                knots = np.linspace(np.min(exog_var), np.max(exog_var), exog_cfg.n_knots)
-            else:
+    if _is_spline_config(exog_cfg):
+        configured = np.asarray(exog_cfg.knots, dtype=float)
+        knots = np.asarray(knots, dtype=float) if knots is not None else configured
+        if knots.size == 0:
+            if exog_cfg.n_knots is None:
                 raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
-        else:
-            knots = cfg_knots
-    if knots is not None:
-        knots = np.asarray(knots)
-    Hs = _build_exog_Hs(exog_cfg, exog_var, knots)
-    valid_mask = np.all(np.all(~np.isnan(np.asarray(Hs)), axis=-1), axis=0)
-    return valid_mask, Hs
+            knots = np.linspace(np.min(exog_var), np.max(exog_var), exog_cfg.n_knots)
+        base = make_spline_basis(exog_var, knots)
+    else:
+        base = exog_var.reshape(-1, 1)
+    offset_basis = make_offset_basis(base, offsets=tuple(-lag for lag in exog_cfg.lags))
+    width = offset_basis.block_width
+    blocks = [
+        offset_basis.design[:, ix * width : (ix + 1) * width]
+        for ix in range(len(exog_cfg.lags))
+    ]
+    return offset_basis.valid_mask, blocks
 
 
 def _get_zero_lag_H(
@@ -362,26 +292,6 @@ def _get_zero_lag_H(
             "Interaction pairs require each referenced exogenous factor to include lag=0."
         ) from exc
     return Hs[zero_lag_ix]
-
-
-def _outer_column_product(arr1: ndarray, arr2: ndarray) -> ndarray:
-    """Build a q*r interaction design block from two response matrices."""
-    return (arr1[:, :, None] * arr2[:, None, :]).reshape(arr1.shape[0], -1)
-
-
-def _interaction_contribution_from_blocks(
-    arr1: ndarray,
-    arr2: ndarray,
-    interaction_coef: ndarray,
-    *,
-    nan_to_zero: bool = False,
-) -> ndarray:
-    """Contract two response matrices against flattened interaction coefficients."""
-    if nan_to_zero:
-        arr1 = np.nan_to_num(arr1, nan=0.0)
-        arr2 = np.nan_to_num(arr2, nan=0.0)
-    coef_matrix = interaction_coef.reshape(arr1.shape[1], arr2.shape[1])
-    return np.sum((arr1 @ coef_matrix) * arr2, axis=1)
 
 
 def _normalize_interaction_pairs(config: TsgamEstimatorConfig) -> list[tuple[int, int]]:
@@ -467,7 +377,7 @@ def _resolve_exog_knots(
                     np.linspace(np.min(X_array[:, ix]), np.max(X_array[:, ix]), exog_cfg.n_knots)
                 )
             else:
-                knots_by_exog.append(None)
+                knots_by_exog.append(cfg_knots)
         else:
             knots_by_exog.append(None)
     return knots_by_exog
@@ -489,52 +399,39 @@ def _make_fourier_basis(
 ) -> ndarray | None:
     if config.multi_periodic_config is None:
         return None
-    max_idx = int(np.max(time_indices))
-    min_idx = int(np.min(time_indices))
-    if min_idx < 0:
-        offset = -min_idx
-        adjusted_indices = time_indices.astype(int) + offset
-        basis_length = max_idx + offset + 1
-    else:
-        adjusted_indices = time_indices.astype(int)
-        basis_length = max_idx + 1
-    if np.any(adjusted_indices < 0) or np.any(adjusted_indices >= basis_length):
-        raise ValueError(
-            f"Adjusted indices out of bounds: min={adjusted_indices.min()}, "
-            f"max={adjusted_indices.max()}, basis_length={basis_length}"
-        )
-    F_full = make_basis_matrix(
-        num_harmonics=config.multi_periodic_config.num_harmonics,
-        length=basis_length,
-        periods=config.multi_periodic_config.periods,
-    )
-    if np.any(np.isnan(F_full)):
-        raise ValueError(
-            f"Basis matrix contains NaN. basis_length={basis_length}, "
-            f"F_full shape: {F_full.shape}, "
-            f"time_indices range: [{min_idx}, {max_idx}]"
-        )
-    fourier_basis = F_full[adjusted_indices, 1:]
-    if np.any(np.isnan(fourier_basis)):
-        raise ValueError(
-            f"Indexed basis matrix F contains NaN. "
-            f"F shape: {fourier_basis.shape}, "
-            f"adjusted_indices range: [{adjusted_indices.min()}, {adjusted_indices.max()}]"
-        )
-    return fourier_basis
+    periodic = config.multi_periodic_config
+    start = int(np.min(time_indices))
+    indices = time_indices.astype(int) - start
+    length = int(indices.max()) + 1
+    if start == 0:
+        return make_basis_matrix(
+            periodic.num_harmonics, length, periodic.periods,
+        )[indices, 1:]
+    blocks = {}
+    for ix, (period, harmonics) in enumerate(zip(periodic.periods, periodic.num_harmonics)):
+        block = make_basis_matrix(harmonics, length, period)[:, 1:]
+        phase = 2 * np.pi * np.arange(1, harmonics + 1) * start / period
+        cosine, sine = block[:, ::2].copy(), block[:, 1::2].copy()
+        block[:, ::2] = cosine * np.cos(phase) - sine * np.sin(phase)
+        block[:, 1::2] = sine * np.cos(phase) + cosine * np.sin(phase)
+        blocks[ix] = block
+    # SignalDecomp retains ownership of column ordering and cross-period products.
+    return make_basis_matrix(
+        periodic.num_harmonics, length, periodic.periods, custom_basis=blocks,
+    )[indices, 1:]
 
 
-def _build_tsgam_design(
+def build_tsgam_design(
     config: TsgamEstimatorConfig,
     X: pd.DataFrame,
-    *,
     y: ndarray | None = None,
     sample_weight: ndarray | None = None,
+    *,
     knots_by_exog: list[ndarray | None] | None = None,
     reference: pd.Timestamp | None = None,
     freq: str | None = None,
 ) -> _TsgamDesign:
-    """Build shared TSGAM design matrices for fit or predict paths."""
+    """Validate fit inputs; build evaluation bases only for prediction."""
     timestamps, X_array = _ensure_timestamp_index(X)
     if freq is None:
         freq = pd.infer_freq(timestamps)
@@ -557,33 +454,28 @@ def _build_tsgam_design(
         )
         valid_mask = ~np.isnan(y_array)
         y_array = cast(ndarray, y_array)
-    if knots_by_exog is None:
+    if y is None and knots_by_exog is None:
         knots_by_exog = _resolve_exog_knots(config, X_array)
     exog_Hs: list[list[ndarray]] = []
     interaction_Hs: list[ndarray] = []
     zero_lag_Hs: dict[int, ndarray] = {}
     interaction_pairs = _normalize_interaction_pairs(config)
     interaction_parent_indices = {ix for pair in interaction_pairs for ix in pair}
-    if config.exog_config:
+    if y is None and config.exog_config:
+        assert knots_by_exog is not None
         for ix, exog_cfg in enumerate(config.exog_config):
             stored_knots = knots_by_exog[ix] if _is_spline_config(exog_cfg) else None
             exog_valid_mask, Hs = _process_exog_config(
                 exog_cfg, X_array[:, ix], knots=stored_knots
             )
             exog_Hs.append(Hs)
-            if y is not None:
-                valid_mask &= exog_valid_mask
+            valid_mask &= exog_valid_mask
             if ix in interaction_parent_indices:
                 zero_lag_Hs[ix] = _get_zero_lag_H(exog_cfg, Hs)
         for left_ix, right_ix in interaction_pairs:
-            interaction_H = _outer_column_product(
-                zero_lag_Hs[left_ix],
-                zero_lag_Hs[right_ix],
-            )
-            interaction_Hs.append(interaction_H)
-            if y is not None:
-                valid_mask &= np.all(~np.isnan(interaction_H), axis=1)
-    fourier_basis = _make_fourier_basis(config, time_indices)
+            left, right = zero_lag_Hs[left_ix], zero_lag_Hs[right_ix]
+            interaction_Hs.append(cross_bases(left, right))
+    fourier_basis = _make_fourier_basis(config, time_indices) if y is None else None
     weights = None
     if y_array is not None:
         if sample_weight is None:
@@ -610,29 +502,6 @@ def _build_tsgam_design(
         interaction_pairs=interaction_pairs,
         fourier_basis=fourier_basis,
     )
-
-
-def build_tsgam_design(
-    config: TsgamEstimatorConfig,
-    X: pd.DataFrame,
-    y: ndarray | None = None,
-    sample_weight: ndarray | None = None,
-    *,
-    knots_by_exog: list[ndarray | None],
-    reference: pd.Timestamp,
-    freq: str,
-) -> _TsgamDesign:
-    return _build_tsgam_design(
-        config,
-        X,
-        y=y,
-        sample_weight=sample_weight,
-        knots_by_exog=knots_by_exog,
-        reference=reference,
-        freq=freq,
-    )
-
-
 def infer_fit_frequency(timestamps: pd.DatetimeIndex) -> str:
     inferred_freq = pd.infer_freq(timestamps)
     if inferred_freq is None:

@@ -3,13 +3,13 @@ from datetime import date
 import inspect
 from pathlib import Path
 import sys
-from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import pytest
+from signaldecomp.spline import make_spline_basis
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 
@@ -46,6 +46,41 @@ from example_tidal_compact import (  # noqa: E402
 @dataclass
 class _Widget:
     value: Any
+
+
+def test_native_fit_responses_and_shapley_with_missing_rows():
+    rng = np.random.default_rng(31)
+    index = pd.date_range("2024-01-01", periods=96, freq="1h")
+    x, z = rng.uniform(-1, 1, (2, len(index)))
+    frame = pd.DataFrame({
+        "water_level": 1 + x ** 2 + z ** 2 + x * z,
+        "pressure": x, "wind_u": z,
+    }, index=index).drop(index[20])
+    kwargs = dict(
+        df=frame, sph=1, harmonic_orders={},
+        lag_ranges={"pressure": (-1, 0), "wind_u": (0, 0)},
+        knot_presets={"pressure": "low", "wind_u": "low"},
+        interaction_pairs=[("pressure", "wind_u")],
+        train_start="2024-01-01", train_end="2024-01-04", test_end="2024-01-04",
+    )
+    mask = {"pressure": True, "wind_u": True}
+    result = tidal_compact.run_tidal_model(mask, **kwargs)
+    assert result["model"] is not None
+    assert np.isnan(result["tr_pred"][[0, 20, 21]]).all()
+    assert np.isnan(result["te_pred"][0])
+    response = tidal_compact.build_regressor_response_inputs(result, "pressure", lag=-1)
+    assert index[21] not in response["time_index"]
+    assert np.isfinite(response["curve"]).all()
+    tidal_compact.build_regressor_response_figure(response, sph=1)
+    assert tidal_compact.build_diagnostic_figures(frame, result)
+    components = ["pressure", "wind_u"]
+    shapley = tidal_compact.build_shapley_result(
+        mask, components=components, interaction_lookup={},
+        raw_to_canonical={i: i for i in range(4)}, **kwargs,
+    )
+    assert shapley["failed"] == 0
+    assert np.isfinite(list(shapley["shap_r2"].values())).all()
+    assert sum(shapley["shap_r2"].values()) == pytest.approx(shapley["full_r2"] - shapley["baseline_r2"])
 
 
 def test_build_model_date_defaults_keeps_example_split_when_available():
@@ -430,7 +465,8 @@ def test_build_shapley_result_deduplicates_invalid_interaction_runs(monkeypatch)
         reg_score = int(component_mask.get("pressure", False)) + int(component_mask.get("wind_u", False))
         interaction_score = len(interaction_pairs)
         return {
-            "metrics_test": {"r2": float(reg_score + interaction_score), "rmse": float(10 - reg_score - interaction_score)},
+            "te_obs": np.array([-1.0, 1.0]),
+            "te_pred": np.array([-1.0, 1.0]) + (3 - reg_score - interaction_score),
             "picked": {},
             "active_regs": [name for name in ["pressure", "wind_u"] if component_mask.get(name, False)],
             "active_interactions": ["Pressure (hPa) × Wind U (m/s)"] if interaction_pairs else [],
@@ -463,13 +499,10 @@ def test_build_shapley_result_deduplicates_invalid_interaction_runs(monkeypatch)
     assert shapley_result["coalitions"] == 5
     assert len(calls) == 5
     assert len(progress_ticks) == 5
-    assert shapley_result["shap_r2"] == pytest.approx(
-        {
-            "pressure": 4.0 / 3.0,
-            "wind_u": 4.0 / 3.0,
-            "Pressure (hPa) × Wind U (m/s)": 1.0 / 3.0,
-        }
+    assert sum(shapley_result["shap_r2"].values()) == pytest.approx(
+        shapley_result["full_r2"] - shapley_result["baseline_r2"]
     )
+    assert shapley_result["shap_r2"]["pressure"] == pytest.approx(shapley_result["shap_r2"]["wind_u"])
     assert shapley_result["shap_rmse"] == pytest.approx(
         {
             "pressure": -4.0 / 3.0,
@@ -496,7 +529,8 @@ def test_build_shapley_result_accepts_model_solver_keywords(monkeypatch):
         )
         score = int(component_mask.get("M2", False)) + int(component_mask.get("pressure", False))
         return {
-            "metrics_test": {"r2": float(score), "rmse": float(10 - score)},
+            "te_obs": np.array([-1.0, 1.0]),
+            "te_pred": np.array([-1.0, 1.0]) + (3 - score),
             "picked": {},
             "active_regs": ["pressure"] if component_mask.get("pressure", False) else [],
             "active_interactions": [],
@@ -654,9 +688,8 @@ def test_build_regressor_response_inputs_aligns_selected_lag():
             exog_config=None,
         )
     )
-    estimator.variables_ = {
-        "exog_coef_0": SimpleNamespace(value=np.array([[1.5, 2.5]])),
-    }
+    estimator.decomposition_ = {"values": {"exog_0_beta": np.array([1.5, 2.5])}}
+    estimator.freq_ = "1h"
 
     fit_result = {
         "tr_obs_clean": np.array([1.0, 2.0, 3.0, 4.0]),
@@ -720,6 +753,7 @@ def test_run_tidal_model_passes_active_interaction_pairs_to_estimator(monkeypatc
     monkeypatch.setattr(tidal_compact, "build_periodic_config", fake_build_periodic_config)
     monkeypatch.setattr(tidal_compact, "build_exog_design_matrices", fake_build_exog_design_matrices)
     monkeypatch.setattr(tidal_compact, "TsgamEstimator", FakeEstimator)
+    monkeypatch.setattr(tidal_compact, "fitted_components", lambda model, index: pd.DataFrame({"reconstruction": np.zeros(len(index))}, index=index))
 
     parameters = inspect.signature(tidal_compact.run_tidal_model).parameters
 
@@ -860,17 +894,9 @@ def test_build_regressor_basis_inputs_matches_tsgam_spline_basis():
     )
 
     basis_inputs = build_regressor_basis_inputs(regressor, "med")
-    estimator = tidal_compact.TsgamEstimator(
-        tidal_compact.TsgamEstimatorConfig(
-            multi_periodic_config=None,
-            exog_config=None,
-        )
-    )
-
-    expected_basis = estimator._make_H(
+    expected_basis = make_spline_basis(
         basis_inputs["grid"],
         basis_inputs["knots"],
-        include_offset=False,
     )
 
     np.testing.assert_allclose(basis_inputs["basis"], expected_basis)

@@ -656,7 +656,7 @@ def _():
     import seaborn as sns
     import scipy.stats as stats
     import statsmodels.api as sm
-    from spcqe import make_basis_matrix, make_regularization_matrix
+    from signaldecomp.basis import make_basis_matrix, make_regularization_matrix
     return (
         DataHandler,
         cvx,

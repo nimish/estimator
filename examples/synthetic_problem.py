@@ -7,7 +7,8 @@ from itertools import combinations
 
 import numpy as np
 import pandas as pd
-from spcqe import make_basis_matrix
+from signaldecomp import make_interaction_basis
+from signaldecomp.basis import make_basis_matrix
 
 from tsgam_estimator import (
     TrendType,
@@ -18,6 +19,14 @@ from tsgam_estimator import (
     TsgamSolverConfig,
     TsgamSplineConfig,
     TsgamTrendConfig,
+)
+from tsgam_estimator._design import (
+    _ensure_sorted_index,
+    _ensure_timestamp_index,
+    _get_zero_lag_H,
+    _normalize_interaction_pairs,
+    _process_exog_config,
+    _timestamps_to_indices,
 )
 
 
@@ -962,7 +971,7 @@ def _fourier_contribution(estimator: TsgamEstimator, time_indices: np.ndarray) -
         periods=estimator.config.multi_periodic_config.periods,
     )[adjusted_indices, 1:]
     coefficients = _coefficient_value(
-        estimator.variables_["fourier_coef"].value,
+        estimator.decomposition_["values"]["periodic_theta"],
         "Fourier coefficients",
     )
     return basis @ coefficients
@@ -1035,7 +1044,7 @@ def fourier_coefficient_frame(
         return pd.DataFrame(columns=columns)
 
     fitted_coefficients = _coefficient_value(
-        estimator.variables_["fourier_coef"].value,
+        estimator.decomposition_["values"]["periodic_theta"],
         "Fourier coefficients",
     )
     rows: list[dict[str, str | int | float]] = []
@@ -1083,7 +1092,7 @@ def cross_basis_coefficient_frame(
         return pd.DataFrame(columns=columns)
 
     fitted_coefficients = _coefficient_value(
-        estimator.variables_["fourier_coef"].value,
+        estimator.decomposition_["values"]["periodic_theta"],
         "Fourier coefficients",
     )
     basis_blocks = _periodic_basis_blocks(config)
@@ -1232,16 +1241,17 @@ def regressor_response_frame(
             if isinstance(exog_cfg, TsgamSplineConfig)
             else None
         )
-        _, basis_blocks = estimator._process_exog_config(
+        _, basis_blocks = _process_exog_config(
             exog_cfg,
             grid,
             knots=stored_knots,
         )
         zero_lag_ix = exog_cfg.lags.index(0)
+        suffix = "coef" if isinstance(exog_cfg, TsgamSplineConfig) else "beta"
         coefficients = _coefficient_value(
-            estimator.variables_[f"exog_coef_{ix}"].value,
+            estimator.decomposition_["values"][f"exog_{ix}_{suffix}"],
             f"Exogenous coefficients for {spec.name}",
-        )
+        ).reshape(basis_blocks[0].shape[1], len(basis_blocks), order="F")
         fitted = basis_blocks[zero_lag_ix] @ coefficients[:, zero_lag_ix]
         rows.append(
             pd.DataFrame(
@@ -1270,39 +1280,21 @@ def _trend_contribution(
     if (
         trend_config is None
         or trend_config.trend_type == TrendType.NONE
-        or "trend" not in estimator.variables_
     ):
         return np.zeros(n_samples, dtype=float)
 
-    trend = _coefficient_value(estimator.variables_["trend"].value, "Trend coefficients")
-    period_hours = getattr(estimator, "trend_period_hours_", trend_config.grouping)
-    if period_hours is None:
-        raise ValueError("Trend period is unavailable. Fit may not have converged.")
-
-    period_indices = (time_indices / period_hours).astype(int)
-    if len(period_indices) == 0:
-        return np.zeros(n_samples, dtype=float)
-    n_periods_pred = int(period_indices.max()) + 1
-    if n_periods_pred <= 0:
-        return np.zeros(n_samples, dtype=float)
-
-    trend_extended = np.zeros(n_periods_pred, dtype=float)
-    n_periods_fit = len(trend)
-    trend_extended[: min(n_periods_fit, n_periods_pred)] = trend[:n_periods_pred]
-    if n_periods_pred > n_periods_fit:
-        trend_extended[:n_periods_fit] = trend
-        slope_variable = estimator.variables_.get("trend_slope")
-        slope = None if slope_variable is None else slope_variable.value
-        if trend_config.trend_type == TrendType.LINEAR and slope is not None:
-            slope_value = float(np.asarray(slope))
-            for ix in range(n_periods_fit, n_periods_pred):
-                trend_extended[ix] = trend[-1] + slope_value * (ix - n_periods_fit + 1)
-        else:
-            trend_extended[n_periods_fit:] = trend[-1]
-
+    values = estimator.decomposition_["values"]
+    trend = _coefficient_value(values["trend_group_values"], "Trend coefficients")
     contribution = np.zeros(n_samples, dtype=float)
-    valid_mask = period_indices >= 0
-    contribution[valid_mask] = trend_extended[period_indices[valid_mask]]
+    period_indices = (time_indices / estimator.trend_period_hours_).astype(int)
+    valid = period_indices >= 0
+    selected = period_indices[valid]
+    contribution[valid] = trend[np.minimum(selected, len(trend) - 1)]
+    beyond = selected >= len(trend)
+    if trend_config.trend_type == TrendType.LINEAR:
+        contribution[np.flatnonzero(valid)[beyond]] += float(values["trend_slope"]) * (
+            selected[beyond] - len(trend) + 1
+        )
     return contribution
 
 
@@ -1313,12 +1305,15 @@ def fitted_component_frame(
     regressor_names: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """Return fitted additive component contributions for a fitted estimator."""
-    (X_sorted,) = estimator._ensure_sorted_index(X)
-    timestamps, X_array = estimator._ensure_timestamp_index(X_sorted)
-    time_indices = estimator._timestamps_to_indices(timestamps, estimator.time_reference_)
+    (X_sorted,) = _ensure_sorted_index(X, sort_index=estimator.config.sort_index)
+    timestamps, X_array = _ensure_timestamp_index(X_sorted)
+    time_indices = _timestamps_to_indices(
+        timestamps, estimator.time_reference_, estimator.freq_
+    )
     n_samples = len(X_array)
 
-    constant = float(_coefficient_value(estimator.variables_["constant"].value, "Constant"))
+    values = estimator.decomposition_["values"]
+    constant = float(_coefficient_value(values["intercept_group_values"], "Constant")[0])
     components: dict[str, np.ndarray] = {
         "constant": np.full(n_samples, constant, dtype=float),
     }
@@ -1329,9 +1324,10 @@ def fitted_component_frame(
         names.extend(f"x{ix}" for ix in range(len(names), len(exog_config)))
 
     zero_lag_Hs: dict[int, np.ndarray] = {}
+    interaction_pairs = _normalize_interaction_pairs(estimator.config)
     interaction_parent_indices = {
         exog_ix
-        for pair in getattr(estimator, "interaction_pairs_", [])
+        for pair in interaction_pairs
         for exog_ix in pair
     }
     for ix, exog_cfg in enumerate(exog_config):
@@ -1340,37 +1336,36 @@ def fitted_component_frame(
             if isinstance(exog_cfg, TsgamSplineConfig)
             else None
         )
-        _, basis_blocks = estimator._process_exog_config(
+        _, basis_blocks = _process_exog_config(
             exog_cfg,
             X_array[:, ix],
             knots=stored_knots,
         )
         if ix in interaction_parent_indices:
-            zero_lag_Hs[ix] = estimator._get_zero_lag_H(exog_cfg, basis_blocks)
+            zero_lag_Hs[ix] = _get_zero_lag_H(exog_cfg, basis_blocks)
 
+        suffix = "coef" if isinstance(exog_cfg, TsgamSplineConfig) else "beta"
         coefficients = _coefficient_value(
-            estimator.variables_[f"exog_coef_{ix}"].value,
+            values[f"exog_{ix}_{suffix}"],
             f"Exogenous coefficients for {names[ix]}",
-        )
+        ).reshape(basis_blocks[0].shape[1], len(basis_blocks), order="F")
         contribution = np.zeros(n_samples, dtype=float)
         for lag_ix, basis in enumerate(basis_blocks):
             contribution += np.nan_to_num(basis, nan=0.0) @ coefficients[:, lag_ix]
         components[f"regressor:{names[ix]}"] = contribution
 
-    for pair_ix, (left_ix, right_ix) in enumerate(getattr(estimator, "interaction_pairs_", [])):
+    for pair_ix, (left_ix, right_ix) in enumerate(interaction_pairs):
         coefficients = _coefficient_value(
-            estimator.variables_[f"interaction_coef_{pair_ix}"].value,
+            values[f"interaction_{pair_ix}_coef"],
             f"Interaction coefficients for pair {pair_ix}",
         )
         left_name = names[left_ix]
         right_name = names[right_ix]
         components[f"interaction:{left_name} x {right_name}"] = (
-            estimator._interaction_contribution_from_blocks(
-                zero_lag_Hs[left_ix],
-                zero_lag_Hs[right_ix],
-                coefficients,
-                nan_to_zero=True,
-            )
+            make_interaction_basis(
+                zero_lag_Hs[left_ix], zero_lag_Hs[right_ix]
+            ).design
+            @ coefficients.reshape(-1)
         )
 
     components["periodic"] = _fourier_contribution(estimator, time_indices)

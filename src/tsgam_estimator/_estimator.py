@@ -3,50 +3,32 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import overload
+from typing import cast
 
-from numpy import ndarray
-import numpy as np
 import cvxpy
-from numpy.random import RandomState
-from scipy import stats, signal
-from scipy.sparse import spmatrix
-from sklearn.base import RegressorMixin, BaseEstimator, check_is_fitted
-from sklearn.utils import check_random_state
+import numpy as np
 import pandas as pd
+from numpy import ndarray
+from numpy.random import RandomState
+from scipy import signal, stats
+from signaldecomp import make_offset_basis, solve
+from signaldecomp.spline import make_spline_basis
+from sklearn.base import BaseEstimator, RegressorMixin, check_is_fitted
+from sklearn.utils import check_random_state
 
 from ._design import (
-    _build_exog_Hs,
-    _ensure_numeric_prefix,
-    _ensure_sorted_index,
-    _ensure_timestamp_index,
     _extract_timestamps,
-    _get_zero_lag_H,
-    _infer_frequency_from_differences,
-    _interaction_contribution_from_blocks,
-    _make_offset_H,
-    _make_regularization_matrix,
-    _make_spline_H,
-    _min_samples_required,
-    _normalize_interaction_pairs,
-    _outer_column_product,
-    _process_exog_config,
-    _timestamps_to_indices,
     _to_pandas_timedelta_frequency,
-    _validate_frequency,
     build_tsgam_design,
     infer_fit_frequency,
-    resolve_exog_knots,
     sort_fit_inputs,
     sort_predict_X,
     validate_predict_frequency,
 )
 from ._problem import (
     evaluate_single_output_prediction,
-    make_single_output_standard_variables,
-    single_output_prediction_expression,
-    solve_problem,
-    weighted_squared_loss,
+    build_single_output_decomposition,
+    legacy_variable_views,
 )
 from ._sklearn import SklearnConfigMixin
 
@@ -124,9 +106,10 @@ class TsgamSplineConfig(SklearnConfigMixin):
         min and max of the variable. If None, knots must be provided explicitly.
         Ignored if knots is non-empty.
     lags : list[int], default=[0]
-        Lead/lag offsets for the exogenous variable. Positive values = lag
-        (looking back), negative values = lead (looking forward). For example,
-        [-3, -2, -1, 0, 1, 2, 3] includes 3 hours ahead, current, and 3 hours back.
+        Time offsets for the exogenous variable, evaluated as ``x[t + offset]``.
+        Negative values are lags (past values), and positive values are leads
+        (future values). For example, ``[-3, -2, -1, 0]`` includes the current
+        value and the previous three samples.
     reg_weight : float, default=1.0e-4
         Regularization weight for spline coefficients. Higher values increase
         smoothness. Typical range: 1e-5 to 1e-3.
@@ -149,7 +132,7 @@ class TsgamSplineConfig(SklearnConfigMixin):
     ...     lags=[0]
     ... )
     """
-    n_knots: int | None
+    n_knots: int | None = None
     lags: list[int] = field(default_factory=lambda:[0])
     reg_weight: float = 1.0e-4
     diff_reg_weight: float = 1.0
@@ -167,9 +150,10 @@ class TsgamLinearConfig(SklearnConfigMixin):
     Parameters
     ----------
     lags : list[int], default=[0]
-        Lead/lag offsets for the exogenous variable. Positive values = lag
-        (looking back), negative values = lead (looking forward). For example,
-        [-1, 0, 1] includes 1 hour ahead, current, and 1 hour back.
+        Time offsets for the exogenous variable, evaluated as ``x[t + offset]``.
+        Negative values are lags (past values), and positive values are leads
+        (future values). For example, ``[-1, 0]`` includes the current value and
+        the previous sample.
     reg_weight : float, default=1.0e-4
         Regularization weight for linear coefficients. Higher values increase
         regularization. Typical range: 1e-5 to 1e-3.
@@ -729,7 +713,8 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
     - Optional outlier detector (sparse multiplicative corrections per period)
     - Optional autoregressive (AR) modeling of residuals
 
-    The model uses regularized optimization via CVXPY to fit coefficients.
+    The model composes its structural components with SignalDecomp and uses
+    CVXPY to fit coefficients.
     While the model can work with targets in any scale, log transformation is
     commonly used when components are multiplicative rather than additive.
 
@@ -740,36 +725,29 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
 
     Attributes
     ----------
-    problem_ : cvxpy.Problem
-        The solved optimization problem. Check `problem_.status` to verify
-        convergence (should be 'optimal' or 'optimal_inaccurate').
     freq_ : str
         Inferred frequency of the time series (e.g., 'h' for hourly).
     time_reference_ : Timestamp
         Reference timestamp used for phase alignment (first timestamp from fit).
     time_indices_ : ndarray
         Numeric time indices (hours since reference) used during fit.
+    decomposition_ : dict
+        Native SignalDecomp solve result. Fitted components and coefficients are
+        available by role under ``decomposition_["values"]``.
     variables_ : dict
-        Dictionary of CVXPY variables containing fitted coefficients:
-        - 'constant': intercept term
-        - 'fourier_coef': Fourier coefficients (if multi_periodic_config provided)
-        - 'exog_coef_{i}': Exogenous variable coefficients for variable i
-        - 'trend': Trend coefficients (if trend_config provided)
-        - 'trend_slope': Trend slope (if trend_type='linear')
-        - 'outlier': Outlier coefficients (if outlier_config provided)
+        Historical coefficient names and shapes as CVXPY expression views.
+        Supports inspection through ``.value``; prediction uses native results.
+    output_ : dict
+        Alias of ``decomposition_`` (no separate result schema).
+    problem_ : cvxpy.Problem
+        The native optimization problem.
     exog_knots_ : list
         List of knot locations for spline exogenous variables (auto-computed
         during fit, reused during predict).
-    trend_T_matrix_ : ndarray or None
-        Matrix mapping samples to periods for trend term (if trend_config provided).
     trend_period_hours_ : float or None
         Period length in hours used for trend (if trend_config provided).
-    outlier_T_matrix_ : ndarray or None
-        Matrix mapping samples to periods for outlier detector (if outlier_config provided).
     outlier_period_hours_ : float or None
         Period length in hours used for outlier detector (if outlier_config provided).
-    combined_valid_mask_ : ndarray
-        Boolean mask indicating valid samples (no NaN from lead/lag operations).
     ar_coef_ : ndarray or None
         Fitted AR coefficients (if ar_config provided and model converged).
     ar_intercept_ : float or None
@@ -813,7 +791,7 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
     >>> estimator.fit(X, y)
     >>>
     >>> # Access detected outliers
-    >>> outlier_values = estimator.variables_['outlier'].value
+    >>> outlier_values = estimator.decomposition_["values"]["outlier_group_values"]
     >>> print(f"Detected {np.sum(np.abs(outlier_values) > 0.1)} outlier days")
     >>>
     >>> # Make predictions
@@ -824,404 +802,8 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
     def __init__(self, config: TsgamEstimatorConfig) -> None:
         self.config = config
 
-    def _extract_timestamps(self, X: pd.DataFrame) -> pd.DatetimeIndex:
-        """
-        Extract timestamps from X.
-
-        Parameters
-        ----------
-        X : array-like or DataFrame
-            Input data. If DataFrame with DatetimeIndex, extracts index.
-            If DataFrame, checks first column for datetime.
-            Otherwise raises ValueError.
-
-        Returns
-        -------
-        timestamps : DatetimeIndex
-            Extracted timestamps.
-        """
-        return _extract_timestamps(X)
-
-    @staticmethod
-    def _ensure_numeric_prefix(freq: str) -> str:
-        """Ensure frequency string has a numeric prefix (e.g. ``'h'`` -> ``'1h'``)."""
-        return _ensure_numeric_prefix(freq)
-
-    def _timestamps_to_indices(self, timestamps: pd.DatetimeIndex, reference: pd.Timestamp) -> ndarray:
-        """
-        Convert timestamps to numeric indices (hours since reference).
-
-        Parameters
-        ----------
-        timestamps : DatetimeIndex
-            Timestamps to convert.
-        reference : Timestamp
-            Reference timestamp (time 0).
-
-        Returns
-        -------
-        indices : ndarray
-            Numeric indices in hours since reference.
-        """
-        return _timestamps_to_indices(timestamps, reference, getattr(self, 'freq_', None))
-
-    def _get_trend_period_hours(self, timestamps: pd.DatetimeIndex, period_hours: float | None = None) -> tuple[float, float]:
-        """
-        Determine trend period in hours from data frequency.
-
-        Parameters
-        ----------
-        timestamps : DatetimeIndex
-            Timestamps from the data.
-        period_hours : float or None, default=None
-            Explicit period in hours. If None, defaults to daily (24 hours for
-            sub-daily data, 1 day for daily data, etc.).
-
-        Returns
-        -------
-        period_hours : float
-            Period length in hours.
-        samples_per_period : float
-            Number of samples per period (for creating T matrix).
-        """
-        if period_hours is not None:
-            # Use explicit period
-            # Calculate samples per period from data frequency
-            if len(timestamps) < 2:
-                raise ValueError("Need at least 2 timestamps to infer frequency.")
-            diffs = timestamps[1:] - timestamps[:-1]
-            median_diff_hours = diffs.median().total_seconds() / 3600.0
-            samples_per_period = period_hours / median_diff_hours
-            return period_hours, samples_per_period
-
-        # Default to daily period
-        # Infer frequency and calculate base time step
-        inferred_freq = pd.infer_freq(timestamps)
-        if inferred_freq is None:
-            # Try to infer from differences
-            diffs = timestamps[1:] - timestamps[:-1]
-            median_diff = diffs.median()
-            base_step_hours = median_diff.total_seconds() / 3600.0
-        else:
-            try:
-                freq_td_str = inferred_freq if inferred_freq[0].isdigit() else f'1{inferred_freq}'
-                base_step_hours = pd.to_timedelta(_to_pandas_timedelta_frequency(freq_td_str)).total_seconds() / 3600.0
-            except (ValueError, IndexError):
-                diffs = timestamps[1:] - timestamps[:-1]
-                base_step_hours = diffs.median().total_seconds() / 3600.0
-
-        # Default period: daily (24 hours)
-        period_hours = 24.0
-        samples_per_period = period_hours / base_step_hours
-
-        return period_hours, samples_per_period
-
-    def _infer_frequency_from_differences(self, timestamps: pd.DatetimeIndex) -> str:
-        """
-        Infer the intended frequency from time differences, even when there are gaps.
-
-        This method finds the most common time difference between consecutive timestamps
-        and maps it to a pandas frequency string.
-
-        Parameters
-        ----------
-        timestamps : DatetimeIndex
-            Timestamps (may have gaps)
-
-        Returns
-        -------
-        freq : str
-            Inferred frequency string (e.g., 'h', '15min', 'D')
-        """
-        return _infer_frequency_from_differences(timestamps)
-
-    def _validate_frequency(self, timestamps: pd.DatetimeIndex, expected_freq: str, allow_gaps: bool = False) -> None:
-        """
-        Validate that timestamps match expected frequency, optionally allowing gaps.
-
-        Parameters
-        ----------
-        timestamps : DatetimeIndex
-            Timestamps to validate.
-        expected_freq : str
-            Expected pandas frequency string (e.g., 'h' for hourly, 'H' also accepted).
-        allow_gaps : bool, default=False
-            If True, allow gaps in timestamps and infer base frequency from
-            time differences.  If False, require perfectly regular timestamps.
-
-        Raises
-        ------
-        ValueError
-            If frequency doesn't match or timestamps are not regular (when allow_gaps=False).
-        """
-        _validate_frequency(timestamps, expected_freq, allow_gaps=allow_gaps)
-
-    def _ensure_timestamp_index(self, X: pd.DataFrame) -> tuple[pd.DatetimeIndex, ndarray]:
-        """
-        Ensure X has proper timestamp index/column, extracting timestamps.
-
-        Parameters
-        ----------
-        X : array-like or DataFrame
-            Input data.
-
-        Returns
-        -------
-        timestamps : DatetimeIndex
-            Extracted timestamps.
-        X_array : ndarray
-            X as array without timestamp column if it was extracted.
-        """
-        return _ensure_timestamp_index(X)
-
-    @overload
-    def _ensure_sorted_index(
-        self, X: pd.DataFrame, y: ndarray, sample_weight: ndarray | None = None
-    ) -> tuple[pd.DataFrame, ndarray, ndarray | None]: ...
-    @overload
-    def _ensure_sorted_index(
-        self, X: pd.DataFrame, y: None = None, sample_weight: None = None
-    ) -> tuple[pd.DataFrame]: ...
-
-    def _ensure_sorted_index(
-        self,
-        X: pd.DataFrame,
-        y: ndarray | None = None,
-        sample_weight: ndarray | None = None,
-    ) -> tuple[pd.DataFrame, ndarray, ndarray | None] | tuple[pd.DataFrame]:
-        """
-        Sort X (and y, sample_weight if provided) by datetime index, or require sorted.
-
-        If config.sort_index is True, sort by timestamps so row order matches
-        time order. If False, require the index to be chronologically sorted
-        and raise ValueError if not.
-
-        Parameters
-        ----------
-        X : DataFrame
-            Input data with DatetimeIndex or datetime column.
-        y : array-like of shape (n_samples,) or None
-            Target values (fit only). If provided, reordered in the same way as X.
-        sample_weight : array-like of shape (n_samples,) or None
-            Sample weights (fit only). If provided, reordered with X and y.
-
-        Returns
-        -------
-        If y is None: (X_sorted,)
-        If y is not None: (X_sorted, y_sorted, sample_weight_sorted or None)
-        """
-        if y is None:
-            return _ensure_sorted_index(
-                X,
-                sort_index=self.config.sort_index,
-            )
-        return _ensure_sorted_index(
-            X,
-            sort_index=self.config.sort_index,
-            y=y,
-            sample_weight=sample_weight,
-        )
-
-    def _make_regularization_matrix(self, num_harmonics: list[int],
-                                   weight: float,
-                                   periods: list[float],
-                                   drop_constant: bool = False,
-                                   standing_wave: bool | list[bool] = False,
-                                   trend: bool = False,
-                                   max_cross_k: int | None = None,
-                                   custom_basis: dict[int, ndarray] | None = None) -> spmatrix:
-        """
-        Create regularization matrix for Fourier coefficients.
-
-        Parameters
-        ----------
-        num_harmonics : int or array-like
-            Number of harmonics for each period.
-        weight : float
-            Regularization weight.
-        periods : float or array-like
-            Periods for each harmonic block.
-        standing_wave : bool or array-like, default=False
-            Whether to use standing wave basis.
-        trend : bool, default=False
-            Whether to include trend term.
-        max_cross_k : int or None, default=None
-            Maximum cross terms.
-        custom_basis : dict or None, default=None
-            Custom basis matrices.
-
-        Returns
-        -------
-        D : sparse matrix
-            Regularization matrix.
-        """
-        return _make_regularization_matrix(
-            num_harmonics,
-            weight,
-            periods,
-            drop_constant=drop_constant,
-            standing_wave=standing_wave,
-            trend=trend,
-            max_cross_k=max_cross_k,
-            custom_basis=custom_basis,
-        )
-
-
-
-    def _make_H(self, x: ndarray, knots: ndarray, include_offset: bool = False) -> ndarray:
-        """
-        Create cubic spline basis matrix.
-
-        Parameters
-        ----------
-        x : array-like
-            Input values.
-        knots : array-like
-            Knot locations.
-        include_offset : bool, default=False
-            Whether to include constant term.
-
-        Returns
-        -------
-        H : ndarray
-            Basis matrix.
-        """
-        return _make_spline_H(x, knots, include_offset=include_offset)
-
-    def _make_offset_H(self, H: ndarray, offset: int) -> ndarray:
-        """
-        Create lead/lag version of basis matrix.
-
-        Parameters
-        ----------
-        H : ndarray
-            Original basis matrix.
-        offset : int
-            Lead/lag offset (positive = lag, negative = lead).
-
-        Returns
-        -------
-        newH : ndarray
-            Offset basis matrix with NaN padding.
-        """
-        return _make_offset_H(H, offset)
-
-    def _running_view(self, arr: ndarray, window: int, lag: int = 1, axis: int = -1) -> ndarray:
-        """
-        Create running view of array for AR terms.
-
-        Parameters
-        ----------
-        arr : array-like
-            Input array.
-        window : int
-            Window size (number of AR lags).
-        lag : int, default=1
-            Lag offset (typically 1 for standard AR).
-        axis : int, default=-1
-            Axis along which to create running view.
-
-        Returns
-        -------
-        view : ndarray
-            Running view with extra dimension of shape (len(arr), window).
-        """
-        mod_arr = np.r_[np.ones(window + lag - 1) * np.nan, arr[:-1]]
-        shape = list(mod_arr.shape)
-        shape[axis] -= (window - 1)
-        assert shape[axis] > 0, f"Array too short for window={window}, lag={lag}"
-        return np.lib.stride_tricks.as_strided(
-            mod_arr,
-            shape=shape + [window],
-            strides=mod_arr.strides + (mod_arr.strides[axis],)
-        )
-
-    def _build_exog_Hs(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None) -> list[ndarray]:
-        """
-        Build basis matrices for an exogenous variable with lead/lag.
-
-        This is a helper method that can be reused in both fit and predict.
-
-        Parameters
-        ----------
-        exog_cfg : TsgamSplineConfig or TsgamLinearConfig
-            Configuration for the exogenous variable.
-        exog_var : ndarray
-            Single exogenous variable column (shape: (n_samples,)).
-        knots : ndarray or None, default=None
-            Knot locations for spline (if None and spline config, will be computed or error).
-
-        Returns
-        -------
-        Hs : list of ndarray
-            List of basis matrices, one for each lag in exog_cfg.lags.
-        """
-        return _build_exog_Hs(exog_cfg, exog_var, knots)
-
-    def _process_exog_config(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, exog_var: ndarray, knots: ndarray | None = None) -> tuple[ndarray, list[ndarray]]:
-        """
-        Process an exogenous variable configuration to build basis matrices.
-
-        Parameters
-        ----------
-        exog_cfg : TsgamSplineConfig or TsgamLinearConfig
-            Configuration for the exogenous variable.
-        exog_var : ndarray
-            Single exogenous variable column (shape: (n_samples,)).
-        knots : ndarray or None, optional
-            Pre-computed knots to use (for prediction). If None, computes from config or data.
-
-        Returns
-        -------
-        valid_mask : ndarray
-            Boolean mask indicating valid samples (no NaN from lead/lag operations).
-        Hs : list of ndarray
-            List of basis matrices, one for each lag in exog_cfg.lags.
-        """
-        return _process_exog_config(exog_cfg, exog_var, knots=knots)
-
-    def _get_zero_lag_H(self, exog_cfg: TsgamSplineConfig | TsgamLinearConfig, Hs: list[ndarray]) -> ndarray:
-        """Return the current-index basis block for an exogenous term."""
-        return _get_zero_lag_H(exog_cfg, Hs)
-
-    def _outer_column_product(self, arr1: ndarray, arr2: ndarray) -> ndarray:
-        """Build a q*r interaction design block from two response matrices."""
-        return _outer_column_product(arr1, arr2)
-
-    def _interaction_contribution_from_blocks(
-        self,
-        arr1: ndarray,
-        arr2: ndarray,
-        interaction_coef: ndarray,
-        *,
-        nan_to_zero: bool = False,
-    ) -> ndarray:
-        """Contract two response matrices against flattened interaction coefficients."""
-        return _interaction_contribution_from_blocks(
-            arr1,
-            arr2,
-            interaction_coef,
-            nan_to_zero=nan_to_zero,
-        )
-
-    def _normalize_interaction_pairs(self) -> list[tuple[int, int]]:
-        """Validate and normalize configured exogenous interaction pairs."""
-        return _normalize_interaction_pairs(self.config)
-
-    def _get_min_samples_required(self) -> int:
-        """
-        Calculate minimum number of samples required based on lags.
-
-        For positive lags (looking back), we need at least that many samples.
-        For negative lags (leads/looking forward), we need at least abs(lag) samples.
-        For AR lags, we need at least max(ar_lags) samples.
-
-        Returns
-        -------
-        min_samples : int
-            Minimum number of samples required.
-        """
-        return _min_samples_required(self.config)
+    # Historical response-plot helper; implementation belongs to SignalDecomp.
+    _make_H = staticmethod(make_spline_basis)
 
     def fit(self, X: pd.DataFrame, y: ndarray, sample_weight: ndarray | None = None) -> "TsgamEstimator":
         """
@@ -1286,185 +868,81 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
         timestamps = _extract_timestamps(X)
         self.freq_ = infer_fit_frequency(timestamps)
         self.time_reference_ = timestamps[0]
-        self.exog_knots_ = resolve_exog_knots(self.config, X)
         design = build_tsgam_design(
             self.config,
             X,
             y,
             sample_weight,
-            knots_by_exog=self.exog_knots_,
             reference=self.time_reference_,
             freq=self.freq_,
         )
         assert design.y is not None
         assert design.sample_weight is not None
-        X_array = design.X_array
-        fit_y = design.y
         time_indices = design.time_indices
         self.time_indices_ = time_indices
-        self._sample_weight_ = design.sample_weight
-        self.combined_valid_mask_ = design.valid_mask
-        self.interaction_pairs_ = design.interaction_pairs
-        self._fit_design_ = design
-        self.variables_, regularization_term = make_single_output_standard_variables(
-            self.config,
-            design,
-        )
-        model_term = single_output_prediction_expression(
-            self.config,
-            design,
-            self.variables_,
-            self.combined_valid_mask_,
-        )
 
-        # Add trend term if configured
-        constraints = []
+        trend_period = None
         if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE:
-            trend_config = self.config.trend_config
+            trend_period = self.config.trend_config.grouping or 24.0
+            self.trend_period_hours_ = trend_period
 
-            # Determine period and samples per period
-            period_hours, samples_per_period = self._get_trend_period_hours(
-                timestamps, trend_config.grouping
-            )
-
-            # Calculate number of periods
-            # Use time_indices to determine which period each sample belongs to
-            period_indices = (time_indices / period_hours).astype(int)
-            n_periods = period_indices.max() + 1
-
-            # Create T matrix: maps each sample to its period
-            # T[i, j] = 1 if sample i belongs to period j, else 0
-            T = np.zeros((len(fit_y), n_periods))
-            # Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i
-            T[np.arange(len(period_indices)), period_indices] = 1.0
-
-            # Create trend variable (one value per period)
-            trend = cvxpy.Variable(n_periods)
-            self.variables_['trend'] = trend
-            self.trend_T_matrix_ = T  # Store for prediction
-            self.trend_period_hours_ = period_hours  # Store period for prediction
-
-            # Add trend term to model
-            trend_term = T @ trend
-            model_term += trend_term[self.combined_valid_mask_]
-
-            # Add regularization for trend differences
-            regularization_term += trend_config.reg_weight * cvxpy.sum_squares(cvxpy.diff(trend))
-
-            # Add constraints based on trend type
-            constraints.append(trend[0] == 0)  # Baseline constraint
-
-            if trend_config.trend_type == TrendType.LINEAR:
-                # Linear trend: constant slope
-                slope = cvxpy.Variable()
-                self.variables_['trend_slope'] = slope
-                constraints.append(cvxpy.diff(trend) == slope)
-            elif trend_config.trend_type in (
-                TrendType.NONLINEAR,
-                TrendType.NONLINEAR_DEC,
-            ):
-                # Nonlinear monotonic decreasing trend
-                constraints.append(cvxpy.diff(trend) <= 0)
-            elif trend_config.trend_type == TrendType.NONLINEAR_INC:
-                constraints.append(cvxpy.diff(trend) >= 0)
-            # For 'none', trend_term is None so it won't be added
-
-        # Add outlier detector term if configured
+        outlier_period = None
         if self.config.outlier_config is not None:
-            outlier_config = self.config.outlier_config
-            # Determine period (default to 24 hours for daily)
-            if outlier_config.period_hours is not None:
-                period_hours = outlier_config.period_hours
-            else:
-                # Default to daily (24 hours)
-                period_hours = 24.0
+            outlier_period = self.config.outlier_config.period_hours or 24.0
+            self.outlier_period_hours_ = outlier_period
 
-            # Calculate number of periods
-            # Use time_indices to determine which period each sample belongs to
-            period_indices = (time_indices / period_hours).astype(int)
-            n_periods = period_indices.max() + 1
-
-            # Create T matrix: maps each sample to its period
-            # T[i, j] = 1 if sample i belongs to period j, else 0
-            T = np.zeros((len(fit_y), n_periods))
-            # Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i
-            T[np.arange(len(period_indices)), period_indices] = 1.0
-
-            # Create outlier variable (one value per period)
-            outlier = cvxpy.Variable(n_periods)
-            self.variables_['outlier'] = outlier
-            self.outlier_T_matrix_ = T  # Store for prediction
-            self.outlier_period_hours_ = period_hours  # Store period for prediction
-
-            # Add outlier term to model (additive in log space, multiplicative in original scale)
-            outlier_term = T @ outlier
-            model_term += outlier_term[self.combined_valid_mask_]
-
-            # Add L1 regularization to encourage sparsity
-            regularization_term += outlier_config.reg_weight * cvxpy.norm1(outlier)
-
-        # Weighted least squares: sum(w_i * r_i^2) / sum(w_i) on valid samples
-        y_valid = fit_y[self.combined_valid_mask_]
-        weight_valid = self._sample_weight_[self.combined_valid_mask_]
-        error = weighted_squared_loss(y_valid, model_term, weight_valid)
-        self.problem_ = cvxpy.Problem(cvxpy.Minimize(error + regularization_term), constraints)
-        solve_problem(
-            self.problem_,
-            self.config.solver_config,
-            failure_message=(
-                "Optimization problem did not converge. "
-                "This may cause NaN predictions. Check your data and model configuration."
-            ),
+        built = build_single_output_decomposition(
+            self.config,
+            design,
+            trend_period=trend_period,
+            outlier_period=outlier_period,
         )
+        decomposition = solve(
+            built, solver=self.config.solver_config.solver, verify_dcp=True,
+            verbose=self.config.solver_config.verbose,
+            warm_start=self.config.solver_config.warm_start,
+            **self.config.solver_config._solve_kwargs(),
+        )
+        self.decomposition_ = decomposition
+        self.output_ = decomposition
+        self.problem_ = decomposition["problem"]
+        self.variables_ = legacy_variable_views(self.config, decomposition["variables"])
+        values = cast(dict[str, ndarray | float], decomposition["values"])
+        metadata = cast(dict[str, dict[str, object]], decomposition["component_metadata"])
+        self.exog_knots_ = [
+            np.asarray(metadata[f"exog_{ix}"]["knots"])
+            if isinstance(exog_cfg, TsgamSplineConfig)
+            else None
+            for ix, exog_cfg in enumerate(self.config.exog_config or [])
+        ]
 
         # Check that constant term is valid
-        if self.variables_['constant'].value is None or np.isnan(self.variables_['constant'].value):
+        if np.isnan(cast(ndarray, values["intercept_group_values"])[0]):
             raise ValueError(
-                f"Constant term is None or NaN after optimization. Problem status: {self.problem_.status}"
+                f"Constant term is NaN after optimization. Status: {decomposition['status']}"
             )
 
         # Fit AR model if configured
         if self.config.ar_config is not None:
-            self._fit_ar_model(X_array, fit_y, time_indices)
+            self._fit_ar_model()
 
         return self
 
-    def _fit_ar_model(self, X_array: ndarray, y: ndarray, time_indices: ndarray) -> None:
-        """
-        Fit AR model on baseline residuals.
-
-        Parameters
-        ----------
-        X_array : ndarray
-            Exogenous variables array.
-        y : ndarray
-            Target values.
-        time_indices : ndarray
-            Time indices for Fourier basis.
-        """
-        baseline_pred = evaluate_single_output_prediction(
-            self.config,
-            self._fit_design_,
-            self.variables_,
-        )
-
-        # Add trend term if present
-        if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_:
-            trend = self.variables_['trend'].value
-            if trend is not None and hasattr(self, 'trend_T_matrix_'):
-                T = self.trend_T_matrix_
-                baseline_pred += T @ trend
-
+    def _fit_ar_model(self) -> None:
+        """Fit the AR model on the SignalDecomp residual."""
         # Compute residuals on valid samples
-        residuals = y[self.combined_valid_mask_] - baseline_pred[self.combined_valid_mask_]
+        fit_mask = cast(ndarray, self.decomposition_["fit_mask"])
+        values = cast(dict[str, ndarray | float], self.decomposition_["values"])
+        residuals = np.where(fit_mask, values["residual"], np.nan)
 
         # Build AR design matrix
         if self.config.ar_config is None:
             return
         ar_config = self.config.ar_config
         ar_lags = len(ar_config.lags)
-        B = self._running_view(residuals, ar_lags)
-        ar_valid_mask = np.all(~np.isnan(B), axis=1)
+        basis = make_offset_basis(residuals, offsets=tuple(reversed(ar_config.lags)))
+        B = basis.design
+        ar_valid_mask = fit_mask & basis.valid_mask
 
         if self.config.debug:
             self._B_running_view_ = B
@@ -1494,7 +972,7 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
             **self.config.solver_config._solve_kwargs(),
         )
 
-        if ar_problem.status not in ["infeasible", "unbounded"]:
+        if ar_problem.status in ["optimal", "optimal_inaccurate"]:
             assert theta.value is not None, "AR coefficients should be set"
             assert constant.value is not None, "AR intercept should be set"
             self.ar_coef_ = theta.value
@@ -1529,7 +1007,8 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
         X : DataFrame
             Input data with exogenous variables. Must have DatetimeIndex or
             first column must be datetime. Must have same frequency as training data.
-            Column order must match training data.
+            Column order must match training data. Rows lacking source history
+            for an exogenous offset return NaN; include source padding to predict them.
 
         Returns
         -------
@@ -1553,7 +1032,7 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
         >>> # Convert back to original scale
         >>> predictions_original = np.exp(predictions)
         """
-        check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
+        check_is_fitted(self, ['decomposition_', 'time_reference_', 'freq_'])
 
         X = sort_predict_X(X, sort_index=self.config.sort_index)
         timestamps = _extract_timestamps(X)
@@ -1571,66 +1050,37 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
         predictions = evaluate_single_output_prediction(
             self.config,
             design,
-            self.variables_,
+            cast(dict[str, ndarray | float], self.decomposition_["values"]),
             remove_periodic=remove_periodic,
             remove_exogenous=remove_exogenous,
         )
 
-        # Add trend term if present
-        if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE and 'trend' in self.variables_:
-            trend = self.variables_['trend'].value
-            if trend is None:
-                raise ValueError("Trend coefficients are None. Model may not have converged.")
-
-            # Use stored period_hours from fit (or recalculate if not stored)
-            if hasattr(self, 'trend_period_hours_'):
-                period_hours = self.trend_period_hours_
-            else:
-                # Fallback: recalculate (shouldn't happen if fit was called first)
-                period_hours, _ = self._get_trend_period_hours(
-                    timestamps, self.config.trend_config.grouping
+        values = cast(dict[str, ndarray | float], self.decomposition_["values"])
+        if (
+            not remove_trend
+            and self.config.trend_config is not None
+            and self.config.trend_config.trend_type != TrendType.NONE
+        ):
+            trend = cast(ndarray, values["trend_group_values"])
+            period_indices = (time_indices / self.trend_period_hours_).astype(int)
+            valid = period_indices >= 0
+            selected = period_indices[valid]
+            contribution = trend[np.minimum(selected, len(trend) - 1)].copy()
+            beyond = selected >= len(trend)
+            if self.config.trend_config.trend_type == TrendType.LINEAR:
+                contribution[beyond] += float(values["trend_slope"]) * (
+                    selected[beyond] - len(trend) + 1
                 )
-
-            # Calculate period indices for prediction timestamps
-            period_indices = (time_indices / period_hours).astype(int)
-            n_periods_fit = len(trend)
-            n_periods_pred = period_indices.max() + 1
-
-            # Create T matrix for predictions
-            T_pred = np.zeros((len(predictions), n_periods_pred))
-            # Use numpy advanced indexing for efficiency
-            # Filter out negative indices (can occur if predicting before training data)
-            valid_mask = period_indices >= 0
-            T_pred[np.arange(len(period_indices))[valid_mask], period_indices[valid_mask]] = 1.0
-
-            # Extend trend if prediction extends beyond training data
-            if n_periods_pred > n_periods_fit:
-                # Extend trend using the last value or extrapolate based on trend type
-                trend_extended = np.zeros(n_periods_pred)
-                trend_extended[:n_periods_fit] = trend
-
-                if self.config.trend_config.trend_type == TrendType.LINEAR and self.variables_['trend_slope'].value is not None:
-                    for i in range(n_periods_fit, n_periods_pred):
-                        trend_extended[i] = trend[-1] + self.variables_['trend_slope'].value * (i - n_periods_fit + 1)
-                else:
-                    # fallback: use last value
-                    trend_extended[n_periods_fit:] = trend[-1]
-
-                trend = trend_extended
-            else:
-                trend = trend[:n_periods_pred]
-
-            # Add trend term to predictions
-            predictions += T_pred @ trend
+            predictions[valid] += contribution
 
         # Final check for NaN in predictions
-        if np.any(np.isnan(predictions)):
+        if np.any(np.isnan(predictions) & design.valid_mask):
             nan_count = np.sum(np.isnan(predictions))
             nan_indices = np.where(np.isnan(predictions))[0]
             raise ValueError(
                 f"Predictions contain {nan_count} NaN values out of {len(predictions)}. "
                 f"First few NaN indices: {nan_indices[:10] if len(nan_indices) > 0 else []}. "
-                f"Constant value: {self.variables_['constant'].value}, "
+                f"Constant value: {cast(ndarray, values['intercept_group_values'])[0]}, "
                 f"Time indices range: [{time_indices.min():.1f}, {time_indices.max():.1f}]"
             )
 
@@ -1682,7 +1132,7 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
         >>> p5 = np.percentile(samples_original, 5, axis=0)
         >>> p95 = np.percentile(samples_original, 95, axis=0)
         """
-        check_is_fitted(self, ['problem_', 'time_reference_', 'freq_'])
+        check_is_fitted(self, ['decomposition_', 'time_reference_', 'freq_'])
         if random_state is None:
             random_state = self.config.random_state
         random_state = check_random_state(random_state)
@@ -1725,63 +1175,23 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
         assert self.ar_noise_loc_ is not None and self.ar_noise_scale_ is not None, \
             "AR noise distribution parameters must be set before generating samples"
 
-        if random_state is not None:
-            if isinstance(random_state, np.random.RandomState):
-                rng = random_state
-            else:
-                rng = np.random.RandomState(random_state)
-        else:
-            rng = np.random.RandomState()
-
-        ar_coef = self.ar_coef_
-        ar_intercept = self.ar_intercept_
-        ar_noise_loc = self.ar_noise_loc_
-        ar_noise_scale = self.ar_noise_scale_
-        ar_lags = len(ar_coef)
+        assert self.config.ar_config is not None
+        ar_lags = max(self.config.ar_config.lags)
         length = len(baseline_pred)
-        nvals = length + ar_lags * 2
-        samples = np.zeros((n_samples, len(baseline_pred)))
-        # Prepare filter coefficients
-        a = np.concatenate([[1], -ar_coef[::-1]])
-        b = np.array([1])
-        for i in range(n_samples):
-            # Generate i.i.d. noise for the entire sequence
-            noise = stats.laplace.rvs(
-                loc=ar_noise_loc,
-                scale=ar_noise_scale,
-                size=nvals,
-                random_state=rng
-            )
+        a = np.zeros(ar_lags + 1)
+        a[0] = 1.0
+        a[self.config.ar_config.lags] = -self.ar_coef_[::-1]
+        noise = stats.laplace.rvs(
+            loc=self.ar_noise_loc_, scale=self.ar_noise_scale_,
+            size=(n_samples, length + 2 * ar_lags), random_state=random_state,
+        )
+        # Preserve each path's original filter state and burn-in.
+        ar_noise, _ = signal.lfilter(
+            [1.0], a, self.ar_intercept_ + noise[:, ar_lags:], axis=1,
+            zi=noise[:, :ar_lags][:, ::-1].copy(),
+        )
+        return baseline_pred + ar_noise[:, -length:]
 
-            # Input to the filter
-            x = ar_intercept + noise
-
-            # Initialize the filter state with the first ar_lags noise values
-            # This matches the original "window" initialization
-            initial_window = noise[:ar_lags]
-
-            # Convert initial window to filter initial conditions
-            # For an AR process, we need to set zi such that the first outputs match our window
-            if ar_lags > 0:
-                zi = np.zeros(ar_lags)
-                # Work backwards through the initial window to set up the state
-                for j in range(ar_lags):
-                    zi[j] = initial_window[ar_lags - 1 - j]
-            else:
-                zi = None
-
-            # Apply the AR filter starting after the initial window
-            if zi is not None:
-                ar_noise, _ = signal.lfilter(b, a, x[ar_lags:], zi=zi)
-                # Prepend the initial window
-                ar_noise = np.concatenate([initial_window, ar_noise])
-            else:
-                ar_noise, _ = signal.lfilter(b, a, x)
-
-            # Use last length values (after burn-in)
-            ar_noise = ar_noise[-length:]
-            samples[i] = baseline_pred + ar_noise
-        return samples
 
 
 __all__ = [
