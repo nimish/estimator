@@ -46,6 +46,7 @@ def _():
     import urllib.request
     import zipfile
     from datetime import timedelta
+    from signaldecomp.spline import make_spline_basis
 
     # Add src directory to path to import tsgam_estimator
     _project_root = Path(__file__).parent.parent
@@ -87,6 +88,7 @@ def _():
         TsgamSolverConfig,
         TsgamSplineConfig,
         TsgamTrendConfig,
+        make_spline_basis,
         mo,
         np,
         pd,
@@ -179,12 +181,12 @@ def _(
         )
 
         # Exogenous configs (pre-canned)
-        # Note: Only non-negative lags (0, 1, 2, ...) are used for forecasting
-        # Negative lags would use future data, which is not available for forecasting
+        # Use only non-positive offsets for a causal model: negative values select
+        # past observations, while positive values would use future data.
         _exog_config_aq = [
-            TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),  # temperature (n_knots=8 to avoid solver issues)
-            TsgamSplineConfig(n_knots=10, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),  # dewpoint
-            TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),  # wind_speed
+            TsgamSplineConfig(n_knots=8, lags=[-2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),  # temperature (n_knots=8 to avoid solver issues)
+            TsgamSplineConfig(n_knots=10, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),  # dewpoint
+            TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),  # wind_speed
             TsgamSplineConfig(n_knots=8, lags=[0], reg_weight=6e-5, diff_reg_weight=0.5),  # pressure
             TsgamSplineConfig(n_knots=6, lags=[0], reg_weight=6e-5, diff_reg_weight=0.5),  # rain_hours
         ]
@@ -211,7 +213,7 @@ def _(
         estimator_aq = TsgamEstimator(config=_config_aq)
         estimator_aq.fit(X_train_aq, _y_train_aq)
 
-        print(f"Model fitted! Status: {estimator_aq.problem_.status}")
+        print(f"Model fitted! Status: {estimator_aq.decomposition_['status']}")
 
         # Make predictions
         _predictions_aq_log = estimator_aq.predict(X_test_aq)
@@ -311,7 +313,7 @@ def _(
         estimator_la = TsgamEstimator(config=_config_la)
         estimator_la.fit(X_train_la, _y_train_la_log)
 
-        print(f"Model fitted! Status: {estimator_la.problem_.status}")
+        print(f"Model fitted! Status: {estimator_la.decomposition_['status']}")
 
         # Make predictions
         _predictions_la_log = estimator_la.predict(X_test_la)
@@ -522,7 +524,7 @@ def _(
             estimator_pv = TsgamEstimator(config=_config_pv)
             estimator_pv.fit(_X_pv, _y_pv)
 
-            print(f"Model fitted! Status: {estimator_pv.problem_.status}")
+            print(f"Model fitted! Status: {estimator_pv.decomposition_['status']}")
 
             # Make predictions
             predictions_pv = estimator_pv.predict(_X_pv)
@@ -613,6 +615,7 @@ def _(
     df_train_aq,
     estimator_aq,
     example_select,
+    make_spline_basis,
     mo,
     np,
     plt,
@@ -661,13 +664,13 @@ def _(
 
         # Response functions
         _ax4_aq = _axes_aq[1, 1]
-        if hasattr(estimator_aq, 'variables_') and 'exog_coef_0' in estimator_aq.variables_:
-            _exog_coef_aq = estimator_aq.variables_['exog_coef_0'].value
+        if hasattr(estimator_aq, 'decomposition_') and 'exog_0_coef' in estimator_aq.decomposition_["values"]:
+            _exog_coef_aq = estimator_aq.decomposition_["values"]['exog_0_coef']
             if _exog_coef_aq is not None and estimator_aq.exog_knots_ and len(estimator_aq.exog_knots_) > 0:
                 _knots_aq = estimator_aq.exog_knots_[0]
                 _x_vals_aq = X_train_aq['temperature'].values
-                _H_aq = estimator_aq._make_H(_x_vals_aq, _knots_aq, include_offset=False)
-                _log_response_aq = _H_aq @ _exog_coef_aq[:, 0]
+                _H_aq = make_spline_basis(_x_vals_aq, _knots_aq)
+                _log_response_aq = _H_aq @ _exog_coef_aq.reshape(_exog_coef_aq.shape[0], -1)[:, 0]
                 _ax4_aq.scatter(_x_vals_aq, _log_response_aq, s=1, alpha=0.3)
                 _ax4_aq.axhline(y=0, color='r', linestyle='--', linewidth=1)
                 _ax4_aq.set_xlabel('Temperature (°C)', fontsize=11)
@@ -693,6 +696,7 @@ def _(
     X_train_la,
     estimator_la,
     example_select,
+    make_spline_basis,
     mo,
     np,
     plt,
@@ -728,13 +732,13 @@ def _(
 
         # Temperature response
         _ax3_la = _axes_la[1, 0]
-        if hasattr(estimator_la, 'variables_') and 'exog_coef_0' in estimator_la.variables_:
-            _exog_coef_la = estimator_la.variables_['exog_coef_0'].value
+        if hasattr(estimator_la, 'decomposition_') and 'exog_0_coef' in estimator_la.decomposition_["values"]:
+            _exog_coef_la = estimator_la.decomposition_["values"]['exog_0_coef']
             if _exog_coef_la is not None and estimator_la.exog_knots_ and len(estimator_la.exog_knots_) > 0:
                 _knots_la = estimator_la.exog_knots_[0]
                 _x_vals_la = X_train_la['temperature_degF'].values
-                _H_la = estimator_la._make_H(_x_vals_la, _knots_la, include_offset=False)
-                _log_response_la = _H_la @ _exog_coef_la[:, 0]  # Use lag 0
+                _H_la = make_spline_basis(_x_vals_la, _knots_la)
+                _log_response_la = _H_la @ _exog_coef_la.reshape(_exog_coef_la.shape[0], -1)[:, 0]  # Use lag 0
                 _ax3_la.scatter(_x_vals_la, _log_response_la, s=1, alpha=0.3)
                 _ax3_la.axhline(y=0, color='r', linestyle='--', linewidth=1)
                 _ax3_la.set_xlabel('Temperature (°F)', fontsize=11)
@@ -744,13 +748,13 @@ def _(
 
         # Humidity response
         _ax4_la = _axes_la[1, 1]
-        if hasattr(estimator_la, 'variables_') and 'exog_coef_1' in estimator_la.variables_:
-            _exog_coef_la_hum = estimator_la.variables_['exog_coef_1'].value
+        if hasattr(estimator_la, 'decomposition_') and 'exog_1_coef' in estimator_la.decomposition_["values"]:
+            _exog_coef_la_hum = estimator_la.decomposition_["values"]['exog_1_coef']
             if _exog_coef_la_hum is not None and estimator_la.exog_knots_ and len(estimator_la.exog_knots_) > 1:
                 _knots_la_hum = estimator_la.exog_knots_[1]
                 _x_vals_la_hum = X_train_la['humidity_pc'].values
-                _H_la_hum = estimator_la._make_H(_x_vals_la_hum, _knots_la_hum, include_offset=False)
-                _log_response_la_hum = _H_la_hum @ _exog_coef_la_hum[:, 0]  # Use lag 0
+                _H_la_hum = make_spline_basis(_x_vals_la_hum, _knots_la_hum)
+                _log_response_la_hum = _H_la_hum @ _exog_coef_la_hum.reshape(_exog_coef_la_hum.shape[0], -1)[:, 0]  # Use lag 0
                 _ax4_la.scatter(_x_vals_la_hum, _log_response_la_hum, s=1, alpha=0.3, color='green')
                 _ax4_la.axhline(y=0, color='r', linestyle='--', linewidth=1)
                 _ax4_la.set_xlabel('Humidity (%)', fontsize=11)
@@ -774,6 +778,7 @@ def _(
 def _(
     estimator_pv,
     example_select,
+    make_spline_basis,
     mo,
     np,
     plt,
@@ -820,13 +825,13 @@ def _(
 
         # Temperature response
         _ax3_pv = _axes_pv[1, 0]
-        if hasattr(estimator_pv, 'variables_') and 'exog_coef_0' in estimator_pv.variables_:
-            _exog_coef_pv = estimator_pv.variables_['exog_coef_0'].value
+        if hasattr(estimator_pv, 'decomposition_') and 'exog_0_coef' in estimator_pv.decomposition_["values"]:
+            _exog_coef_pv = estimator_pv.decomposition_["values"]['exog_0_coef']
             if _exog_coef_pv is not None and estimator_pv.exog_knots_ and len(estimator_pv.exog_knots_) > 0:
                 _knots_pv = estimator_pv.exog_knots_[0]
                 _x_vals_pv = x1_pv[valid_mask_pv] if len(x1_pv) == len(valid_mask_pv) else x1_pv
-                _H_pv = estimator_pv._make_H(_x_vals_pv, _knots_pv, include_offset=False)
-                _log_response_pv = _H_pv @ _exog_coef_pv[:, 0]
+                _H_pv = make_spline_basis(_x_vals_pv, _knots_pv)
+                _log_response_pv = _H_pv @ _exog_coef_pv.reshape(_exog_coef_pv.shape[0], -1)[:, 0]
                 _ax3_pv.scatter(_x_vals_pv * x1_max_pv, np.exp(_log_response_pv), s=1, alpha=0.3)
                 _ax3_pv.set_xlabel('Temperature (normalized)', fontsize=11)
                 _ax3_pv.set_ylabel('Correction Factor', fontsize=11)
@@ -835,13 +840,13 @@ def _(
 
         # Irradiance response
         _ax4_pv = _axes_pv[1, 1]
-        if hasattr(estimator_pv, 'variables_') and 'exog_coef_1' in estimator_pv.variables_:
-            _exog_coef_pv_irr = estimator_pv.variables_['exog_coef_1'].value
+        if hasattr(estimator_pv, 'decomposition_') and 'exog_1_coef' in estimator_pv.decomposition_["values"]:
+            _exog_coef_pv_irr = estimator_pv.decomposition_["values"]['exog_1_coef']
             if _exog_coef_pv_irr is not None and estimator_pv.exog_knots_ and len(estimator_pv.exog_knots_) > 1:
                 _knots_pv_irr = estimator_pv.exog_knots_[1]
                 _x_vals_pv_irr = x2_pv[valid_mask_pv] if len(x2_pv) == len(valid_mask_pv) else x2_pv
-                _H_pv_irr = estimator_pv._make_H(_x_vals_pv_irr, _knots_pv_irr, include_offset=False)
-                _log_response_pv_irr = _H_pv_irr @ _exog_coef_pv_irr[:, 0]
+                _H_pv_irr = make_spline_basis(_x_vals_pv_irr, _knots_pv_irr)
+                _log_response_pv_irr = _H_pv_irr @ _exog_coef_pv_irr.reshape(_exog_coef_pv_irr.shape[0], -1)[:, 0]
                 _ax4_pv.scatter(_x_vals_pv_irr * x2_max_pv, np.exp(_log_response_pv_irr), s=1, alpha=0.3, color='orange')
                 _ax4_pv.set_xlabel('Irradiance (normalized)', fontsize=11)
                 _ax4_pv.set_ylabel('Correction Factor', fontsize=11)
@@ -865,6 +870,7 @@ def _(
     X_train_aq,
     estimator_aq,
     example_select,
+    make_spline_basis,
     mo,
     np,
     plt,
@@ -883,14 +889,14 @@ def _(
 
         for _idx, (_var_name, _var_label, _color) in enumerate(zip(_var_names_aq, _var_labels_aq, _colors_aq)):
             _ax = _axes_aq2.flatten()[_idx]
-            _var_key = f'exog_coef_{_idx}'
-            if hasattr(estimator_aq, 'variables_') and _var_key in estimator_aq.variables_:
-                _exog_coef = estimator_aq.variables_[_var_key].value
+            _var_key = f'exog_{_idx}_coef'
+            if hasattr(estimator_aq, 'decomposition_') and _var_key in estimator_aq.decomposition_["values"]:
+                _exog_coef = estimator_aq.decomposition_["values"][_var_key]
                 if _exog_coef is not None and estimator_aq.exog_knots_ and len(estimator_aq.exog_knots_) > _idx:
                     _knots = estimator_aq.exog_knots_[_idx]
                     _x_vals = X_train_aq[_var_name].values
-                    _H = estimator_aq._make_H(_x_vals, _knots, include_offset=False)
-                    _log_response = _H @ _exog_coef[:, 0]
+                    _H = make_spline_basis(_x_vals, _knots)
+                    _log_response = _H @ _exog_coef.reshape(_exog_coef.shape[0], -1)[:, 0]
                     _ax.scatter(_x_vals, _log_response, s=1, alpha=0.3, color=_color)
                     _ax.axhline(y=0, color='r', linestyle='--', linewidth=1)
                     _ax.set_xlabel(_var_label, fontsize=10)
@@ -1032,8 +1038,8 @@ def _(
 
         # Fourier/harmonic contribution
         _ax3 = _axes_la2[1, 0]
-        if hasattr(estimator_la, 'variables_') and 'fourier_coef' in estimator_la.variables_:
-            _fourier_coef = estimator_la.variables_['fourier_coef'].value
+        if hasattr(estimator_la, 'decomposition_') and 'periodic_theta' in estimator_la.decomposition_["values"]:
+            _fourier_coef = estimator_la.decomposition_["values"]['periodic_theta']
             if _fourier_coef is not None and hasattr(estimator_la, 'F_') and estimator_la.F_ is not None:
                 _fourier_contrib = estimator_la.F_ @ _fourier_coef
                 _n_plot = min(len(_fourier_contrib), 2000)
@@ -1148,8 +1154,8 @@ def _(estimator_pv, example_select, mo, np, plt, predictions_pv, stats, y_pv):
 
         # Trend/degradation over time
         _ax3_pv2 = _axes_pv2[1, 0]
-        if hasattr(estimator_pv, 'variables_') and 'trend' in estimator_pv.variables_:
-            _trend = estimator_pv.variables_['trend'].value
+        if hasattr(estimator_pv, 'decomposition_') and 'trend_group_values' in estimator_pv.decomposition_["values"]:
+            _trend = estimator_pv.decomposition_["values"]['trend_group_values']
             if _trend is not None:
                 _years = np.arange(len(_trend)) / 365.0
                 _ax3_pv2.plot(_years, np.exp(_trend), 'b-', linewidth=2)
@@ -1163,8 +1169,8 @@ def _(estimator_pv, example_select, mo, np, plt, predictions_pv, stats, y_pv):
 
         # Fourier/seasonal contribution
         _ax4_pv2 = _axes_pv2[1, 1]
-        if hasattr(estimator_pv, 'variables_') and 'fourier_coef' in estimator_pv.variables_:
-            _fourier_coef_pv = estimator_pv.variables_['fourier_coef'].value
+        if hasattr(estimator_pv, 'decomposition_') and 'periodic_theta' in estimator_pv.decomposition_["values"]:
+            _fourier_coef_pv = estimator_pv.decomposition_["values"]['periodic_theta']
             if _fourier_coef_pv is not None and hasattr(estimator_pv, 'F_') and estimator_pv.F_ is not None:
                 _fourier_contrib_pv = estimator_pv.F_ @ _fourier_coef_pv
                 _n_plot_pv = min(len(_fourier_contrib_pv), 5000)

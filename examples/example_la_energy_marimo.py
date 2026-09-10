@@ -50,6 +50,7 @@ def _():
     import sys
     from datetime import timedelta
     from scipy import stats
+    from signaldecomp.spline import make_spline_basis
 
     # Add src directory to path to import tsgam_estimator
     _project_root = Path(__file__).parent.parent
@@ -69,7 +70,7 @@ def _():
         PERIOD_HOURLY_WEEKLY,
         PERIOD_HOURLY_YEARLY
     )
-    from spcqe import make_basis_matrix
+    from signaldecomp.basis import make_basis_matrix
     return (
         PERIOD_HOURLY_DAILY,
         PERIOD_HOURLY_WEEKLY,
@@ -83,6 +84,7 @@ def _():
         TsgamSolverConfig,
         TsgamSplineConfig,
         make_basis_matrix,
+        make_spline_basis,
         mo,
         np,
         pd,
@@ -635,31 +637,31 @@ def _(
     var_configs = {
         'temperature_degF': TsgamSplineConfig(
             n_knots=10,
-            lags=[0, 1, 2, 3],  # Current and 1-3 hours back
+            lags=[-3, -2, -1, 0],  # Current and 1-3 hours back
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
         'humidity_pc': TsgamSplineConfig(
             n_knots=8,
-            lags=[0, 1, 2],  # Current and 1-2 hours back
+            lags=[-2, -1, 0],  # Current and 1-2 hours back
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
         'global_Wpms': TsgamSplineConfig(
             n_knots=8,
-            lags=[0, 1],
+            lags=[-1, 0],
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
         'direct_Wpms': TsgamSplineConfig(
             n_knots=8,
-            lags=[0, 1],
+            lags=[-1, 0],
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
         'diffuse_Wpms': TsgamSplineConfig(
             n_knots=8,
-            lags=[0, 1],
+            lags=[-1, 0],
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
@@ -722,9 +724,9 @@ def _(
     estimator.fit(X_train, y_train_log)
 
     print("\nModel fitting complete!")
-    print(f"Problem status: {estimator.problem_.status}")
-    if estimator.problem_.status in ["optimal", "optimal_inaccurate"]:
-        print(f"Optimal value: {estimator.problem_.value:.6e}")
+    print(f"Problem status: {estimator.decomposition_['status']}")
+    if estimator.decomposition_["status"] in ["optimal", "optimal_inaccurate"]:
+        print(f"Optimal value: {estimator.decomposition_['problem'].value:.6e}")
 
     if getattr(estimator, "ar_coef_", None) is not None:
         print("\nAR model fitted successfully:")
@@ -844,7 +846,7 @@ def _(mo):
 
 
 @app.cell
-def _(X_train, estimator, np, plt, weather_cols):
+def _(X_train, estimator, make_spline_basis, np, plt, weather_cols):
     def _():
         # Visualize exogenous variable response functions
         # Create a grid of subplots for each weather variable
@@ -857,10 +859,10 @@ def _(X_train, estimator, np, plt, weather_cols):
 
         for var_idx, _weather_var_name in enumerate(weather_cols):
             _ax_exog = axes_exog[var_idx]
-            var_key = f'exog_coef_{var_idx}'
+            var_key = f'exog_{var_idx}_coef'
 
-            if var_key in estimator.variables_:
-                _exog_coef_vis = estimator.variables_[var_key].value
+            if var_key in estimator.decomposition_["values"]:
+                _exog_coef_vis = estimator.decomposition_["values"][var_key]
                 if _exog_coef_vis is not None:
                     knots = estimator.exog_knots_[var_idx] if estimator.exog_knots_ and len(estimator.exog_knots_) > var_idx else None
                     if knots is not None:
@@ -869,16 +871,16 @@ def _(X_train, estimator, np, plt, weather_cols):
 
                         # Build basis matrix for visualization
                         # Use lag 0 (current) for main response
-                        H = estimator._make_H(x_vals, knots, include_offset=False)
+                        H = make_spline_basis(x_vals, knots)
 
                         # Get response for lag 0 (main effect)
-                        if _exog_coef_vis.shape[1] > 0:
-                            log_response = H @ _exog_coef_vis[:, 0]  # Use lag 0
+                        if _exog_coef_vis.size > 0:
+                            log_response = H @ _exog_coef_vis.reshape(len(knots) - 1, -1, order='F')[:, estimator.config.exog_config[var_idx].lags.index(0)]  # Use lag 0
 
                             # Create smooth curve for visualization
                             x_smooth = np.linspace(x_vals.min(), x_vals.max(), 200)
-                            H_smooth = estimator._make_H(x_smooth, knots, include_offset=False)
-                            log_response_smooth = H_smooth @ _exog_coef_vis[:, 0]
+                            H_smooth = make_spline_basis(x_smooth, knots)
+                            log_response_smooth = H_smooth @ _exog_coef_vis.reshape(len(knots) - 1, -1, order='F')[:, estimator.config.exog_config[var_idx].lags.index(0)]
 
                             # Plot
                             _ax_exog.scatter(x_vals, log_response, s=1, alpha=0.3, color='blue', label='Data points')
@@ -912,8 +914,8 @@ def _(X_train, estimator, np, plt, weather_cols):
 def _(estimator, make_basis_matrix, np, plt, timestamps_train_aligned):
     def _():
         # Visualize Fourier/harmonic basis functions
-        if estimator.config.multi_periodic_config and 'fourier_coef' in estimator.variables_:
-            fourier_coef = estimator.variables_['fourier_coef'].value
+        if estimator.config.multi_periodic_config:
+            fourier_coef = estimator.decomposition_["values"]['periodic_theta']
             if fourier_coef is not None:
                 # Reconstruct Fourier contribution over time
                 max_idx = int(np.max(estimator.time_indices_))
@@ -1013,8 +1015,8 @@ def _(estimator, make_basis_matrix, np, plt, timestamps_train_aligned):
 def _(estimator, make_basis_matrix, np, plt):
     def _():
         # Visualize individual harmonic basis functions
-        if estimator.config.multi_periodic_config and 'fourier_coef' in estimator.variables_:
-            fourier_coef = estimator.variables_['fourier_coef'].value
+        if estimator.config.multi_periodic_config:
+            fourier_coef = estimator.decomposition_["values"]['periodic_theta']
             if fourier_coef is not None:
                 periods = estimator.config.multi_periodic_config.periods
                 num_harmonics = estimator.config.multi_periodic_config.num_harmonics
@@ -1108,30 +1110,27 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
         # Visualize outlier detector if present
         # Check if outlier is configured
         has_outlier_config = hasattr(estimator, 'config') and estimator.config.outlier_config is not None
-        has_outlier_var = 'outlier' in estimator.variables_
-        has_outlier_value = has_outlier_var and estimator.variables_['outlier'].value is not None
+        has_outlier_var = 'outlier_group_values' in estimator.decomposition_["values"]
+        has_outlier_value = has_outlier_var
 
         if not has_outlier_config:
             print("Outlier detector not configured in estimator.config.outlier_config")
             return None
 
         if not has_outlier_var:
-            print("Outlier variable not found in estimator.variables_")
+            print("Outlier component not found in estimator.decomposition_")
             return None
 
         if not has_outlier_value:
             print("Outlier variable value is None")
             return None
 
-        _outlier_values_vis = estimator.variables_['outlier'].value
+        _outlier_values_vis = estimator.decomposition_["values"]["outlier_group_values"]
+        _outlier_per_sample_vis = np.asarray(
+            estimator.decomposition_["values"]["outlier"]
+        )[estimator.time_indices_.astype(int)]
 
-        # Map outlier values to timestamps using outlier_T_matrix
-        if hasattr(estimator, 'outlier_T_matrix_') and estimator.outlier_T_matrix_ is not None:
-            # Outlier values are per period, need to map to samples
-            _T_outlier = estimator.outlier_T_matrix_
-            _outlier_per_sample_vis = _T_outlier @ _outlier_values_vis
-
-            # Get timestamps for training data
+        if len(_outlier_per_sample_vis):
             outlier_timestamps = timestamps_train_aligned[:len(_outlier_per_sample_vis)]
 
             # Use threshold from UI (in log space)
@@ -1266,8 +1265,8 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
 def _(estimator, np, outlier_threshold, pd, timestamps_train_aligned):
     def _():
         # Analyze if significant outlier days correspond to holidays or interesting dates
-        if 'outlier' in estimator.variables_ and estimator.variables_['outlier'].value is not None:
-            _outlier_values_vis = estimator.variables_['outlier'].value
+        if 'outlier_group_values' in estimator.decomposition_["values"]:
+            _outlier_values_vis = estimator.decomposition_["values"]['outlier_group_values']
             threshold_value = outlier_threshold.value
             significant_mask = np.abs(_outlier_values_vis) > threshold_value
             outlier_period_indices = np.where(significant_mask)[0]
@@ -1391,10 +1390,7 @@ def _(estimator, np, outlier_threshold, pd, timestamps_train_aligned):
 
 @app.cell
 def _(
-    TsgamSplineConfig,
-    X_train,
     estimator,
-    make_basis_matrix,
     np,
     plt,
     stats,
@@ -1402,61 +1398,13 @@ def _(
     y_train_log,
 ):
     def _():
-        # Compute residuals and fit distributions
-        # Get baseline predictions (without AR)
-        baseline_pred = np.full(len(y_train_log), estimator.variables_['constant'].value)
+        from signaldecomp import components_to_frame
 
-        # Add Fourier terms
-        if estimator.config.multi_periodic_config:
-            max_idx = int(np.max(estimator.time_indices_))
-            F_full = make_basis_matrix(
-                num_harmonics=estimator.config.multi_periodic_config.num_harmonics,
-                length=max_idx + 1,
-                periods=estimator.config.multi_periodic_config.periods
-            )
-            F = F_full[estimator.time_indices_.astype(int), 1:]
-            fourier_coef = estimator.variables_['fourier_coef'].value
-            if fourier_coef is not None:
-                baseline_pred += F @ fourier_coef
-
-        # Add exogenous terms
-        if estimator.config.exog_config:
-            for ix, exog_cfg in enumerate(estimator.config.exog_config):
-                exog_var = X_train.iloc[:, ix].values
-                stored_knots = estimator.exog_knots_[ix] if isinstance(exog_cfg, TsgamSplineConfig) else None
-                _, Hs = estimator._process_exog_config(exog_cfg, exog_var, knots=stored_knots)
-                _exog_coef_res = estimator.variables_[f'exog_coef_{ix}'].value
-                if _exog_coef_res is not None:
-                    # Handle NaN in basis matrices (from lead/lag boundaries)
-                    exog_pred = np.zeros(len(exog_var))
-                    for lag_ix, H in enumerate(Hs):
-                        H_clean = np.nan_to_num(H, nan=0.0)
-                        lag_contrib = H_clean @ _exog_coef_res[:, lag_ix]
-                        exog_pred += lag_contrib
-                    baseline_pred += exog_pred
-
-        # Add outlier term if present
-        if 'outlier' in estimator.variables_ and estimator.variables_['outlier'].value is not None:
-            if hasattr(estimator, 'outlier_T_matrix_') and estimator.outlier_T_matrix_ is not None:
-                _outlier_values_res = estimator.variables_['outlier'].value
-                _T_outlier_res = estimator.outlier_T_matrix_
-                _outlier_per_sample_res = _T_outlier_res @ _outlier_values_res
-                baseline_pred += _outlier_per_sample_res[:len(baseline_pred)]
-
-        # Check baseline_pred for NaN before computing residuals
-        if np.any(~np.isfinite(baseline_pred)):
-            nan_count = np.sum(~np.isfinite(baseline_pred))
-            print(f"Warning: {nan_count} non-finite values in baseline_pred. This may be from lead/lag boundaries.")
-            # Replace NaN with 0 (no contribution from components with NaN)
-            baseline_pred = np.nan_to_num(baseline_pred, nan=0.0, posinf=0.0, neginf=0.0)
-
-        # Check y_train_log for non-finite values
-        if np.any(~np.isfinite(y_train_log)):
-            nan_count = np.sum(~np.isfinite(y_train_log))
-            print(f"Warning: {nan_count} non-finite values in y_train_log.")
-
-        # Compute residuals
-        train_residuals = y_train_log - baseline_pred
+        decomposition = estimator.decomposition_
+        frame = components_to_frame(decomposition, mask=decomposition["fit_mask"])
+        train_residuals = frame["residual"].to_numpy()[
+            estimator.time_indices_.astype(int)
+        ]
 
         # Check for non-finite values in residuals and filter them out
         valid_residuals_mask = np.isfinite(train_residuals)
@@ -1671,11 +1619,11 @@ def _(
     if len(weather_cols) > 0 and X_train.shape[1] > 0:
         exog_config_ablation = []
         var_configs_ablation = {
-            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[0, 1, 2, 3], reg_weight=6e-5, diff_reg_weight=0.5),
-            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),
-            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
+            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[-3, -2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[-2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
         }
         for _var_name_ablation in X_train.columns:
             if _var_name_ablation in var_configs_ablation:
@@ -1695,11 +1643,11 @@ def _(
     if len(weather_cols) > 0 and X_train.shape[1] > 0:
         exog_config_ablation = []
         var_configs_ablation = {
-            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[0, 1, 2, 3], reg_weight=6e-5, diff_reg_weight=0.5),
-            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),
-            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
+            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[-3, -2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[-2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
         }
         for _var_name_ablation in X_train.columns:
             if _var_name_ablation in var_configs_ablation:
@@ -1723,11 +1671,11 @@ def _(
     if len(weather_cols) > 0 and X_train.shape[1] > 0:
         exog_config_ablation = []
         var_configs_ablation = {
-            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[0, 1, 2, 3], reg_weight=6e-5, diff_reg_weight=0.5),
-            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),
-            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
+            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[-3, -2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[-2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
         }
         for _var_name_ablation in X_train.columns:
             if _var_name_ablation in var_configs_ablation:
@@ -1764,11 +1712,11 @@ def _(
     if len(weather_cols) > 0 and X_train.shape[1] > 0:
         exog_config_ablation = []
         var_configs_ablation = {
-            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[0, 1, 2, 3], reg_weight=6e-5, diff_reg_weight=0.5),
-            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),
-            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
+            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[-3, -2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[-2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
         }
         for _var_name_ablation in X_train.columns:
             if _var_name_ablation in var_configs_ablation:
@@ -1792,11 +1740,11 @@ def _(
     if len(weather_cols) > 0 and X_train.shape[1] > 0:
         exog_config_ablation = []
         var_configs_ablation = {
-            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[0, 1, 2, 3], reg_weight=6e-5, diff_reg_weight=0.5),
-            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),
-            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
+            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[-3, -2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[-2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
         }
         for _var_name_ablation in X_train.columns:
             if _var_name_ablation in var_configs_ablation:
@@ -1820,11 +1768,11 @@ def _(
     if len(weather_cols) > 0 and X_train.shape[1] > 0:
         exog_config_ablation = []
         var_configs_ablation = {
-            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[0, 1, 2, 3], reg_weight=6e-5, diff_reg_weight=0.5),
-            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),
-            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
+            'temperature_degF': TsgamSplineConfig(n_knots=10, lags=[-3, -2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'humidity_pc': TsgamSplineConfig(n_knots=8, lags=[-2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'global_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'direct_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+            'diffuse_Wpms': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
         }
         for _var_name_ablation in X_train.columns:
             if _var_name_ablation in var_configs_ablation:
@@ -1905,10 +1853,10 @@ def _(
                 'rmse': rmse_ablation,
                 'mape': mape_ablation,
                 'r2': r2_ablation,
-                'status': estimator_ablation.problem_.status
+                'status': estimator_ablation.decomposition_["status"]
             })
 
-            print(f"  Status: {estimator_ablation.problem_.status}")
+            print(f"  Status: {estimator_ablation.decomposition_['status']}")
             print(f"  MAE:  {mae_ablation:.2f} MW")
             print(f"  RMSE: {rmse_ablation:.2f} MW")
             print(f"  MAPE: {mape_ablation:.2f}%")

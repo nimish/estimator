@@ -263,7 +263,7 @@ def plot_results(
         Path to save the plot. If None, displays interactively.
     """
     # Get detected outlier values
-    detected_outlier = estimator_with_outlier.variables_['outlier'].value
+    detected_outlier = estimator_with_outlier.decomposition_["values"]["outlier_group_values"]
     n_days = len(detected_outlier)
 
     # Create predictions
@@ -418,17 +418,17 @@ def main():
     # Fit model with outlier detector
     print("Fitting model with outlier detector...")
     estimator_with_outlier = fit_model_with_outlier_detector(X, y_log, reg_weight=0.01)
-    print(f"Model status: {estimator_with_outlier.problem_.status}")
+    print(f"Model status: {estimator_with_outlier.decomposition_['status']}")
     print()
 
     # Fit model without outlier detector for comparison
     print("Fitting model without outlier detector (for comparison)...")
     estimator_without_outlier = fit_model_without_outlier_detector(X, y_log)
-    print(f"Model status: {estimator_without_outlier.problem_.status}")
+    print(f"Model status: {estimator_without_outlier.decomposition_['status']}")
     print()
 
     # Get detected outlier values
-    detected_outlier = estimator_with_outlier.variables_['outlier'].value
+    detected_outlier = estimator_with_outlier.decomposition_["values"]["outlier_group_values"]
     print("Outlier Detection Results:")
     print(f"  Number of days: {len(detected_outlier)}")
     print("  Detected outlier values (log space):")
@@ -489,4 +489,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

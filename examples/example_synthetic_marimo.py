@@ -1440,8 +1440,8 @@ def _(
                     "residual_test": residual_test,
                     "metrics_train": synthetic_metrics(split.y_train.to_numpy(), y_pred_train),
                     "metrics_test": synthetic_metrics(split.y_test.to_numpy(), y_pred_test),
-                    "status": estimator.problem_.status,
-                    "objective_value": estimator.problem_.value,
+                    "status": estimator.decomposition_["status"],
+                    "objective_value": estimator.decomposition_["problem"].value,
                 }
             except Exception as exc:
                 solver_output = _solver_log_buffer.getvalue().strip()
