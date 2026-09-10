@@ -16,7 +16,6 @@ from tsgam_estimator import (
     TsgamSplineConfig,
 )
 
-
 SOLVER = TsgamSolverConfig(solver="CLARABEL", verbose=False)
 
 
@@ -55,39 +54,6 @@ def _make_pure_interaction_data(
 
 def _rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
-
-
-def test_interaction_contribution_matches_explicit_design_matrix():
-    est = TsgamEstimator(
-        config=TsgamEstimatorConfig(
-            multi_periodic_config=None,
-            exog_config=None,
-        )
-    )
-    left_H = np.array(
-        [
-            [1.0, 2.0],
-            [3.0, 4.0],
-            [5.0, 6.0],
-        ]
-    )
-    right_H = np.array(
-        [
-            [7.0, 8.0, 9.0],
-            [10.0, 11.0, 12.0],
-            [13.0, 14.0, 15.0],
-        ]
-    )
-    interaction_coef = np.arange(6, dtype=float) - 1.5
-
-    expected = est._outer_column_product(left_H, right_H) @ interaction_coef
-    actual = est._interaction_contribution_from_blocks(
-        left_H,
-        right_H,
-        interaction_coef,
-    )
-
-    np.testing.assert_allclose(actual, expected)
 
 
 def test_interaction_pairs_default_matches_explicit_none():
@@ -243,9 +209,8 @@ def test_linear_linear_interaction_uses_single_coefficient():
 
     est.fit(X[["x0", "x1"]], y)
 
-    coef = est.variables_["interaction_coef_0"].value
-    assert coef is not None
-    assert coef.shape == (1,)
+    coef = est.decomposition_["values"]["interaction_0_coef"]
+    assert coef.shape == (1, 1)
 
 
 def test_spline_linear_interaction_has_q_times_r_coefficients():
@@ -264,9 +229,8 @@ def test_spline_linear_interaction_has_q_times_r_coefficients():
 
     est.fit(X[["x0", "x1"]], y)
 
-    coef = est.variables_["interaction_coef_0"].value
-    assert coef is not None
-    assert coef.shape == (4,)
+    coef = est.decomposition_["values"]["interaction_0_coef"]
+    assert coef.shape == (4, 1)
 
 
 def test_interactions_use_only_current_index_when_main_effects_have_lags():
@@ -285,9 +249,10 @@ def test_interactions_use_only_current_index_when_main_effects_have_lags():
 
     est.fit(X[["x0", "x1"]], y)
 
-    assert est.variables_["exog_coef_0"].value.shape == (1, 3)
-    assert est.variables_["exog_coef_1"].value.shape == (1, 3)
-    assert est.variables_["interaction_coef_0"].value.shape == (1,)
+    values = est.decomposition_["values"]
+    assert values["exog_0_beta"].shape == (3,)
+    assert values["exog_1_beta"].shape == (3,)
+    assert values["interaction_0_coef"].shape == (1, 1)
 
 
 def test_interactions_improve_held_out_predictions():

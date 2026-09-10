@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, cast
 
 import cvxpy
@@ -13,6 +13,7 @@ from sklearn.base import BaseEstimator, RegressorMixin, check_is_fitted
 
 from ._design import (
     build_tsgam_design,
+    _make_fourier_basis,
     infer_fit_frequency,
     normalize_X,
     resolve_exog_knots,
@@ -28,13 +29,12 @@ from ._estimator import (
     TsgamLinearConfig,
 )
 from ._problem import (
-    evaluate_horizon_prediction,
-    horizon_prediction_expression,
-    make_horizon_standard_variables,
+    evaluate_single_output_prediction,
+    build_single_output_decomposition,
     solve_problem,
-    weighted_squared_loss,
 )
 from ._sklearn import SklearnConfigMixin
+
 
 @dataclass
 class TsgamForecastCouplingConfig(SklearnConfigMixin):
@@ -152,8 +152,12 @@ class TsgamForecastConfig(SklearnConfigMixin):
                 "base_config must be a TsgamEstimatorConfig, got "
                 f"{type(self.base_config).__name__}."
             )
-        if not isinstance(self.horizon, (int, np.integer)) or isinstance(self.horizon, bool):
-            raise ValueError(f"horizon must be a non-negative integer, got {self.horizon!r}.")
+        if not isinstance(self.horizon, (int, np.integer)) or isinstance(
+            self.horizon, bool
+        ):
+            raise ValueError(
+                f"horizon must be a non-negative integer, got {self.horizon!r}."
+            )
         if self.horizon < 0:
             raise ValueError(f"horizon must be non-negative, got {self.horizon!r}.")
         if not isinstance(self.include_nowcast, (bool, np.bool_)):
@@ -165,7 +169,9 @@ class TsgamForecastConfig(SklearnConfigMixin):
         if not self.include_nowcast and self.horizon == 0:
             raise ValueError("horizon must be at least 1 when include_nowcast=False.")
         if self.mode not in ("independent", "coupled"):
-            raise ValueError(f"mode must be 'independent' or 'coupled', got {self.mode!r}.")
+            raise ValueError(
+                f"mode must be 'independent' or 'coupled', got {self.mode!r}."
+            )
         if self.base_config.ar_config is not None:
             raise ValueError(
                 "base_config.ar_config models residuals for stochastic sampling and "
@@ -182,9 +188,7 @@ class TsgamForecastConfig(SklearnConfigMixin):
             )
         if self.mode == "independent":
             if self.coupling_config is not None:
-                raise ValueError(
-                    "coupling_config is only valid when mode='coupled'."
-                )
+                raise ValueError("coupling_config is only valid when mode='coupled'.")
         elif self.coupling_config is None:
             self.coupling_config = TsgamForecastCouplingConfig()
         elif not isinstance(self.coupling_config, TsgamForecastCouplingConfig):
@@ -221,7 +225,9 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
             TsgamLinearConfig(lags=[0], reg_weight=ar_config.reg_weight)
             for _ in ar_config.lags
         ]
-        model_config.exog_config = list(model_config.exog_config or []) + history_configs
+        model_config.exog_config = (
+            list(model_config.exog_config or []) + history_configs
+        )
         return model_config
 
     def _target_history_frame(
@@ -244,7 +250,9 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
         earliest = origins.min() - max(ar_config.lags) * self.step_
         latest = origins.max()
         regular_index = pd.date_range(earliest, latest, freq=self.freq_)
-        filled = history.reindex(history.index.union(regular_index)).sort_index().ffill()
+        filled = (
+            history.reindex(history.index.union(regular_index)).sort_index().ffill()
+        )
         columns: dict[str, ndarray] = {}
         for lag in ar_config.lags:
             required = origins - lag * self.step_
@@ -268,17 +276,14 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
         ar_config = self.config.forecast_ar_config
         assert ar_config is not None
         conflicts = {
-            self._forecast_ar_column(lag)
-            for lag in ar_config.lags
+            self._forecast_ar_column(lag) for lag in ar_config.lags
         }.intersection(X.columns)
         if conflicts:
             raise ValueError(
                 "X contains reserved forecast target-history columns: "
                 f"{sorted(conflicts)!r}."
             )
-        return X.join(
-            self._target_history_frame(pd.DatetimeIndex(X.index), history)
-        )
+        return X.join(self._target_history_frame(pd.DatetimeIndex(X.index), history))
 
     def _prepare_forecast_ar_fit_data(
         self,
@@ -378,7 +383,9 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
             self.feature_names_in_ = np.asarray(X.columns, dtype=object)
         timestamps = X.index
         if not isinstance(timestamps, pd.DatetimeIndex):
-            raise TypeError("Forecast inputs must have a DatetimeIndex after normalization.")
+            raise TypeError(
+                "Forecast inputs must have a DatetimeIndex after normalization."
+            )
         self.freq_ = infer_fit_frequency(timestamps)
         self.step_ = step_timedelta(self.freq_)
         self.time_reference_ = timestamps[0]
@@ -390,7 +397,7 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
         y: ndarray,
         sample_weight: ndarray | None = None,
     ) -> "TsgamForecastEstimator":
-        """Fit direct models for horizons 0 through ``config.horizon``."""
+        """Fit direct models for the configured forecast horizons."""
         X, y, sample_weight = self._prepare_fit_inputs(X, y, sample_weight)
         X, y, sample_weight = self._prepare_forecast_ar_fit_data(
             X,
@@ -418,9 +425,7 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
                 X, y, sample_weight, horizon
             )
             estimator_config = (
-                self.config.base_config
-                if horizon == 0
-                else self.model_config_
+                self.config.base_config if horizon == 0 else self.model_config_
             )
             estimator = TsgamEstimator(deepcopy(estimator_config))
             if horizon == 0 and self._uses_forecast_ar:
@@ -442,21 +447,18 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
                 if horizon == 0:
                     continue
                 estimator = self.forecast_estimators_[horizon]
-                for lag_ix in range(len(ar_config.lags)):
-                    value = estimator.variables_[f"exog_coef_{first_ar_ix + lag_ix}"].value
-                    if value is None:
-                        raise ValueError("Forecast AR coefficients are unavailable.")
-                    standardized[horizon_ix, lag_ix] = float(value[0, 0])
-        else:
-            for lag_ix in range(len(ar_config.lags)):
-                horizon_variables = cast(
-                    list[cvxpy.Variable],
-                    self.variables_[f"exog_coef_{first_ar_ix + lag_ix}"],
+                values = cast(
+                    dict[str, ndarray | float], estimator.decomposition_["values"]
                 )
-                for horizon, variable in enumerate(horizon_variables):
-                    if variable.value is None:
-                        raise ValueError("Forecast AR coefficients are unavailable.")
-                    standardized[horizon, lag_ix] = float(variable.value[0, 0])
+                for lag_ix in range(len(ar_config.lags)):
+                    value = values[f"exog_{first_ar_ix + lag_ix}_beta"]
+                    standardized[horizon_ix, lag_ix] = float(np.asarray(value).item())
+        else:
+            for horizon_ix, values in enumerate(self.horizon_values_):
+                for lag_ix in range(len(ar_config.lags)):
+                    standardized[horizon_ix, lag_ix] = float(
+                        values[f"exog_{first_ar_ix + lag_ix}_beta"].item()
+                    )
         columns = [f"lag_{lag}" for lag in ar_config.lags]
         index = pd.Index(self.horizons_, name="horizon")
         self.forecast_ar_standardized_coefficients_ = pd.DataFrame(
@@ -471,7 +473,9 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
     def _validate_coupled_config(self) -> None:
         base_config = self.config.base_config
         if base_config.outlier_config is not None:
-            raise ValueError("Coupled forecast mode does not support outlier_config yet.")
+            raise ValueError(
+                "Coupled forecast mode does not support outlier_config yet."
+            )
         if (
             base_config.trend_config is not None
             and base_config.trend_config.trend_type != TrendType.NONE
@@ -526,41 +530,32 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
             for X_horizon, y_horizon, weight_horizon in horizon_data
         ]
 
-        self.variables_, regularization_term = make_horizon_standard_variables(
-            base_config,
-            designs,
-            horizon_regularizer=add_horizon_roughness,
-        )
-        losses = []
-
-        for horizon_ix, design in enumerate(designs):
-            valid_mask = design.valid_mask
-            model_term = horizon_prediction_expression(
-                base_config,
-                design,
-                self.variables_,
-                horizon_ix,
-                valid_mask,
+        built = [
+            build_single_output_decomposition(
+                base_config, design, knots_by_exog=self.exog_knots_,
             )
-            assert design.y is not None
-            assert design.sample_weight is not None
-            y_valid = design.y[valid_mask]
-            weight_valid = design.sample_weight[valid_mask]
-            losses.append(weighted_squared_loss(y_valid, model_term, weight_valid))
-
-        constraints = []
+            for design in designs
+        ]
+        # Couple original coefficient coordinates, preserving each component's penalty.
+        variables = [cast(dict[str, cvxpy.Variable], item["variables"]) for item in built]
+        problems = [cast(cvxpy.Problem, item["problem"]) for item in built]
+        coefficient_roles = [
+            role for role in variables[0]
+            if role == "intercept_group_values" or role.endswith(("_coef", "_beta", "_theta"))
+        ]
+        regularization_term = cvxpy.Constant(0.0)
+        for role in coefficient_roles:
+            matrix = cvxpy.vstack([cvxpy.vec(v[role], order="F") for v in variables]).T
+            regularization_term = add_horizon_roughness(regularization_term, matrix)
+        constraints = [c for problem in problems for c in problem.constraints]
         if self._uses_forecast_ar and self.config.include_nowcast:
             first_ar_ix = len(self.config.base_config.exog_config or [])
             ar_config = self.config.forecast_ar_config
             assert ar_config is not None
             for lag_ix in range(len(ar_config.lags)):
-                horizon_variables = cast(
-                    list[cvxpy.Variable],
-                    self.variables_[f"exog_coef_{first_ar_ix + lag_ix}"],
-                )
-                constraints.append(horizon_variables[0] == 0)
+                constraints.append(variables[0][f"exog_{first_ar_ix + lag_ix}_beta"] == 0)
         self.problem_ = cvxpy.Problem(
-            cvxpy.Minimize(cvxpy.sum(losses) + regularization_term),
+            cvxpy.Minimize(sum(problem.objective.expr for problem in problems) + regularization_term),
             constraints,
         )
         solve_problem(
@@ -568,6 +563,13 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
             base_config.solver_config,
             failure_message="Optimization problem did not converge.",
         )
+        self.horizon_values_ = [
+            {
+                role: np.asarray(values[role].value).copy()
+                for role in coefficient_roles
+            }
+            for values in variables
+        ]
         return self
 
     def predict(
@@ -585,7 +587,9 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
         X = sort_predict_X(X, sort_index=self.config.base_config.sort_index)
         origin_index = X.index
         if not isinstance(origin_index, pd.DatetimeIndex):
-            raise TypeError("Forecast inputs must have a DatetimeIndex after normalization.")
+            raise TypeError(
+                "Forecast inputs must have a DatetimeIndex after normalization."
+            )
         validate_predict_frequency(origin_index, self.freq_)
 
         model_X = X
@@ -614,34 +618,36 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
                     base_columns = len(self.config.base_config.exog_config or [])
                     horizon_X = X.iloc[:, :base_columns]
                 X_horizon = self._target_time_X(horizon_X, horizon)
-                columns[f"horizon_{horizon}"] = self.forecast_estimators_[horizon].predict(
+                columns[f"horizon_{horizon}"] = self.forecast_estimators_[
+                    horizon
+                ].predict(
                     X_horizon,
                     remove_periodic=remove_periodic,
                     remove_exogenous=remove_exogenous,
                     remove_trend=remove_trend,
                 )
         else:
-            check_is_fitted(self, ["problem_", "variables_", "exog_knots_"])
+            check_is_fitted(self, ["horizon_values_", "exog_knots_"])
             if remove_periodic or remove_exogenous or remove_trend:
                 raise ValueError(
                     "Component removal is not supported for coupled forecast predictions yet."
+                )
+            design = build_tsgam_design(
+                self.model_config_, model_X, knots_by_exog=self.exog_knots_,
+                reference=self.time_reference_, freq=self.freq_,
             )
             for horizon_ix, horizon in enumerate(self.horizons_):
-                X_horizon = self._target_time_X(model_X, horizon)
-                design = build_tsgam_design(
-                    self.model_config_,
-                    X_horizon,
-                    y=None,
-                    sample_weight=None,
-                    knots_by_exog=self.exog_knots_,
-                    reference=self.time_reference_,
-                    freq=self.freq_,
-                )
-                columns[f"horizon_{horizon}"] = evaluate_horizon_prediction(
-                    self.model_config_,
+                time_indices = design.time_indices + horizon
+                horizon_design = replace(
                     design,
-                    self.variables_,
-                    horizon_ix,
+                    time_indices=time_indices,
+                    fourier_basis=(
+                        design.fourier_basis if horizon == 0
+                        else _make_fourier_basis(self.model_config_, time_indices)
+                    ),
+                )
+                columns[f"horizon_{horizon}"] = evaluate_single_output_prediction(
+                    self.model_config_, horizon_design, self.horizon_values_[horizon_ix],
                 )
 
         return pd.DataFrame(columns, index=origin_index)

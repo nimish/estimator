@@ -17,8 +17,10 @@ from tsgam_estimator import (
     TsgamForecastCouplingConfig,
     TsgamForecastEstimator,
     TsgamLinearConfig,
+    TsgamMultiPeriodicConfig,
     TsgamOutlierConfig,
     TsgamSolverConfig,
+    TsgamSplineConfig,
 )
 from tsgam_estimator.tsgam_estimator import (
     TsgamForecastArConfig as ShimForecastArConfig,
@@ -172,7 +174,9 @@ def test_independent_forecast_matches_manual_shifted_regressions():
     X, y = _make_data()
     horizon = 3
     X_future = X.iloc[-12:]
-    forecast_estimator = TsgamForecastEstimator(config=_forecast_config(horizon=horizon))
+    forecast_estimator = TsgamForecastEstimator(
+        config=_forecast_config(horizon=horizon)
+    )
 
     forecast_estimator.fit(X, y)
     forecast_predictions = forecast_estimator.predict(X_future)
@@ -208,6 +212,34 @@ def test_coupled_zero_roughness_matches_manual_shifted_regressions():
         )
 
 
+def test_coupled_zero_roughness_matches_nonlinear_independent_fit():
+    rng = np.random.default_rng(17)
+    X = pd.DataFrame(
+        rng.uniform(-1, 1, (100, 2)),
+        index=pd.date_range("2020-01-01", periods=100, freq="1h"),
+    )
+    y = 1 + X[0].to_numpy() ** 2 + X.prod(axis=1).to_numpy()
+    weights = rng.uniform(0.5, 2, len(X))
+    base = TsgamEstimatorConfig(
+        exog_config=[
+            TsgamSplineConfig(knots=np.linspace(-1, 1, 5), lags=[0, 1]),
+            TsgamLinearConfig(lags=[0]),
+        ],
+        interaction_pairs=[(0, 1)],
+        multi_periodic_config=TsgamMultiPeriodicConfig(
+            num_harmonics=[2], periods=[24],
+        ),
+        solver_config=TsgamSolverConfig(solver="CLARABEL"),
+    )
+    predictions = []
+    for mode in ("independent", "coupled"):
+        model = TsgamForecastEstimator(
+            config=_forecast_config(horizon=2, mode=mode, base_config=base)
+        ).fit(X, y, sample_weight=weights)
+        predictions.append(model.predict(X.iloc[-12:]).to_numpy())
+    np.testing.assert_allclose(*predictions, atol=1e-5, rtol=1e-5, equal_nan=True)
+
+
 def test_coupled_forecast_uses_shared_design_module(monkeypatch):
     X, y = _make_data()
     original_build_design = forecast_module.build_tsgam_design
@@ -217,18 +249,11 @@ def test_coupled_forecast_uses_shared_design_module(monkeypatch):
         calls.append(config)
         return original_build_design(config, *args, **kwargs)
 
-    def fail_private_helper(*args, **kwargs):
-        raise AssertionError("coupled forecast should use shared design functions")
-
     monkeypatch.setattr(
         forecast_module,
         "build_tsgam_design",
         tracking_build_design,
     )
-    monkeypatch.setattr(TsgamEstimator, "_process_exog_config", fail_private_helper)
-    monkeypatch.setattr(TsgamEstimator, "_normalize_interaction_pairs", fail_private_helper)
-    monkeypatch.setattr(TsgamEstimator, "_make_regularization_matrix", fail_private_helper)
-
     TsgamForecastEstimator(
         config=_forecast_config(horizon=2, mode="coupled", roughness_weight=0.0)
     ).fit(X, y)
@@ -252,15 +277,13 @@ def test_coupled_roughness_smooths_horizon_coefficients():
     ).fit(X, y)
 
     unsmoothed_coefs = np.array(
-        [coef.value[0, 0] for coef in unsmoothed.variables_["exog_coef_0"]][1:]
+        [values["exog_0_beta"].item() for values in unsmoothed.horizon_values_][1:]
     )
     smoothed_coefs = np.array(
-        [coef.value[0, 0] for coef in smoothed.variables_["exog_coef_0"]][1:]
+        [values["exog_0_beta"].item() for values in smoothed.horizon_values_][1:]
     )
 
-    assert np.sum(np.diff(smoothed_coefs) ** 2) < np.sum(
-        np.diff(unsmoothed_coefs) ** 2
-    )
+    assert np.sum(np.diff(smoothed_coefs) ** 2) < np.sum(np.diff(unsmoothed_coefs) ** 2)
 
 
 def test_coupling_does_not_bias_horizon_zero_nowcast():
@@ -340,9 +363,7 @@ def test_forecast_ar_can_exclude_nowcast(mode):
 
 def test_direct_forecast_ar_does_not_change_horizon_zero():
     X, y = _make_ar_data(n_samples=180)
-    baseline = TsgamForecastEstimator(
-        config=_forecast_config(horizon=2)
-    ).fit(X, y)
+    baseline = TsgamForecastEstimator(config=_forecast_config(horizon=2)).fit(X, y)
     autoregressive = TsgamForecastEstimator(
         config=_forecast_config(
             horizon=2,
@@ -433,15 +454,9 @@ def test_coupling_smooths_direct_forecast_ar_coefficients():
         )
     ).fit(X, y)
 
-    uncoupled_coefs = uncoupled.forecast_ar_standardized_coefficients_.loc[
-        1:, "lag_0"
-    ]
-    smoothed_coefs = smoothed.forecast_ar_standardized_coefficients_.loc[
-        1:, "lag_0"
-    ]
-    assert np.sum(np.diff(smoothed_coefs) ** 2) < np.sum(
-        np.diff(uncoupled_coefs) ** 2
-    )
+    uncoupled_coefs = uncoupled.forecast_ar_standardized_coefficients_.loc[1:, "lag_0"]
+    smoothed_coefs = smoothed.forecast_ar_standardized_coefficients_.loc[1:, "lag_0"]
+    assert np.sum(np.diff(smoothed_coefs) ** 2) < np.sum(np.diff(uncoupled_coefs) ** 2)
 
 
 def test_forecast_ar_requires_sufficient_prediction_history():

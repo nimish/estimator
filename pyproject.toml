@@ -3,7 +3,7 @@ name = "tsgam-estimator"
 version = "0.1.0"
 description = "Time series GAM (Generalized Additive Model) estimators for load forecasting"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 authors = [
@@ -20,23 +20,22 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-    "cvxpy>=1.7.3,<2",
-    "numpy>=2.3.4,<3",
-    "pandas>=2.3.3,<4",
-    "scipy>=1.16.3,<2",
+    "cvxpy>=1.9.2,<2",
+    "numpy>=2.5.1,<3",
+    "pandas>=3.0.3,<4",
+    "scipy>=1.18.0,<2",
     "scikit-learn>=1.7.2,<2",
-    "spcqe>=0.3.0,<0.4",
+    "signaldecomp @ git+https://github.com/cvxgrp/cvx-sd-skill.git@4cfcc3271f9a24fb3a442882df45ca1668590e6f",
 ]
 
 [project.optional-dependencies]
 viz = [
-    "matplotlib>=3.10.7",
+    "matplotlib>=3.11.0",
 ]
 
 [project.urls]
@@ -63,7 +62,7 @@ docs = [
 ]
 viz = [
     "altair>=6.0.0",
-    "matplotlib>=3.10.7",
+    "matplotlib>=3.11.0",
     "seaborn>=0.13.2",
     "vegafusion>=2.0.3",
     "vl-convert-python>=1.9.0.post1",
@@ -85,7 +84,7 @@ notebooks = [
 examples = [
     "click>=8.1.0",
     "rich>=13.0.0",
-    "matplotlib>=3.10.0",
+    "matplotlib>=3.11.0",
     "solar-data-tools>=2.1.1",
     "plotly>=6.7.0",
 ]
