@@ -12,6 +12,7 @@ from numpy import ndarray
 from numpy.random import RandomState
 from scipy import signal, stats
 from signaldecomp import make_offset_basis, solve
+from signaldecomp.spline import make_spline_basis
 from sklearn.base import BaseEstimator, RegressorMixin, check_is_fitted
 from sklearn.utils import check_random_state
 
@@ -800,6 +801,9 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
     """
     def __init__(self, config: TsgamEstimatorConfig) -> None:
         self.config = config
+
+    # Historical response-plot helper; implementation belongs to SignalDecomp.
+    _make_H = staticmethod(make_spline_basis)
 
     def fit(self, X: pd.DataFrame, y: ndarray, sample_weight: ndarray | None = None) -> "TsgamEstimator":
         """

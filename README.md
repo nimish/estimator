@@ -70,6 +70,8 @@ fits also expose `problem_` and `output_` (an alias of `decomposition_`). Couple
 `variables_` retains horizon-column matrices and lists of exogenous coefficient
 matrices. These are inspection interfaces, not supported mutation hooks:
 prediction continues to use native solved values. No optimization is duplicated.
+The historical `_make_H` response-plot helper delegates directly to
+SignalDecomp's spline basis builder, so existing response plots can stay unchanged.
 
 New consumers should use `components_to_frame` for fitted time-series components
 and reconstruction, reserving coefficient access for response diagnostics.

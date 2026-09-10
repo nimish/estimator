@@ -453,9 +453,7 @@ def _(
                 {
                     "model": "independent",
                     "horizon": horizon,
-                    "coefficient": float(
-                        child.decomposition_["values"]["exog_0_beta"]
-                    ),
+                    "coefficient": float(child.variables_["exog_coef_0"].value[0, 0]),
                 }
             )
             rows.append(
@@ -463,7 +461,7 @@ def _(
                     "model": "coupled",
                     "horizon": horizon,
                     "coefficient": float(
-                        coupled.horizon_values_[coupled_horizon_ix]["exog_0_beta"].item()
+                        coupled.variables_["exog_coef_0"][coupled_horizon_ix].value[0, 0]
                     ),
                 }
             )
