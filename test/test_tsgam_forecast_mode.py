@@ -513,7 +513,6 @@ def test_forecast_horizon_validation():
 
     with pytest.raises(ValueError, match="horizon must be non-negative"):
         TsgamForecastConfig(horizon=-1, base_config=_base_config())
-
     with pytest.raises(ValueError, match="at least 1"):
         TsgamForecastConfig(
             horizon=0,
