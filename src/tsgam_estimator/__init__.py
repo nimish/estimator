@@ -25,6 +25,17 @@ from ._estimator import (
     TsgamTrendConfig,
     get_recommended_periods,
 )
+from ._forecast import (
+    TsgamForecastArConfig,
+    TsgamForecastConfig,
+    TsgamForecastCouplingConfig,
+    TsgamForecastEstimator,
+)
+from ._forecast_plotting import (
+    forecast_to_long_dataframe,
+    plot_forecast_horizon,
+    plot_forecast_origin,
+)
 
 try:
     __version__ = version("tsgam-estimator")
@@ -34,7 +45,14 @@ except PackageNotFoundError:
 __all__ = [
     "__version__",
     "TsgamEstimator",
+    "TsgamForecastEstimator",
     "TsgamEstimatorConfig",
+    "TsgamForecastConfig",
+    "TsgamForecastArConfig",
+    "TsgamForecastCouplingConfig",
+    "forecast_to_long_dataframe",
+    "plot_forecast_origin",
+    "plot_forecast_horizon",
     "TsgamMultiPeriodicConfig",
     "TsgamSplineConfig",
     "TsgamLinearConfig",

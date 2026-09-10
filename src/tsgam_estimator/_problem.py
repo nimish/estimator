@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
 
 import cvxpy
 import numpy as np
@@ -18,6 +19,9 @@ from ._design import (
 
 if TYPE_CHECKING:
     from ._estimator import TsgamEstimatorConfig, TsgamSolverConfig
+
+_VariableDict = dict[str, cvxpy.Variable | list[cvxpy.Variable]]
+_RoughnessCallback = Callable[[cvxpy.Expression, cvxpy.Expression], cvxpy.Expression]
 
 
 def make_fourier_regularization_matrix(config: TsgamEstimatorConfig) -> spmatrix:
@@ -104,6 +108,79 @@ def make_single_output_standard_variables(
     return variables, regularization_term
 
 
+def make_horizon_standard_variables(
+    config: TsgamEstimatorConfig,
+    designs: list[_TsgamDesign],
+    *,
+    horizon_regularizer: _RoughnessCallback,
+) -> tuple[_VariableDict, cvxpy.Expression]:
+    n_horizons = len(designs)
+    variables: _VariableDict = {
+        "constant": cvxpy.Variable(n_horizons),
+    }
+    regularization_term: cvxpy.Expression = cvxpy.Constant(0.0)
+
+    if config.exog_config:
+        for ix, exog_cfg in enumerate(config.exog_config):
+            basis_dim = designs[0].exog_Hs[ix][0].shape[1]
+            num_lags = len(exog_cfg.lags)
+            horizon_vars = [
+                cvxpy.Variable((basis_dim, num_lags))
+                for _ in range(n_horizons)
+            ]
+            variables[f"exog_coef_{ix}"] = horizon_vars
+            for exog_coef in horizon_vars:
+                regularization_term += exog_cfg.reg_weight * cvxpy.sum_squares(exog_coef)
+                if num_lags > 1:
+                    regularization_term += (
+                        exog_cfg.diff_reg_weight
+                        * cvxpy.sum_squares(cvxpy.diff(exog_coef, axis=1))
+                    )
+            flattened = cvxpy.hstack(
+                [
+                    cvxpy.reshape(exog_coef, (basis_dim * num_lags, 1), order="F")
+                    for exog_coef in horizon_vars
+                ]
+            )
+            regularization_term = horizon_regularizer(regularization_term, flattened)
+
+    if config.multi_periodic_config:
+        assert designs[0].fourier_basis is not None
+        fourier_coef = cvxpy.Variable((designs[0].fourier_basis.shape[1], n_horizons))
+        variables["fourier_coef"] = fourier_coef
+        fourier_regularizer = make_fourier_regularization_matrix(config)
+        for horizon_ix in range(n_horizons):
+            regularization_term += (
+                config.multi_periodic_config.reg_weight
+                * cvxpy.sum_squares(fourier_regularizer @ fourier_coef[:, horizon_ix])
+            )
+        regularization_term = horizon_regularizer(regularization_term, fourier_coef)
+
+    if config.exog_config:
+        for pair_ix, (left_ix, right_ix) in enumerate(designs[0].interaction_pairs):
+            interaction_coef = cvxpy.Variable(
+                (designs[0].interaction_Hs[pair_ix].shape[1], n_horizons)
+            )
+            variables[f"interaction_coef_{pair_ix}"] = interaction_coef
+            left_cfg = config.exog_config[left_ix]
+            right_cfg = config.exog_config[right_ix]
+            interaction_weight = float(np.sqrt(left_cfg.reg_weight * right_cfg.reg_weight))
+            for horizon_ix in range(n_horizons):
+                regularization_term += interaction_weight * cvxpy.sum_squares(
+                    interaction_coef[:, horizon_ix]
+                )
+            regularization_term = horizon_regularizer(
+                regularization_term,
+                interaction_coef,
+            )
+
+    regularization_term = horizon_regularizer(
+        regularization_term,
+        cvxpy.reshape(variables["constant"], (1, n_horizons), order="F"),
+    )
+    return variables, regularization_term
+
+
 def single_output_prediction_expression(
     config: TsgamEstimatorConfig,
     design: _TsgamDesign,
@@ -127,6 +204,38 @@ def single_output_prediction_expression(
         model_term += (
             interaction_H[valid_mask] @ variables[f"interaction_coef_{pair_ix}"]
         )
+    return model_term
+
+
+def horizon_prediction_expression(
+    config: TsgamEstimatorConfig,
+    design: _TsgamDesign,
+    variables: _VariableDict,
+    horizon_ix: int,
+    valid_mask: ndarray,
+) -> cvxpy.Expression:
+    constant = cast(cvxpy.Variable, variables["constant"])
+    model_term = constant[horizon_ix]
+    if config.exog_config:
+        for ix, Hs in enumerate(design.exog_Hs):
+            exog_coefs = cast(list[cvxpy.Variable], variables[f"exog_coef_{ix}"])
+            exog_coef = exog_coefs[horizon_ix]
+            model_term += cvxpy.sum(
+                expr=[
+                    H[valid_mask] @ exog_coef[:, lag_ix]
+                    for lag_ix, H in enumerate(Hs)
+                ]
+            )
+    if config.multi_periodic_config:
+        assert design.fourier_basis is not None
+        fourier_coef = cast(cvxpy.Variable, variables["fourier_coef"])
+        model_term += design.fourier_basis[valid_mask] @ fourier_coef[:, horizon_ix]
+    for pair_ix, interaction_H in enumerate(design.interaction_Hs):
+        interaction_coef = cast(
+            cvxpy.Variable,
+            variables[f"interaction_coef_{pair_ix}"],
+        )
+        model_term += interaction_H[valid_mask] @ interaction_coef[:, horizon_ix]
     return model_term
 
 
@@ -210,4 +319,42 @@ def evaluate_single_output_prediction(
             f"Time indices range: [{design.time_indices.min():.1f}, "
             f"{design.time_indices.max():.1f}]"
         )
+    return predictions
+
+
+def evaluate_horizon_prediction(
+    config: TsgamEstimatorConfig,
+    design: _TsgamDesign,
+    variables: _VariableDict,
+    horizon_ix: int,
+) -> ndarray:
+    constant = cast(cvxpy.Variable, variables["constant"])
+    constant_values = cast(ndarray, constant.value)
+    predictions = np.full(
+        len(design.timestamps),
+        constant_values[horizon_ix],
+    )
+    if config.exog_config:
+        for ix, Hs in enumerate(design.exog_Hs):
+            exog_coefs = cast(list[cvxpy.Variable], variables[f"exog_coef_{ix}"])
+            exog_values = cast(ndarray, exog_coefs[horizon_ix].value)
+            for lag_ix, H in enumerate(Hs):
+                predictions += np.nan_to_num(H, nan=0.0) @ exog_values[:, lag_ix]
+    if config.multi_periodic_config:
+        assert design.fourier_basis is not None
+        fourier_coef = cast(cvxpy.Variable, variables["fourier_coef"])
+        fourier_values = cast(ndarray, fourier_coef.value)
+        predictions += design.fourier_basis @ fourier_values[:, horizon_ix]
+    for pair_ix, interaction_H in enumerate(design.interaction_Hs):
+        interaction_coef = cast(
+            cvxpy.Variable,
+            variables[f"interaction_coef_{pair_ix}"],
+        )
+        interaction_values = cast(ndarray, interaction_coef.value)
+        predictions += (
+            np.nan_to_num(interaction_H, nan=0.0)
+            @ interaction_values[:, horizon_ix]
+        )
+    if np.any(np.isnan(predictions)):
+        raise ValueError("Forecast predictions contain NaN values.")
     return predictions

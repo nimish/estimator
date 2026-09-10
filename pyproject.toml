@@ -34,6 +34,11 @@ dependencies = [
     "spcqe>=0.3.0,<0.4",
 ]
 
+[project.optional-dependencies]
+viz = [
+    "matplotlib>=3.10.7",
+]
+
 [project.urls]
 Homepage = "https://github.com/nimish/estimator"
 Repository = "https://github.com/nimish/estimator"
