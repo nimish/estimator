@@ -447,9 +447,9 @@ def _(
                         lag,
                         "independent",
                         float(
-                            independent_child.decomposition_["values"][
-                                "exog_0_beta"
-                            ][lag_ix]
+                            independent_child.variables_["exog_coef_0"].value[
+                                0, lag_ix
+                            ]
                         ),
                     )
                     append_coefficient(
@@ -457,7 +457,9 @@ def _(
                         lag,
                         "coupled",
                         float(
-                            coupled.horizon_values_[coupled_horizon_ix]["exog_0_beta"].ravel()[lag_ix]
+                            coupled.variables_["exog_coef_0"][
+                                coupled_horizon_ix
+                            ].value[0, lag_ix]
                         ),
                     )
         else:

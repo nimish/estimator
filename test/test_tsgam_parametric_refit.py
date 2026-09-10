@@ -42,13 +42,15 @@ def test_parametric_fit_correctness_equivalence():
     config = _make_config()
     est = TsgamEstimator(config=config)
     est.fit(X, y)
-    coef_first = {k: np.copy(v) for k, v in est.decomposition_["values"].items()}
+    coef_first = {k: np.copy(v.value) for k, v in est.variables_.items() if v.value is not None}
 
     est.fit(X, y)
-    for k, value in est.decomposition_["values"].items():
+    for k, v in est.variables_.items():
+        if v.value is None:
+            continue
         np.testing.assert_allclose(
             coef_first[k],
-            value,
+            v.value,
             rtol=1e-9,
             atol=1e-9,
             err_msg=f"Repeated fit changed coefficient {k}",
@@ -66,7 +68,7 @@ def test_second_fit_different_sample_count_succeeds():
     X1 = pd.DataFrame({"x": np.random.randn(n1)}, index=dates1)
     y1 = np.random.randn(n1)
     est.fit(X1, y1)
-    assert est.decomposition_["status"] in ("optimal", "optimal_inaccurate")
+    assert est.problem_.status in ("optimal", "optimal_inaccurate")
 
     n2 = 100
     dates2 = pd.date_range("2020-01-01", periods=n2, freq="h")
@@ -74,9 +76,9 @@ def test_second_fit_different_sample_count_succeeds():
     y2 = np.random.randn(n2)
     est.fit(X2, y2)
 
-    assert est.decomposition_["status"] in ("optimal", "optimal_inaccurate")
-    c = est.decomposition_["values"]["intercept_group_values"]
-    assert np.isfinite(np.asarray(c)).all()
+    assert est.problem_.status in ("optimal", "optimal_inaccurate")
+    c = est.variables_["constant"].value
+    assert c is not None and np.isfinite(np.asarray(c)).all()
 
 
 def test_repeated_fit_same_shape_succeeds():
@@ -90,7 +92,7 @@ def test_repeated_fit_same_shape_succeeds():
     y = np.random.randn(n)
 
     est.fit(X, y)
-    assert est.decomposition_["status"] in ("optimal", "optimal_inaccurate")
+    assert est.problem_.status in ("optimal", "optimal_inaccurate")
 
     est.fit(X, y)
-    assert est.decomposition_["status"] in ("optimal", "optimal_inaccurate")
+    assert est.problem_.status in ("optimal", "optimal_inaccurate")

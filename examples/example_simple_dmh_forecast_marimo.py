@@ -414,7 +414,7 @@ def _(
                 {
                     "horizon": metric_step,
                     "learned coefficient": float(
-                        child_model.decomposition_["values"]["exog_0_beta"]
+                        child_model.variables_["exog_coef_0"].value[0, 0]
                     ),
                 }
             )

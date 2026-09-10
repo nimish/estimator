@@ -99,11 +99,13 @@ def test_optimal_value_matches_notebook(tsgam_estimator_baseline):
     notebook_optimal_value = 1.9436e-03
 
     # Get optimal value from our estimator
-    assert estimator.decomposition_["status"] in ["optimal", "optimal_inaccurate"]
+    assert hasattr(estimator, 'problem_'), "Problem should be stored"
+    assert estimator.problem_.status in ["optimal", "optimal_inaccurate"], \
+        f"Problem status should be optimal, got {estimator.problem_.status}"
 
-    actual_optimal = estimator.decomposition_["problem"].value
+    actual_optimal = estimator.problem_.value
 
-    # Compare with the captured notebook baseline.
+    # Compare with notebook (matching tolerance from test_estimator_vs_notebook.py)
     np.testing.assert_allclose(
         actual_optimal,
         notebook_optimal_value,
@@ -132,9 +134,8 @@ def test_fourier_coefficients_match_notebook(tsgam_estimator_baseline, notebook_
     notebook_fourier_coef = notebook_time_coef[1:]  # Rest are Fourier coefficients
 
     # Our estimator
-    values = estimator.decomposition_["values"]
-    our_constant = values["intercept_group_values"][0]
-    our_fourier_coef = values["periodic_theta"]
+    our_constant = estimator.variables_['constant'].value
+    our_fourier_coef = estimator.variables_['fourier_coef'].value
 
     # Compare constant/intercept
     np.testing.assert_allclose(
@@ -152,7 +153,7 @@ def test_fourier_coefficients_match_notebook(tsgam_estimator_baseline, notebook_
     np.testing.assert_allclose(
         our_fourier_coef,
         notebook_fourier_coef,
-        rtol=2.0,
+        rtol=2.0,  # Notebook uses rtol=2.0 in test_estimator_vs_notebook.py
         atol=2e-3,
         err_msg="Fourier coefficients don't match notebook"
     )
@@ -171,7 +172,7 @@ def test_temperature_coefficients_match_notebook(tsgam_estimator_baseline, noteb
     estimator, _, _ = tsgam_estimator_baseline
 
     notebook_temp_coef = notebook_baseline_coefficients['temp_coef']
-    our_temp_coef = estimator.decomposition_["values"]["exog_0_coef"]
+    our_temp_coef = estimator.variables_['exog_coef_0'].value
 
     assert our_temp_coef.shape == notebook_temp_coef.shape, \
         f"Temperature coefficients shape mismatch: estimator={our_temp_coef.shape}, notebook={notebook_temp_coef.shape}"
@@ -202,9 +203,8 @@ def test_combined_coefficients_match_notebook(tsgam_estimator_baseline, notebook
     notebook_time_coef = notebook_baseline_coefficients['time_coef']
 
     # Combine our constant and Fourier coefficients
-    values = estimator.decomposition_["values"]
-    our_constant = values["intercept_group_values"][0]
-    our_fourier_coef = values["periodic_theta"]
+    our_constant = estimator.variables_['constant'].value
+    our_fourier_coef = estimator.variables_['fourier_coef'].value
     our_combined = np.concatenate([[our_constant], our_fourier_coef])
 
     assert our_combined.shape == notebook_time_coef.shape, \

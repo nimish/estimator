@@ -103,7 +103,7 @@ def _(mo, np, pd, plt, result, slct_sample, take_log, target):
     # temp_grouped.loc[temp_grouped['est'] < np.nanquantile(temp_grouped[target.value], 0.95) * 0.3, ['est']] = np.nan
     temp_grouped['PI'] = temp_grouped[target.value] / temp_grouped['est']
     try:
-        trend = result['tsgam'].decomposition_["values"]["trend_group_values"]
+        trend =result['tsgam'].variables_['trend'].value
     except KeyError:
         trend = np.zeros_like(temp_grouped['PI'].index, dtype=float) if take_log.value else np.ones_like(temp_grouped['PI'].index, dtype=float)
     try:
@@ -127,7 +127,7 @@ def _(mo, np, pd, plt, result, slct_sample, take_log, target):
 
 
 @app.cell
-def _(make_spline_basis, np, plt, result, take_log, target):
+def _(np, plt, result, take_log, target):
     if take_log.value:
         _func = lambda _x: np.exp(_x)
     else:
@@ -147,7 +147,7 @@ def _(make_spline_basis, np, plt, result, take_log, target):
 
 
 @app.cell
-def _(make_spline_basis, np, plt, result, take_log, target):
+def _(np, plt, result, take_log, target):
     if take_log.value:
         _func = lambda _x: np.exp(_x)
     else:
@@ -200,15 +200,15 @@ def _(mo, np, plt, result, take_log, target):
 
 
 @app.cell
-def _(make_spline_basis, np, plt, result, take_log, target):
+def _(np, plt, result, take_log, target):
     if take_log.value:
         _func = lambda _x: np.exp(_x)
     else:
         _func = lambda _x: _x
-    irrad_vars = result['tsgam'].decomposition_["values"]["exog_0_coef"]
+    irrad_vars = result['tsgam'].variables_['exog_coef_0'].value
     # irrad_knots = tsgam.exog_knots_[0]
     _x_vals = result['train']['poa_global'].values
-    _H = make_spline_basis(_x_vals, result['knot_points'])
+    _H = result['tsgam']._make_H(_x_vals, result['knot_points'], include_offset=False)
     plt.scatter(result['train']['poa_global'].values, _func(result['train'][target.value].values), s=1, 
                 c=result['train'].index.day_of_year / 365 + result['train'].index.year, label='measured')
     plt.plot(_x_vals, _func(_H @ irrad_vars - np.mean(_H @ irrad_vars) + np.mean(result['train'][target.value].values)), marker='.', ls='none', color='black', label='average model response')
@@ -223,15 +223,15 @@ def _(make_spline_basis, np, plt, result, take_log, target):
 
 
 @app.cell
-def _(make_spline_basis, np, plt, result, take_log, target):
+def _(np, plt, result, take_log, target):
     if take_log.value:
         _func = lambda _x: np.exp(_x)
     else:
         _func = lambda _x: _x
-    temp_vars = result['tsgam'].decomposition_["values"]["exog_1_coef"]
+    temp_vars = result['tsgam'].variables_['exog_coef_1'].value
     temp_knots = result['tsgam'].exog_knots_[1]
     _x_vals = result['train']['temperature_module'].values
-    _H = make_spline_basis(_x_vals, temp_knots)
+    _H = result['tsgam']._make_H(_x_vals, temp_knots, include_offset=False)
     plt.scatter(result['train']['temperature_module'].values, _func(result['train'][target.value].values), s=1, 
                 c=result['train'].index.day_of_year / 365 + result['train'].index.year, label='measured')
     plt.plot(_x_vals, _func(_H @ temp_vars - np.quantile(_H @ temp_vars, .9) + np.quantile(result['train'][target.value].values, .9)), marker='.', ls='none', color='black', label='average model response')
@@ -293,7 +293,6 @@ def _():
     from tsgam_estimator import TsgamEstimator, TsgamEstimatorConfig, TsgamMultiPeriodicConfig, TsgamSplineConfig, TsgamTrendConfig, TsgamArConfig, TsgamSolverConfig
     from typing import Tuple, Literal
     import itertools
-    from signaldecomp.spline import make_spline_basis
 
     return (
         Literal,
@@ -307,7 +306,6 @@ def _():
         TsgamTrendConfig,
         Tuple,
         glob,
-        make_spline_basis,
         mo,
         np,
         pd,

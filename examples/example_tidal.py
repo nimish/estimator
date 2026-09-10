@@ -917,7 +917,7 @@ def main():
     est = TsgamEstimator(config=config)
     print('Fitting model ...')
     est.fit(X_train, y_train)
-    print(f'Solver status: {est.decomposition_["status"]}')
+    print(f'Solver status: {est.problem_.status}')
 
     preds = est.predict(X_test)
     rmse = float(np.sqrt(np.mean((preds - y_test) ** 2)))

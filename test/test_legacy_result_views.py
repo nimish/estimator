@@ -2,6 +2,7 @@ import cvxpy as cp
 import numpy as np
 import pandas as pd
 import pytest
+from signaldecomp.spline import make_spline_basis
 
 from tsgam_estimator import (
     TrendType,
@@ -37,6 +38,18 @@ def _data_and_config(lags):
         solver_config=TsgamSolverConfig(solver="CLARABEL", verbose=False),
     )
     return X, y, config
+
+
+@pytest.mark.parametrize("include_offset", [False, True])
+def test_legacy_spline_helper_delegates_to_signaldecomp(include_offset):
+    X, y, config = _data_and_config([0])
+    model = TsgamEstimator(config).fit(X, y)
+    assert TsgamEstimator._make_H is make_spline_basis
+    basis = model._make_H(X.x.to_numpy(), model.exog_knots_[0], include_offset=include_offset)
+    assert basis.shape == (len(X), 4 + include_offset)
+    if not include_offset:
+        response = basis @ model.variables_["exog_coef_0"].value[:, 0]
+        np.testing.assert_allclose(response, model.decomposition_["values"]["exog_0"])
 
 
 @pytest.mark.parametrize("lags", [[0], [-1, 0]])
