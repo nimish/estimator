@@ -64,6 +64,7 @@ def _forecast_config(
     roughness_weight: float = 0.0,
     base_config: TsgamEstimatorConfig | None = None,
     forecast_ar_config: TsgamForecastArConfig | None = None,
+    include_nowcast: bool = True,
 ) -> TsgamForecastConfig:
     coupling_config = None
     if mode == "coupled":
@@ -76,6 +77,7 @@ def _forecast_config(
         mode=mode,
         coupling_config=coupling_config,
         forecast_ar_config=forecast_ar_config,
+        include_nowcast=include_nowcast,
     )
 
 
@@ -117,6 +119,40 @@ def test_independent_forecast_predict_returns_dataframe_columns():
         "horizon_2",
         "horizon_3",
     ]
+
+
+@pytest.mark.parametrize("mode", ["independent", "coupled"])
+def test_forecast_can_exclude_nowcast(mode):
+    X, y = _make_data()
+    estimator = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=3,
+            mode=mode,
+            roughness_weight=0.0,
+            include_nowcast=False,
+        )
+    ).fit(X, y)
+
+    predictions = estimator.predict(X.iloc[-10:])
+
+    assert estimator.horizons_ == [1, 2, 3]
+    assert list(predictions.columns) == [
+        "horizon_1",
+        "horizon_2",
+        "horizon_3",
+    ]
+    for horizon in estimator.horizons_:
+        expected = _predict_from_origin(
+            _manual_shifted_fit(X, y, horizon),
+            X.iloc[-10:],
+            horizon,
+        )
+        np.testing.assert_allclose(
+            predictions[f"horizon_{horizon}"],
+            expected,
+            rtol=1e-5,
+            atol=1e-5,
+        )
 
 
 def test_independent_forecast_aligns_child_models_to_target_time():
@@ -271,6 +307,35 @@ def test_direct_forecast_ar_recovers_planted_coefficient():
     )
     assert list(predictions) == ["horizon_0", "horizon_1", "horizon_2"]
     assert np.all(np.isfinite(predictions.to_numpy()))
+
+
+@pytest.mark.parametrize("mode", ["independent", "coupled"])
+def test_forecast_ar_can_exclude_nowcast(mode):
+    X, y = _make_ar_data()
+    estimator = TsgamForecastEstimator(
+        config=_forecast_config(
+            horizon=2,
+            mode=mode,
+            roughness_weight=0.0,
+            forecast_ar_config=TsgamForecastArConfig(
+                lags=[0],
+                reg_weight=1.0e-8,
+            ),
+            include_nowcast=False,
+        )
+    ).fit(X, y)
+
+    predictions = estimator.predict(
+        X.iloc[-12:],
+        y_history=pd.Series(y, index=X.index),
+    )
+
+    assert list(predictions) == ["horizon_1", "horizon_2"]
+    assert list(estimator.forecast_ar_coefficients_.index) == [1, 2]
+    assert estimator.forecast_ar_coefficients_.loc[1, "lag_0"] == pytest.approx(
+        0.72,
+        abs=0.08,
+    )
 
 
 def test_direct_forecast_ar_does_not_change_horizon_zero():
@@ -433,6 +498,19 @@ def test_forecast_horizon_validation():
 
     with pytest.raises(ValueError, match="horizon must be non-negative"):
         TsgamForecastConfig(horizon=-1, base_config=_base_config())
+
+    with pytest.raises(ValueError, match="at least 1"):
+        TsgamForecastConfig(
+            horizon=0,
+            base_config=_base_config(),
+            include_nowcast=False,
+        )
+    with pytest.raises(TypeError, match="include_nowcast must be a boolean"):
+        TsgamForecastConfig(
+            horizon=1,
+            base_config=_base_config(),
+            include_nowcast=1,  # type: ignore[arg-type]
+        )
 
 
 def test_forecast_config_rejects_ignored_or_invalid_coupling_config():

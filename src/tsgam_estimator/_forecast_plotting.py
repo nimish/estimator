@@ -62,10 +62,16 @@ def _horizon_columns(predictions: pd.DataFrame) -> list[tuple[int, str]]:
         )
     columns.sort()
     horizons = [horizon for horizon, _ in columns]
-    expected = list(range(horizons[-1] + 1))
+    first_horizon = horizons[0]
+    if first_horizon not in (0, 1):
+        raise ValueError(
+            "forecast prediction columns must start at horizon_0 or horizon_1; "
+            f"got {horizons}."
+        )
+    expected = list(range(first_horizon, horizons[-1] + 1))
     if horizons != expected:
         raise ValueError(
-            "forecast prediction columns must be contiguous from horizon_0; "
+            "forecast prediction columns must be contiguous from their first horizon; "
             f"got {horizons}."
         )
     return columns
@@ -157,7 +163,8 @@ def forecast_to_long_dataframe(
     ----------
     predictions
         Output from :meth:`TsgamForecastEstimator.predict`. Rows are forecast
-        origins and columns are named ``horizon_0``, ``horizon_1``, and so on.
+        origins and columns are named ``horizon_0``, ``horizon_1``, and so on,
+        or begin at ``horizon_1`` when nowcasting is disabled.
     actual
         Optional observed target series indexed by target time.
     freq
@@ -253,7 +260,8 @@ def plot_forecast_origin(
     Pass a mapping such as ``{"Independent": independent_predictions,
     "Coupled": coupled_predictions}`` to compare models on the same axes.
     The forecast region is shaded and begins at the vertical forecast-origin
-    marker, making the known past and predicted future explicit.
+    marker, making the known past and predicted future explicit. Horizon zero
+    is emphasized as the nowcast at that boundary.
     """
 
     if history_steps < 0:
@@ -308,13 +316,23 @@ def plot_forecast_origin(
             [selected_origin + horizon * offset for horizon, _ in horizons]
         )
         values = [predictions.loc[selected_origin, column] for _, column in horizons]
-        ax.plot(
+        forecast_line = ax.plot(
             target_times,
             values,
             linewidth=2.0,
             marker=markers[model_index % len(markers)],
             label=label,
-        )
+        )[0]
+        if horizons[0][0] == 0:
+            ax.scatter(
+                target_times[0],
+                values[0],
+                s=75,
+                facecolor=forecast_line.get_color(),
+                edgecolor="white",
+                linewidth=1.5,
+                zorder=5,
+            )
 
     from matplotlib import dates as mdates
 
@@ -327,6 +345,17 @@ def plot_forecast_origin(
         linestyle=":",
         linewidth=1.5,
         label="Forecast origin",
+    )
+    ax.annotate(
+        "now",
+        xy=(origin_number, 1.0),
+        xycoords=("data", "axes fraction"),
+        xytext=(5, -5),
+        textcoords="offset points",
+        color="0.3",
+        fontsize="small",
+        ha="left",
+        va="top",
     )
     left_limit = (
         cast(pd.Timestamp, history.index.min())

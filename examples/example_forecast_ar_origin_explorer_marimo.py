@@ -102,6 +102,10 @@ def _(mo):
         label="AR order (number of observed target lags)",
         full_width=True,
     )
+    include_nowcast_control = mo.ui.checkbox(
+        value=False,
+        label="Include horizon-zero nowcast",
+    )
     mo.vstack(
         [
             mo.md(
@@ -110,9 +114,10 @@ def _(mo):
                 "to every positive forecast horizon and refits both AR models."
             ),
             ar_order_control,
+            include_nowcast_control,
         ]
     )
-    return (ar_order_control,)
+    return ar_order_control, include_nowcast_control
 
 
 @app.cell
@@ -126,11 +131,13 @@ def _(
     TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
     ar_order_control,
+    include_nowcast_control,
     np,
     pd,
 ):
     forecast_horizon = 12
     selected_ar_order = int(ar_order_control.value)
+    include_nowcast = bool(include_nowcast_control.value)
     target_lags = list(range(selected_ar_order))
     train_samples = 720
     total_samples = 1008
@@ -198,6 +205,7 @@ def _(
             horizon=forecast_horizon,
             base_config=base_config(),
             mode="independent",
+            include_nowcast=include_nowcast,
         )
     ).fit(X_train, y_train)
     independent_model = TsgamForecastEstimator(
@@ -205,6 +213,7 @@ def _(
             horizon=forecast_horizon,
             base_config=base_config(),
             mode="independent",
+            include_nowcast=include_nowcast,
             forecast_ar_config=TsgamForecastArConfig(
                 lags=target_lags,
                 reg_weight=1.0e-5,
@@ -216,6 +225,7 @@ def _(
             horizon=forecast_horizon,
             base_config=base_config(),
             mode="coupled",
+            include_nowcast=include_nowcast,
             forecast_ar_config=TsgamForecastArConfig(
                 lags=target_lags,
                 reg_weight=1.0e-5,
@@ -246,13 +256,10 @@ def _(
     )
     origin_times = X_eval.index
     return (
-        X_eval,
-        coupled_model,
         coupled_prediction,
         coupled_without_target_history,
-        forecast_horizon,
         frame,
-        independent_model,
+        include_nowcast,
         independent_prediction,
         independent_without_target_history,
         origin_times,
@@ -264,7 +271,7 @@ def _(
 
 
 @app.cell
-def _(frame, mo, selected_ar_order, train_samples):
+def _(mo, selected_ar_order, train_samples):
     mo.md(
         f"""
         ## The generated problem
@@ -326,14 +333,14 @@ def _(mo, origin_times):
 
 
 @app.cell
-def _(mo, origin_slider, origin_times):
+def _(include_nowcast, mo, origin_slider, origin_times):
     selected_origin = origin_times[origin_slider.value]
     mo.md(
         f"""
         ## Forecast issued at `{selected_origin:%a, %b %d %Y %H:%M}`
 
         The solid history is known when this forecast is issued. The shaded region
-        contains the nowcast and twelve direct future predictions. Scrubbing changes
+        contains {"a nowcast and " if include_nowcast else ""}twelve direct future predictions. Scrubbing changes
         the origin and recomputes the visible forecast slice; it does not refit models.
         """
     )
@@ -372,7 +379,6 @@ def _(
 @app.cell
 def _(
     coupled_prediction,
-    forecast_horizon,
     frame,
     independent_prediction,
     np,
@@ -381,7 +387,9 @@ def _(
     plt,
     selected_origin,
 ):
-    selected_horizons = np.arange(forecast_horizon + 1)
+    selected_horizons = np.array(
+        [int(column.removeprefix("horizon_")) for column in periodic_prediction]
+    )
     selected_target_times = pd.DatetimeIndex(
         [
             selected_origin + pd.Timedelta(hours=int(_horizon))
@@ -437,7 +445,7 @@ def _(
 
 
 @app.cell
-def _(frame, mo, pd, selected_origin, target_lags):
+def _(frame, include_nowcast, mo, pd, selected_origin, target_lags):
     known_rows = [
         {
             "forecast feature": "linear driver at origin",
@@ -462,7 +470,11 @@ def _(frame, mo, pd, selected_origin, target_lags):
                 "### Origin-known inputs supplied to the direct forecasts\n\n"
                 "The linear driver is observed at the origin. Lag 0 is the target "
                 "at the origin; higher target lags are preceding observations. "
-                "Horizon 0 cannot use target history, avoiding `y[t] = y[t]`."
+                + (
+                    "Horizon 0 cannot use target history, avoiding `y[t] = y[t]`."
+                    if include_nowcast
+                    else "Nowcasting is disabled, so every fitted horizon can use target history."
+                )
             ),
             mo.ui.table(pd.DataFrame(known_rows), pagination=False),
         ]
@@ -474,14 +486,15 @@ def _(frame, mo, pd, selected_origin, target_lags):
 def _(
     coupled_prediction,
     coupled_without_target_history,
-    forecast_horizon,
     independent_prediction,
     independent_without_target_history,
     np,
     plt,
     selected_origin,
 ):
-    contribution_horizons = np.arange(forecast_horizon + 1)
+    contribution_horizons = np.array(
+        [int(column.removeprefix("horizon_")) for column in independent_prediction]
+    )
     contribution_models = {
         "Independent AR": (
             independent_prediction,
@@ -517,8 +530,7 @@ def _(
             linestyle=contribution_style,
             marker="o",
             label=(
-                f"{contribution_label} "
-                f"(mean absolute adjustment {mean_adjustment:.3f})"
+                f"{contribution_label} (mean absolute adjustment {mean_adjustment:.3f})"
             ),
         )
     axis_contribution.axhline(0, color="#111111", linewidth=1)
@@ -536,7 +548,6 @@ def _(
 @app.cell
 def _(
     coupled_prediction,
-    forecast_horizon,
     frame,
     independent_prediction,
     np,
@@ -550,10 +561,11 @@ def _(
         "Coupled AR": coupled_prediction,
     }
     for model_name, prediction in prediction_sets.items():
-        for _horizon in range(forecast_horizon + 1):
+        for _column in prediction:
+            _horizon = int(_column.removeprefix("horizon_"))
             target_times = prediction.index + pd.Timedelta(hours=_horizon)
             actual_values = frame["observed"].reindex(target_times).to_numpy()
-            errors = prediction[f"horizon_{_horizon}"].to_numpy() - actual_values
+            errors = prediction[_column].to_numpy() - actual_values
             metric_rows.append(
                 {
                     "model": model_name,

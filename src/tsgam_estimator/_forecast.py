@@ -131,11 +131,12 @@ class TsgamForecastConfig(SklearnConfigMixin):
     """
     Configuration for direct multi-horizon forecast mode.
 
-    Forecast mode trains one direct regression per horizon, including the
-    horizon-zero nowcast. For horizon ``h``,
+    Forecast mode trains one direct regression per requested horizon. For
+    horizon ``h``,
     each row uses exogenous data available at the forecast origin and the target
     at ``origin + h``. ``horizon`` is the largest requested horizon, so
-    ``predict`` returns ``horizon_0`` through ``horizon_H``.
+    ``predict`` returns ``horizon_0`` through ``horizon_H`` when
+    ``include_nowcast=True``, or ``horizon_1`` through ``horizon_H`` otherwise.
     """
 
     horizon: int
@@ -143,6 +144,7 @@ class TsgamForecastConfig(SklearnConfigMixin):
     mode: Literal["independent", "coupled"] = "independent"
     coupling_config: TsgamForecastCouplingConfig | None = None
     forecast_ar_config: TsgamForecastArConfig | None = None
+    include_nowcast: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.base_config, TsgamEstimatorConfig):
@@ -154,6 +156,14 @@ class TsgamForecastConfig(SklearnConfigMixin):
             raise ValueError(f"horizon must be a non-negative integer, got {self.horizon!r}.")
         if self.horizon < 0:
             raise ValueError(f"horizon must be non-negative, got {self.horizon!r}.")
+        if not isinstance(self.include_nowcast, (bool, np.bool_)):
+            raise TypeError(
+                "include_nowcast must be a boolean, got "
+                f"{type(self.include_nowcast).__name__}."
+            )
+        self.include_nowcast = bool(self.include_nowcast)
+        if not self.include_nowcast and self.horizon == 0:
+            raise ValueError("horizon must be at least 1 when include_nowcast=False.")
         if self.mode not in ("independent", "coupled"):
             raise ValueError(f"mode must be 'independent' or 'coupled', got {self.mode!r}.")
         if self.base_config.ar_config is not None:
@@ -387,7 +397,8 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
             y,
             sample_weight,
         )
-        self.horizons_ = list(range(int(self.config.horizon) + 1))
+        first_horizon = 0 if self.config.include_nowcast else 1
+        self.horizons_ = list(range(first_horizon, int(self.config.horizon) + 1))
         if self.config.mode == "independent":
             self._fit_independent(X, y, sample_weight)
         else:
@@ -427,13 +438,15 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
         first_ar_ix = len(self.config.base_config.exog_config or [])
         standardized = np.zeros((len(self.horizons_), len(ar_config.lags)))
         if self.config.mode == "independent":
-            for horizon in self.horizons_[1:]:
+            for horizon_ix, horizon in enumerate(self.horizons_):
+                if horizon == 0:
+                    continue
                 estimator = self.forecast_estimators_[horizon]
                 for lag_ix in range(len(ar_config.lags)):
                     value = estimator.variables_[f"exog_coef_{first_ar_ix + lag_ix}"].value
                     if value is None:
                         raise ValueError("Forecast AR coefficients are unavailable.")
-                    standardized[horizon, lag_ix] = float(value[0, 0])
+                    standardized[horizon_ix, lag_ix] = float(value[0, 0])
         else:
             for lag_ix in range(len(ar_config.lags)):
                 horizon_variables = cast(
@@ -479,7 +492,8 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
         assert coupling is not None
         roughness_order = coupling.roughness_order
         n_horizons = len(self.horizons_)
-        n_forecast_horizons = n_horizons - 1
+        first_forecast_ix = 1 if self.config.include_nowcast else 0
+        n_forecast_horizons = n_horizons - first_forecast_ix
         if n_forecast_horizons <= roughness_order:
             roughness_order = 1
 
@@ -489,7 +503,7 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
         ) -> cvxpy.Expression:
             if coupling.roughness_weight == 0 or n_forecast_horizons < 2:
                 return term
-            forecast_coefs = coef_by_horizon[:, 1:]
+            forecast_coefs = coef_by_horizon[:, first_forecast_ix:]
             return term + coupling.roughness_weight * cvxpy.sum_squares(
                 cvxpy.diff(forecast_coefs, k=roughness_order, axis=1)
             )
@@ -535,7 +549,7 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
             losses.append(weighted_squared_loss(y_valid, model_term, weight_valid))
 
         constraints = []
-        if self._uses_forecast_ar:
+        if self._uses_forecast_ar and self.config.include_nowcast:
             first_ar_ix = len(self.config.base_config.exog_config or [])
             ar_config = self.config.forecast_ar_config
             assert ar_config is not None
