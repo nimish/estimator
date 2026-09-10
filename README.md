@@ -49,6 +49,78 @@ cd docs
 make html
 ```
 
+## Direct Target-History Forecasting
+
+Forecast mode can use values of the target known at each forecast origin as
+direct autoregressive features. Unlike `TsgamArConfig`, this is a deterministic
+multi-horizon predictor: it fits each future target directly and does not roll
+predictions or sampled residuals forward.
+
+```python
+import pandas as pd
+
+from tsgam_estimator import (
+    TsgamForecastArConfig,
+    TsgamForecastConfig,
+    TsgamForecastEstimator,
+)
+
+forecaster = TsgamForecastEstimator(
+    TsgamForecastConfig(
+        horizon=24,
+        base_config=base_config,
+        forecast_ar_config=TsgamForecastArConfig(
+            lags=[0, 1, 2, 24],
+            reg_weight=1e-4,
+        ),
+    )
+).fit(X_train, y_train)
+
+predictions = forecaster.predict(
+    X_origins,
+    y_history=pd.Series(y_observed, index=observed_times),
+)
+```
+
+Lag `0` is the target observed at the origin, lag `1` is the previous sample,
+and so on. The horizon-zero nowcast never uses target history, avoiding the
+tautological prediction `y[t] = y[t]`. Fitted coefficients in original target
+units are available in `forecast_ar_coefficients_`; the internally standardized
+coefficients are in `forecast_ar_standardized_coefficients_`.
+
+## Forecast Visualization
+
+Install the optional Matplotlib support and plot the origin-indexed output from
+`TsgamForecastEstimator.predict` directly:
+
+```bash
+uv add "tsgam-estimator[viz]"
+```
+
+```python
+from tsgam_estimator import plot_forecast_horizon, plot_forecast_origin
+
+predictions = forecaster.predict(X_test)
+
+# One path with its horizon-zero nowcast and horizon 1..H forecasts.
+plot_forecast_origin(
+    predictions,
+    actual=y,
+    origin=predictions.index[24],
+)
+
+# One fixed horizon aligned to target time across all evaluation origins.
+plot_forecast_horizon(predictions, actual=y, horizon=6)
+
+# The horizon-zero baseline over time.
+plot_forecast_horizon(predictions, actual=y, horizon=0)
+```
+
+Both functions also accept a mapping of labels to prediction DataFrames for
+side-by-side model comparisons. Use `forecast_to_long_dataframe` when a notebook
+needs the aligned origin/target data for Altair, Seaborn, or another plotting
+library.
+
 ## Development
 
 ### Running Tests
