@@ -721,9 +721,9 @@ def main():
     estimator.fit(X_train, y_train)
 
     print("\nModel fitting complete!")
-    print(f"Problem status: {estimator.problem_.status}")
-    if estimator.problem_.status in ["optimal", "optimal_inaccurate"]:
-        print(f"Optimal value: {estimator.problem_.value:.6e}")
+    print(f"Problem status: {estimator.decomposition_['status']}")
+    if estimator.decomposition_["status"] in ["optimal", "optimal_inaccurate"]:
+        print(f"Optimal value: {estimator.decomposition_['problem'].value:.6e}")
 
     # Check AR model
     if estimator.ar_coef_ is not None:
@@ -885,4 +885,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -132,9 +132,8 @@ def _fit_single_pv(cfg: dict) -> dict:
         y_train_pred_orig = np.exp(pred_train_log) * y_max
         metrics = compute_standard_metrics(y_true_orig, y_pred_orig)
         slope = None
-        if hasattr(est, 'variables_') and est.variables_ and 'trend_slope' in est.variables_:
-            sl = est.variables_['trend_slope'].value
-            slope = float(sl) if sl is not None else None
+        if hasattr(est, 'decomposition_') and 'trend_slope' in est.decomposition_["values"]:
+            slope = float(est.decomposition_["values"]["trend_slope"])
         return {'name': name, **metrics, 'trend_slope': slope,
                 'y_pred': y_pred_orig, 'y_true': y_true_orig,
                 'y_train_pred': y_train_pred_orig, 'y_train_true': y_train_true_orig}

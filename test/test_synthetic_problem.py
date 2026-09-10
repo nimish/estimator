@@ -899,7 +899,7 @@ def test_fourier_coefficient_frame_ignores_extra_cross_basis_coefficients():
     estimator_config = build_estimator_config(config)
     estimator = SimpleNamespace(
         config=estimator_config,
-        variables_={"fourier_coef": SimpleNamespace(value=np.arange(14.0))},
+        decomposition_={"values": {"periodic_theta": np.arange(14.0)}},
     )
 
     frame = fourier_coefficient_frame(config, estimator)
@@ -948,7 +948,7 @@ def test_cross_basis_coefficient_frame_reports_truth_and_fitted_coefficients():
     estimator_config = build_estimator_config(config)
     estimator = SimpleNamespace(
         config=estimator_config,
-        variables_={"fourier_coef": SimpleNamespace(value=np.arange(8.0))},
+        decomposition_={"values": {"periodic_theta": np.arange(8.0)}},
     )
 
     frame = cross_basis_coefficient_frame(config, estimator)
@@ -993,7 +993,7 @@ def test_fourier_coefficient_frame_does_not_fail_when_fitted_coefficients_are_sh
     estimator_config = build_estimator_config(config)
     estimator = SimpleNamespace(
         config=estimator_config,
-        variables_={"fourier_coef": SimpleNamespace(value=np.array([1.0, 2.0]))},
+        decomposition_={"values": {"periodic_theta": np.array([1.0, 2.0])}},
     )
 
     frame = fourier_coefficient_frame(config, estimator)

@@ -526,9 +526,8 @@ def _(mo):
 
 @app.cell
 def _(estimator):
-    print(f"Problem status: {estimator.problem_.status}")
-    if hasattr(estimator.problem_, 'value'):
-        print(f"Optimal value: {estimator.problem_.value:.6e}")
+    print(f"Problem status: {estimator.decomposition_['status']}")
+    print(f"Optimal value: {estimator.decomposition_['problem'].value:.6e}")
     return
 
 
@@ -647,8 +646,8 @@ def _(
 @app.cell
 def _(estimator, np, plt, sns):
     # Plot trend if available
-    if hasattr(estimator, 'variables_') and 'trend' in estimator.variables_:
-        trend = estimator.variables_['trend'].value
+    if hasattr(estimator, 'decomposition_') and 'trend_group_values' in estimator.decomposition_["values"]:
+        trend = estimator.decomposition_["values"]['trend_group_values']
         if trend is not None:
             with sns.axes_style('whitegrid'):
                 plt.plot(np.arange(len(trend)) / 365, np.exp(trend))
@@ -770,19 +769,18 @@ def _(model, np, plt, res_dist, sm, stats, take_log, valid_mask, y_full):
 
 
 @app.cell
-def _(estimator, np, plt, valid_mask, x1_full, x1_max):
+def _(estimator, make_spline_basis, np, plt, valid_mask, x1_full, x1_max):
     # Plot temperature response
-    if hasattr(estimator, 'variables_') and 'exog_coef_0' in estimator.variables_:
-        exog_coef = estimator.variables_['exog_coef_0'].value
+    if hasattr(estimator, 'decomposition_') and 'exog_0_coef' in estimator.decomposition_["values"]:
+        exog_coef = estimator.decomposition_["values"]['exog_0_coef']
         if exog_coef is not None:
             # Get knots
             knots = estimator.exog_knots_[0] if estimator.exog_knots_ and len(estimator.exog_knots_) > 0 else None
             if knots is not None:
                 # Use only valid samples for visualization
                 x1_valid = x1_full[valid_mask]
-                # Use the estimator's _make_H method
-                H1 = estimator._make_H(x1_valid, knots, include_offset=False)
-                plt.plot(x1_valid * x1_max, np.exp(H1 @ exog_coef[:, 0]), ls='none', marker='.', markersize=1)
+                H1 = make_spline_basis(x1_valid, knots)
+                plt.plot(x1_valid * x1_max, np.exp(H1 @ exog_coef), ls='none', marker='.', markersize=1)
                 plt.title('Inferred temperature response')
                 plt.xlabel('module temp [deg C]')
                 plt.ylabel('correction factor [1]')
@@ -791,17 +789,17 @@ def _(estimator, np, plt, valid_mask, x1_full, x1_max):
 
 
 @app.cell
-def _(estimator, np, plt, valid_mask, x2_full, x2_max):
+def _(estimator, make_spline_basis, np, plt, valid_mask, x2_full, x2_max):
     # Plot irradiance response
-    if hasattr(estimator, 'variables_') and 'exog_coef_1' in estimator.variables_:
-        exog_coef = estimator.variables_['exog_coef_1'].value
+    if hasattr(estimator, 'decomposition_') and 'exog_1_coef' in estimator.decomposition_["values"]:
+        exog_coef = estimator.decomposition_["values"]['exog_1_coef']
         if exog_coef is not None:
             knots = estimator.exog_knots_[1] if estimator.exog_knots_ and len(estimator.exog_knots_) > 1 else None
             if knots is not None:
                 # Use only valid samples for visualization
                 x2_valid = x2_full[valid_mask]
-                H2 = estimator._make_H(x2_valid, knots, include_offset=False)
-                plt.plot(x2_valid * x2_max, np.exp(H2 @ exog_coef[:, 0]), ls='none', marker='.', markersize=1)
+                H2 = make_spline_basis(x2_valid, knots)
+                plt.plot(x2_valid * x2_max, np.exp(H2 @ exog_coef), ls='none', marker='.', markersize=1)
                 plt.title('Inferred irradiance response')
                 plt.xlabel('POA irradiance [W/m^2]')
                 plt.ylabel('correction factor [1]')
@@ -829,6 +827,7 @@ def _():
     import scipy.stats as stats
     import statsmodels.api as sm
     import sys
+    from signaldecomp.spline import make_spline_basis
 
     # Add src directory to path to import tsgam_estimator
     # This notebook is in Archive/, so parent directory is project root
@@ -865,6 +864,7 @@ def _():
         TsgamSolverConfig,
         TsgamSplineConfig,
         TsgamTrendConfig,
+        make_spline_basis,
         mo,
         np,
         pd,

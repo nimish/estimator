@@ -60,7 +60,7 @@ def _fit_single_outlier(cfg: dict) -> dict:
         metrics = compute_standard_metrics(y_original, pred)
         result: dict = {'name': name, **metrics, 'y_pred': pred, 'y_true': y_original}
         if cfg['use_outlier']:
-            det = est.variables_['outlier'].value
+            det = est.decomposition_["values"]["outlier_group_values"]
             ver = verify_outlier_detection(
                 cfg['true_outlier_values'], det, cfg['outlier_days'], tolerance=0.3,
             )
@@ -183,7 +183,7 @@ def main(output_dir: Path | None, n_days: int, seed: int, n_jobs: int) -> None:
     # Refit with outlier detector to get detected values for outlier detection figure
     with quiet():
         est_with = fit_model_with_outlier_detector(cfg['X'], cfg['y_log'], reg_weight=0.01)
-    detected_outlier_values = est_with.variables_['outlier'].value
+    detected_outlier_values = est_with.decomposition_["values"]["outlier_group_values"]
     day_indices = np.arange(n_days)
     with quiet():
         paths = plot_outlier_detection(

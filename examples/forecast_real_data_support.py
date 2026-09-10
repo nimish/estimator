@@ -441,31 +441,23 @@ def _roughness(model: TsgamForecastEstimator) -> float:
     forecast_horizons = [horizon for horizon in model.horizons_ if horizon > 0]
     if model.config.mode == "independent":
         for horizon in forecast_horizons:
-            variables = model.forecast_estimators_[horizon].variables_
+            values = model.forecast_estimators_[horizon].decomposition_["values"]
             vectors.append(
                 np.concatenate(
                     [
-                        np.asarray(variable.value, dtype=float).ravel(order="F")
-                        for _, variable in sorted(variables.items())
+                        np.asarray(value, dtype=float).ravel(order="F")
+                        for name, value in sorted(values.items())
+                        if name.endswith(("_beta", "_coef", "_theta", "_group_values"))
                     ]
                 )
             )
     else:
-        horizon_count = len(model.horizons_)
         for horizon in forecast_horizons:
-            horizon_ix = model.horizons_.index(horizon)
-            parts = []
-            for _, variable in sorted(model.variables_.items()):
-                if isinstance(variable, list):
-                    value = variable[horizon_ix].value
-                else:
-                    value = np.asarray(variable.value)
-                    if value.ndim == 1 and value.shape[0] == horizon_count:
-                        value = value[horizon_ix]
-                    elif value.ndim >= 2 and value.shape[-1] == horizon_count:
-                        value = value[..., horizon_ix]
-                parts.append(np.asarray(value, dtype=float).ravel(order="F"))
-            vectors.append(np.concatenate(parts))
+            values = model.horizon_values_[model.horizons_.index(horizon)]
+            vectors.append(np.concatenate([
+                np.asarray(value, dtype=float).ravel(order="F")
+                for _, value in sorted(values.items())
+            ]))
     if len(vectors) < 2:
         return 0.0
     coefficients = np.vstack(vectors)

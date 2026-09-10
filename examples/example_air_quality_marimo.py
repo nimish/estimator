@@ -46,6 +46,7 @@ def _():
     import sys
     import urllib.request
     import zipfile
+    from signaldecomp.spline import make_spline_basis
 
     # Add src directory to path to import tsgam_estimator
     _project_root = Path(__file__).parent.parent
@@ -77,6 +78,7 @@ def _():
         TsgamOutlierConfig,
         TsgamSolverConfig,
         TsgamSplineConfig,
+        make_spline_basis,
         mo,
         np,
         pd,
@@ -587,8 +589,8 @@ def _(
     )
 
     # Exogenous variables configuration
-    # Note: Only non-negative lags (0, 1, 2, ...) are used for forecasting
-    # Negative lags would use future data, which is not available for forecasting
+    # Use only non-positive offsets for a causal model: negative values select
+    # past observations, while positive values would use future data.
     # Order must match the order of columns in X_train/X_test
 
     # Check if X_train has any columns
@@ -601,19 +603,19 @@ def _(
     var_configs = {
         'temperature': TsgamSplineConfig(
             n_knots=8,
-            lags=[0, 1, 2],  # Current, 1-2 hours back
+            lags=[-2, -1, 0],  # Current and previous 1-2 hours
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
         'dewpoint': TsgamSplineConfig(
             n_knots=10,
-            lags=[0, 1],  # Current, 1 hour back
+            lags=[-1, 0],  # Current and previous hour
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
         'wind_speed': TsgamSplineConfig(
             n_knots=8,
-            lags=[0, 1],  # Current, 1 hour back
+            lags=[-1, 0],  # Current and previous hour
             reg_weight=6e-5,
             diff_reg_weight=0.5
         ),
@@ -696,9 +698,9 @@ def _(
     estimator.fit(X_train, y_train_log)
 
     print("\nModel fitting complete!")
-    print(f"Problem status: {estimator.problem_.status}")
-    if estimator.problem_.status in ["optimal", "optimal_inaccurate"]:
-        print(f"Optimal value: {estimator.problem_.value:.6e}")
+    print(f"Problem status: {estimator.decomposition_['status']}")
+    if estimator.decomposition_["status"] in ["optimal", "optimal_inaccurate"]:
+        print(f"Optimal value: {estimator.decomposition_['problem'].value:.6e}")
 
     if estimator.ar_coef_ is not None:
         print("\nAR model fitted successfully:")
@@ -768,11 +770,11 @@ def _(
 
     # Variable configs mapping
     # Note: n_knots=10+ fails with CLARABEL for temperature when used alone or with dewpoint/wind_speed
-    # Testing showed: n_knots=8 with lags=[0,1,2] works reliably for all combinations
+    # Testing showed: n_knots=8 with lags=[-2,-1,0] works reliably for all combinations
     _var_configs = {
-        'temperature': TsgamSplineConfig(n_knots=8, lags=[0, 1, 2], reg_weight=6e-5, diff_reg_weight=0.5),  # Using n_knots=8 to avoid solver failure
-        'dewpoint': TsgamSplineConfig(n_knots=10, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
-        'wind_speed': TsgamSplineConfig(n_knots=8, lags=[0, 1], reg_weight=6e-5, diff_reg_weight=0.5),
+        'temperature': TsgamSplineConfig(n_knots=8, lags=[-2, -1, 0], reg_weight=6e-5, diff_reg_weight=0.5),  # Using n_knots=8 to avoid solver failure
+        'dewpoint': TsgamSplineConfig(n_knots=10, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
+        'wind_speed': TsgamSplineConfig(n_knots=8, lags=[-1, 0], reg_weight=6e-5, diff_reg_weight=0.5),
         'pressure': TsgamSplineConfig(n_knots=8, lags=[0], reg_weight=6e-5, diff_reg_weight=0.5),
         'rain_hours': TsgamSplineConfig(n_knots=6, lags=[0], reg_weight=6e-5, diff_reg_weight=0.5),
     }
@@ -1184,14 +1186,14 @@ def _(mo):
 @app.cell
 def _(df_train, estimator, np, outlier_reg_weight, pd, plt, use_outlier):
     # Plot outlier detection results if outlier detector was used
-    if not hasattr(estimator, 'variables_'):
+    if not hasattr(estimator, 'decomposition_'):
         _fig_outlier = plt.figure(figsize=(10, 6))
         _ax = _fig_outlier.add_subplot(111)
         _ax.text(0.5, 0.5, 'Fit the model first to see outlier detection results.',
                 ha='center', va='center', fontsize=14, transform=_ax.transAxes)
         _ax.axis('off')
-    elif use_outlier.value and 'outlier' in estimator.variables_:
-        detected_outlier = estimator.variables_['outlier'].value
+    elif use_outlier.value and 'outlier_group_values' in estimator.decomposition_["values"]:
+        detected_outlier = estimator.decomposition_["values"]['outlier_group_values']
         if detected_outlier is not None:
             # Get training timestamps to map days to dates
             timestamps = df_train.index
@@ -1344,18 +1346,18 @@ def _(mo):
 
 
 @app.cell
-def _(X_train, estimator, mo, np):
+def _(X_train, estimator, make_spline_basis, mo, np):
     # Diagnostic: Check response function values
     _log_response = None
     _correction_factor = None
-    if hasattr(estimator, 'variables_') and 'exog_coef_0' in estimator.variables_:
-        _exog_coef = estimator.variables_['exog_coef_0'].value
+    if hasattr(estimator, 'decomposition_') and 'exog_0_coef' in estimator.decomposition_["values"]:
+        _exog_coef = estimator.decomposition_["values"]['exog_0_coef']
         if _exog_coef is not None and estimator.exog_knots_ and len(estimator.exog_knots_) > 0:
             _knots = estimator.exog_knots_[0]
             if 'temperature' in X_train.columns:
                 _x = X_train['temperature'].values
-                _H = estimator._make_H(_x, _knots, include_offset=False)
-                _log_response = _H @ _exog_coef[:, 0]
+                _H = make_spline_basis(_x, _knots)
+                _log_response = _H @ _exog_coef.reshape(_exog_coef.shape[0], -1)[:, 0]
                 _correction_factor = np.exp(_log_response)
 
             mo.md(f"""
@@ -1389,7 +1391,7 @@ def _(X_train, estimator, mo, np):
 
 
 @app.cell
-def _(X_train, estimator, np, plt):
+def _(X_train, estimator, make_spline_basis, np, plt):
     # Response functions - 2x3 subplot grid (5 variables)
     # Plot in log space to better visualize the response
     _fig_resp, _axes_resp = plt.subplots(nrows=2, ncols=3, figsize=(18, 10))
@@ -1445,16 +1447,16 @@ def _(X_train, estimator, np, plt):
         elif _config['var_name'] in _var_to_idx:
             # Get the actual index for this variable
             _var_idx = _var_to_idx[_config['var_name']]
-            _var_key = f'exog_coef_{_var_idx}'
+            _var_key = f'exog_{_var_idx}_coef'
 
-            if hasattr(estimator, 'variables_') and _var_key in estimator.variables_:
-                _exog_coef = estimator.variables_[_var_key].value
+            if hasattr(estimator, 'decomposition_') and _var_key in estimator.decomposition_["values"]:
+                _exog_coef = estimator.decomposition_["values"][_var_key]
                 if _exog_coef is not None:
                     _knots = estimator.exog_knots_[_var_idx] if estimator.exog_knots_ and len(estimator.exog_knots_) > _var_idx else None
                     if _knots is not None:
                         _x = X_train[_config['var_name']].values
-                        _H = estimator._make_H(_x, _knots, include_offset=False)
-                        _log_response = _H @ _exog_coef[:, 0]
+                        _H = make_spline_basis(_x, _knots)
+                        _log_response = _H @ _exog_coef.reshape(_exog_coef.shape[0], -1)[:, 0]
                         _correction_factor = np.exp(_log_response)
 
                         # Plot in log space (more interpretable)
