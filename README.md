@@ -49,6 +49,32 @@ cd docs
 make html
 ```
 
+## Prediction support
+
+TSGAM uses SignalDecomp as its decomposition engine, pinned to an immutable Git
+revision. SignalDecomp owns generic bases, component penalties, and masked
+residual linking; TSGAM owns timestamps, model configuration, forecasting, and AR
+policy. Examples also use SignalDecomp's basis helpers; `spcqe` is not a direct
+dependency (it remains a transitive dependency of `solar-data-tools`).
+
+After an ordinary fit, `estimator.decomposition_` is the native solved result.
+Use `signaldecomp.components_to_frame(result, mask=result["fit_mask"])` for
+fitted components and reconstruction. This is distinct from `predict`, which
+applies forecasting policy and does not replay fitted outliers.
+
+Coupled forecasts expose numeric `horizon_values_` in `horizons_` order, with
+native names such as `exog_0_beta`, `exog_0_coef`, and `periodic_theta`.
+The old `variables_` coefficient layout is removed. Single-offset spline
+coefficients can be vectors; reshape to `(basis_width, n_offsets)` with
+`order="F"` when plotting offset-specific responses.
+
+Exogenous offsets use `x[t + lag]`. Include the required past or future driver
+rows in the prediction input, then select the desired output interval. Rows
+without the required driver history return `NaN`, including in forecast and
+sample outputs. Removing exogenous components removes this requirement.
+Residual AR preserves the fitted time grid and excludes lag windows spanning
+missing observations.
+
 ## Direct Target-History Forecasting
 
 Forecast mode can use values of the target known at each forecast origin as
