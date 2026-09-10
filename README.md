@@ -64,9 +64,17 @@ applies forecasting policy and does not replay fitted outliers.
 
 Coupled forecasts expose numeric `horizon_values_` in `horizons_` order, with
 native names such as `exog_0_beta`, `exog_0_coef`, and `periodic_theta`.
-The old `variables_` coefficient layout is removed. Single-offset spline
-coefficients can be vectors; reshape to `(basis_width, n_offsets)` with
-`order="F"` when plotting offset-specific responses.
+For existing consumers, `variables_` preserves the historical keys, coefficient
+shapes, and `.value` access using views of native CVXPY expressions. Ordinary
+fits also expose `problem_` and `output_` (an alias of `decomposition_`). Coupled
+`variables_` retains horizon-column matrices and lists of exogenous coefficient
+matrices. These are inspection interfaces, not supported mutation hooks:
+prediction continues to use native solved values. No optimization is duplicated.
+
+New consumers should use `components_to_frame` for fitted time-series components
+and reconstruction, reserving coefficient access for response diagnostics.
+Native single-offset spline coefficients can be vectors; reshape to
+`(basis_width, n_offsets)` with `order="F"` for offset-specific responses.
 
 Exogenous offsets use `x[t + lag]`. Include the required past or future driver
 rows in the prediction input, then select the desired output interval. Rows

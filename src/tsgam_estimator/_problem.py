@@ -28,6 +28,37 @@ from ._design import (
 if TYPE_CHECKING:
     from ._estimator import TsgamEstimatorConfig, TsgamSolverConfig
 
+
+def legacy_variable_views(
+    config: TsgamEstimatorConfig,
+    variables: Mapping[str, cvxpy.Expression],
+) -> dict[str, cvxpy.Expression]:
+    """Expose historical coefficient names/shapes without new optimization variables."""
+    views = {"constant": variables["intercept_group_values"][0]}
+    for ix, cfg in enumerate(config.exog_config or []):
+        suffix = "coef" if _is_spline_config(cfg) else "beta"
+        coefficient = variables[f"exog_{ix}_{suffix}"]
+        views[f"exog_coef_{ix}"] = cvxpy.reshape(
+            coefficient, (coefficient.size // len(cfg.lags), len(cfg.lags)), order="F",
+        )
+    for old, native in (
+        ("fourier_coef", "periodic_theta"),
+        ("trend", "trend_group_values"),
+        ("trend_slope", "trend_slope"),
+        ("outlier", "outlier_group_values"),
+    ):
+        if native in variables:
+            views[old] = (
+                cvxpy.vec(variables[native], order="F")
+                if old == "fourier_coef" else variables[native]
+            )
+    for role, coefficient in variables.items():
+        if role.startswith("interaction_") and role.endswith("_coef"):
+            pair = role.removeprefix("interaction_").removesuffix("_coef")
+            views[f"interaction_coef_{pair}"] = cvxpy.vec(coefficient, order="C")
+    return views
+
+
 def solve_problem(
     problem: cvxpy.Problem,
     solver_config: TsgamSolverConfig,
