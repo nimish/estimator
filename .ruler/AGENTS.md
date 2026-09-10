@@ -11,7 +11,7 @@
 * Prefer standalone test functions over test classes when a class is not necessary.
 * Work with data at its natural frequency; do not resample to a coarser resolution.
 * Type parameters as strongly as reasonable; avoid `Any` when a concrete union or recursive type alias suffices.
-* For substantive tidal/met and shareable research reports, prioritize `examples/tidal_analysis.ipynb` as the polished artifact. Keep `examples/example_tidal_marimo.py` out of scope unless Marimo changes are explicitly requested.
+* Use `examples/example_tidal_compact.py` for the primary tidal analysis notebook (regressor responses, interactions, and Shapley analysis). `example_tidal_marimo.py` is the simpler explorer; the old Jupyter tidal notebook has been retired.
 * Prefer PACT-style notebook structure from `PACT_data_analysis_v2.py` and `PACT_data_full_analysis.py`: configuration-first cells, concise section headers, analysis-first plots, and factored plotting/helpers over tutorial exposition or long inline blocks.
 * Prefer human-readable station selection, such as `example_tidal.find_station` or `load_station` with `STATION_CATALOG`, over raw numeric station IDs when it improves clarity.
 * For large notebook refactors, tight context, or resource limits, prefer small focused edits with incremental review. Before large tidal-notebook refactors, snapshot the current state on a dedicated branch or worktree, but do not leave requested work isolated there without clearly bringing it back or committing it as requested.
