@@ -14,7 +14,7 @@ from tsgam_estimator import (
     TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
 )
-from spcqe import make_basis_matrix
+from signaldecomp.basis import make_basis_matrix
 
 
 def test_fit_uses_correct_pattern():
@@ -157,4 +157,3 @@ def test_fit_sample_weight_negative_raises():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

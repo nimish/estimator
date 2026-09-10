@@ -170,7 +170,7 @@ def test_baseline_residuals_computed(tsgam_estimator_with_ar):
     assert hasattr(estimator, '_baseline_residuals_'), "Baseline residuals should be stored in debug mode"
     assert estimator._baseline_residuals_ is not None, "Baseline residuals should not be None"
 
-    residuals = estimator._baseline_residuals_
+    residuals = estimator._baseline_residuals_[estimator.decomposition_["fit_mask"]]
 
     assert len(residuals) > 0, "Should have residuals"
     assert np.all(np.isfinite(residuals)), "Residuals should be finite"
@@ -405,4 +405,3 @@ def test_sample_predictions_match_notebook_pattern(tsgam_estimator_with_ar, note
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
-
