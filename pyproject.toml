@@ -106,7 +106,7 @@ module-name = "tsgam_estimator"
 module-root = "src"
 
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.13"
 root = ["./src"]
 
 [tool.ty.src]
