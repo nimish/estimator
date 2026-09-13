@@ -7,7 +7,62 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import Field
-from typing import ClassVar, Self, cast
+from typing import Callable, ClassVar, Self, cast
+
+import numpy as np
+from numpy import ndarray
+from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.metrics import get_scorer
+from sklearn.utils.validation import check_consistent_length
+
+
+class _PredictionRegressor(RegressorMixin, BaseEstimator):
+    """Pass already-computed predictions through sklearn's public scorer API."""
+
+    def __init__(self, predictions: ndarray):
+        self.predictions = predictions
+
+    def predict(self, X: object) -> ndarray:
+        return self.predictions
+
+
+def make_supported_scorer(scoring: str) -> Callable[..., float]:
+    """Wrap a named sklearn regression scorer to omit NaN prediction rows.
+
+    Predict once on the complete input window before filtering: dropping rows
+    before prediction would change lag support. Targets must remain finite.
+    For multi-output predictions, use rows supported by every output. When
+    comparing different lag configurations, their scored supports may differ.
+    """
+    scorer = get_scorer(scoring)
+
+    def supported_score(estimator, X, y, sample_weight=None) -> float:
+        predicted = np.asarray(estimator.predict(X), dtype=float)
+        target = np.asarray(y, dtype=float)
+        if target.shape != predicted.shape or target.ndim not in (1, 2):
+            raise ValueError("Targets and predictions must have matching 1D or 2D shapes.")
+        if not np.all(np.isfinite(target)) or np.any(np.isinf(predicted)):
+            raise ValueError("Targets must be finite and predictions must not contain infinity.")
+        supported = ~np.isnan(predicted)
+        if predicted.ndim == 2:
+            supported = supported.all(axis=1)
+        if not np.any(supported):
+            raise ValueError("No supported prediction rows are available for scoring.")
+        kwargs = {}
+        if sample_weight is not None:
+            weight = np.asarray(sample_weight, dtype=float)
+            check_consistent_length(target, weight)
+            if weight.ndim != 1 or not np.all(np.isfinite(weight)) or np.any(weight < 0):
+                raise ValueError("sample_weight must be a finite nonnegative 1D array.")
+            if weight[supported].sum() <= 0:
+                raise ValueError("Supported rows must have positive total sample weight.")
+            kwargs["sample_weight"] = weight[supported]
+        return float(scorer(
+            _PredictionRegressor(predicted[supported]),
+            np.empty((int(supported.sum()), 0)), target[supported], **kwargs,
+        ))
+
+    return supported_score
 
 
 class SklearnConfigMixin:

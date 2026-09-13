@@ -16,6 +16,9 @@ For local development:
 uv sync --group dev
 ```
 
+This branch requires Python 3.13 or newer, matching the pinned SignalDecomp
+development revision and its dependency minimums; Python 3.12 is not supported.
+
 ## Documentation
 
 ### Building Documentation Locally
@@ -50,6 +53,16 @@ make html
 ```
 
 ## Prediction support
+
+`predict` returns NaN where lagged inputs are unavailable. `estimator.score`
+computes R² on supported rows only. For explicit sklearn metrics, use
+`make_supported_scorer("neg_root_mean_squared_error")` from `tsgam_estimator`
+as the `scoring` argument to `GridSearchCV` or `cross_validate`. Ordinary sklearn
+scorers do not ignore NaNs. The wrapper predicts on the full validation window
+before filtering, preserving lag alignment. Targets must be finite; an entirely
+unsupported window raises an error. When tuning lag sets, check that candidates
+are compared on equivalent support. For multi-output scoring, a row must be
+supported by every output.
 
 TSGAM uses SignalDecomp as its decomposition engine, pinned to an immutable Git
 revision. SignalDecomp owns generic bases, component penalties, and masked

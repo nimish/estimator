@@ -30,7 +30,7 @@ from ._problem import (
     build_single_output_decomposition,
     legacy_variable_views,
 )
-from ._sklearn import SklearnConfigMixin
+from ._sklearn import SklearnConfigMixin, make_supported_scorer
 
 
 @dataclass
@@ -137,6 +137,16 @@ class TsgamSplineConfig(SklearnConfigMixin):
     reg_weight: float = 1.0e-4
     diff_reg_weight: float = 1.0
     knots: ndarray | list[float] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if (len(self.knots) and len(self.knots) < 3) or (
+            not len(self.knots) and self.n_knots is not None and self.n_knots < 3
+        ):
+            raise ValueError(
+                "Spline responses require at least three knots. For a linear "
+                "response (formerly n_knots=2), use TsgamLinearConfig with the "
+                "same lags and regularization weights."
+            )
 
 @dataclass
 class TsgamLinearConfig(SklearnConfigMixin):
@@ -250,6 +260,9 @@ class TsgamTrendConfig(SklearnConfigMixin):
     trend_type: TrendType = TrendType.NONE
     grouping: float | None = None # todo: rename this to something better
     reg_weight: float = 10.0
+
+    def __post_init__(self) -> None:
+        self.trend_type = TrendType(self.trend_type)
 
 @dataclass
 class TsgamOutlierConfig(SklearnConfigMixin):
@@ -883,6 +896,7 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
 
         trend_period = None
         if self.config.trend_config is not None and self.config.trend_config.trend_type != TrendType.NONE:
+            self.config.trend_config.__post_init__()
             trend_period = self.config.trend_config.grouping or 24.0
             self.trend_period_hours_ = trend_period
 
@@ -988,6 +1002,10 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
             self.ar_intercept_ = None
             self.ar_noise_loc_ = None
             self.ar_noise_scale_ = None
+
+    def score(self, X: pd.DataFrame, y: ndarray, sample_weight: ndarray | None = None) -> float:
+        """Return R² on supported prediction rows, retaining NaNs in predict()."""
+        return make_supported_scorer("r2")(self, X, y, sample_weight=sample_weight)
 
     def predict(self, X: pd.DataFrame,
                 remove_periodic : bool = False, remove_exogenous : bool = False,

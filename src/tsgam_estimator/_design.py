@@ -211,6 +211,11 @@ def _ensure_sorted_index(
 ) -> tuple[pd.DataFrame, ndarray, ndarray | None] | tuple[pd.DataFrame]:
     """Sort or validate a timestamp-indexed input frame and aligned arrays."""
     timestamps = _extract_timestamps(X)
+    if timestamps.has_duplicates:
+        raise ValueError(
+            "Duplicate timestamps are not supported. Aggregate repeated observations "
+            "and their weights explicitly before fitting or predicting."
+        )
     if sort_index:
         sort_idx = np.argsort(timestamps)
         X = X.iloc[sort_idx]
