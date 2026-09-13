@@ -16,9 +16,11 @@ from signaldecomp import (
     grouped_sparse,
     grouped_trend,
     make_problem,
+    make_offset_basis,
     multiperiodic,
+    spline_support_diagnostics,
 )
-from signaldecomp.spline import make_spline_basis
+from signaldecomp.spline import default_knots, make_spline_basis
 
 from ._design import (
     _is_spline_config,
@@ -97,6 +99,14 @@ def build_single_output_decomposition(
     interaction_bases: dict[int, ndarray] = {}
     interaction_parents = {ix for pair in design.interaction_pairs for ix in pair}
 
+    # Parameterization must see exactly the rows used by native residual linking,
+    # including other drivers' offsets and the unlagged interaction inputs.
+    fit_mask = np.isfinite(y)
+    for ix, cfg in enumerate(config.exog_config or []):
+        fit_mask &= make_offset_basis(drivers[:, ix], tuple(-lag for lag in cfg.lags)).valid_mask
+    for ix in interaction_parents:
+        fit_mask &= np.isfinite(drivers[:, ix])
+
     for ix, exog_cfg in enumerate(config.exog_config or []):
         kwargs = {
             "weight": exog_cfg.reg_weight,
@@ -113,11 +123,22 @@ def build_single_output_decomposition(
             )
             if knots is None and exog_cfg.n_knots is None:
                 raise ValueError("Either knots or n_knots must be provided for TsgamSplineConfig")
+            if knots is None:
+                # Retain the existing training-extrema knot policy independently
+                # of the optional change in numerical coordinates.
+                knots = default_knots(drivers[:, ix], exog_cfg.n_knots)
             component = exog_spline(
                 drivers[:, ix],
                 n_knots=exog_cfg.n_knots or 10,
                 knots=knots,
+                whiten=exog_cfg.whiten,
+                fit_mask=fit_mask,
+                rank_tolerance=exog_cfg.rank_tolerance,
                 **kwargs,
+            )
+            component.metadata["support_diagnostics"] = spline_support_diagnostics(
+                drivers[:, ix], knots, component.metadata["support_mask"],
+                rank_tolerance=exog_cfg.rank_tolerance,
             )
             components.append(component)
             if ix in interaction_parents:

@@ -64,6 +64,21 @@ unsupported window raises an error. When tuning lag sets, check that candidates
 are compared on equivalent support. For multi-output scoring, a row must be
 supported by every output.
 
+Spline configs accept `whiten=True` to delegate exact full-rank numerical
+whitening to SignalDecomp. Ridge, lag-smoothing, and horizon-coupling penalties
+remain on the original coefficients, as do the compatibility views. Whitening
+uses the joint fitting mask and raises on rank deficiency; it never silently
+drops basis directions. The existing training-extrema knot policy is unchanged.
+Native component metadata retains `support_diagnostics` (knot-interval counts
+and base-basis rank/conditioning) and, when enabled, `whitening` (the full lagged
+design audit and coordinate transform). Coupled forecasts retain these under
+`horizon_component_metadata_` in horizon order.
+
+Duplicate timestamps are rejected before grid expansion; aggregate repeated
+observations and their weights explicitly. Spline responses require at least
+three knots. For former two-knot linear responses, use `TsgamLinearConfig` with
+the same lags and regularization weights.
+
 TSGAM uses SignalDecomp as its decomposition engine, pinned to an immutable Git
 revision. SignalDecomp owns generic bases, component penalties, and masked
 residual linking; TSGAM owns timestamps, model configuration, forecasting, and AR

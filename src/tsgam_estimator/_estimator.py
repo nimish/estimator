@@ -120,6 +120,11 @@ class TsgamSplineConfig(SklearnConfigMixin):
     knots : list[float], default=[]
         Explicit knot locations for the spline. If empty list, knots will be
         auto-generated using n_knots. If provided, n_knots is ignored.
+    whiten : bool, default=False
+        Use SignalDecomp's exact full-rank whitening on the fitting mask.
+        Original coefficient penalties are preserved; rank deficiency raises.
+    rank_tolerance : float or None, default=None
+        Absolute numerical-rank threshold for SignalDecomp diagnostics/whitening.
 
     Examples
     --------
@@ -137,6 +142,8 @@ class TsgamSplineConfig(SklearnConfigMixin):
     reg_weight: float = 1.0e-4
     diff_reg_weight: float = 1.0
     knots: ndarray | list[float] = field(default_factory=list)
+    whiten: bool = False
+    rank_tolerance: float | None = None
 
     def __post_init__(self) -> None:
         if (len(self.knots) and len(self.knots) < 3) or (
