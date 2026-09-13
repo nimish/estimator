@@ -13,6 +13,7 @@ from sklearn.base import BaseEstimator, RegressorMixin, check_is_fitted
 
 from ._design import (
     build_tsgam_design,
+    _is_spline_config,
     _make_fourier_basis,
     infer_fit_frequency,
     normalize_X,
@@ -540,12 +541,16 @@ class TsgamForecastEstimator(RegressorMixin, BaseEstimator):
             for design in designs
         ]
         # Couple original coefficient coordinates, preserving each component's penalty.
-        variables = [cast(dict[str, cvxpy.Variable], item["variables"]) for item in built]
+        variables = [cast(dict[str, cvxpy.Expression], item["variables"]) for item in built]
         problems = [cast(cvxpy.Problem, item["problem"]) for item in built]
-        coefficient_roles = [
-            role for role in variables[0]
-            if role == "intercept_group_values" or role.endswith(("_coef", "_beta", "_theta"))
+        coefficient_roles = ["intercept_group_values"] + [
+            f"exog_{ix}_{'coef' if _is_spline_config(cfg) else 'beta'}"
+            for ix, cfg in enumerate(base_config.exog_config or [])
         ]
+        coefficient_roles.extend(f"interaction_{ix}_coef" for ix in range(len(designs[0].interaction_pairs)))
+        if base_config.multi_periodic_config is not None:
+            coefficient_roles.append("periodic_theta")
+        self.horizon_component_metadata_ = [item["component_metadata"] for item in built]
         regularization_term = cvxpy.Constant(0.0)
         for role in coefficient_roles:
             matrix = cvxpy.vstack([cvxpy.vec(v[role], order="F") for v in variables]).T
