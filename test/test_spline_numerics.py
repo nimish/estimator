@@ -28,8 +28,11 @@ def numerical_case(solver):
 
 
 @pytest.mark.parametrize("solver", ["CLARABEL", "SCS"])
-def test_whitening_preserves_weighted_gapped_original_problem(solver):
+@pytest.mark.parametrize("driver_scale", [1, 200])
+def test_whitening_preserves_weighted_gapped_original_problem(solver, driver_scale):
     X, y, config = numerical_case(solver)
+    X["x"] *= driver_scale
+    config.exog_config[0].knots = np.asarray(config.exog_config[0].knots) * driver_scale
     keep = np.arange(len(X)) != 37
     weight = np.linspace(0, 2, len(X))
     models = []
@@ -49,6 +52,8 @@ def test_whitening_preserves_weighted_gapped_original_problem(solver):
     metadata = white.decomposition_["component_metadata"]["exog_0"]
     np.testing.assert_array_equal(metadata["support_mask"], offset_source_mask(mask, (2, 0)))
     assert metadata["whitening"].training_gram_error < 1e-10
+    if driver_scale == 200:
+        assert metadata["whitening"].diagnostics.condition_number > 1e4
     assert metadata["support_diagnostics"].n_fit == metadata["support_mask"].sum()
     for role in ["intercept", "exog_0", "exog_1", "exog_0_coef", "exog_1_beta"]:
         np.testing.assert_allclose(raw.decomposition_["values"][role], white.decomposition_["values"][role], atol=2e-5)
