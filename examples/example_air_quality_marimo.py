@@ -1001,11 +1001,6 @@ def _(
 
 
 @app.cell
-def _():
-    return
-
-
-@app.cell
 def _(mo):
     mo.md(r"""
     ## Model Predictions and Evaluation
@@ -1357,7 +1352,7 @@ def _(X_train, estimator, make_spline_basis, mo, np):
             if 'temperature' in X_train.columns:
                 _x = X_train['temperature'].values
                 _H = make_spline_basis(_x, _knots)
-                _log_response = _H @ _exog_coef.reshape(_exog_coef.shape[0], -1)[:, 0]
+                _log_response = _H @ _exog_coef.reshape(len(_knots) - 1, -1, order="F")[:, estimator.config.exog_config[0].lags.index(0)]
                 _correction_factor = np.exp(_log_response)
 
             mo.md(f"""
@@ -1456,7 +1451,7 @@ def _(X_train, estimator, make_spline_basis, np, plt):
                     if _knots is not None:
                         _x = X_train[_config['var_name']].values
                         _H = make_spline_basis(_x, _knots)
-                        _log_response = _H @ _exog_coef.reshape(_exog_coef.shape[0], -1)[:, 0]
+                        _log_response = _H @ _exog_coef.reshape(len(_knots) - 1, -1, order="F")[:, estimator.config.exog_config[_var_idx].lags.index(0)]
                         _correction_factor = np.exp(_log_response)
 
                         # Plot in log space (more interpretable)
