@@ -105,6 +105,7 @@ def build_single_output_decomposition(
             "lag_smooth_weight": exog_cfg.diff_reg_weight,
         }
         if _is_spline_config(exog_cfg):
+            exog_cfg.__post_init__()  # Also validate configurations updated by set_params.
             configured_knots = np.asarray(exog_cfg.knots, dtype=float)
             knots = (
                 knots_by_exog[ix] if knots_by_exog is not None
@@ -158,7 +159,7 @@ def build_single_output_decomposition(
 
     if trend_period is not None:
         assert config.trend_config is not None
-        trend_type = config.trend_config.trend_type.value
+        trend_type = str(config.trend_config.trend_type)
         monotonic = (
             "increasing" if trend_type.endswith("increasing") else "decreasing"
         ) if trend_type.startswith("nonlinear") else None

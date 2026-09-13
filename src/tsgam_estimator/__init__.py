@@ -3,6 +3,8 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from ._sklearn import make_supported_scorer
+
 from ._estimator import (
     PERIOD_DAILY_YEARLY,
     PERIOD_HOURLY_DAILY,
@@ -43,6 +45,7 @@ except PackageNotFoundError:
     __version__ = "0.1.0"
 
 __all__ = [
+    "make_supported_scorer",
     "__version__",
     "TsgamEstimator",
     "TsgamForecastEstimator",
