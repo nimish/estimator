@@ -7,7 +7,7 @@ from itertools import combinations
 
 import numpy as np
 import pandas as pd
-from signaldecomp import make_interaction_basis
+from signaldecomp import components_to_frame, make_interaction_basis, make_offset_basis
 from signaldecomp.basis import make_basis_matrix
 
 from tsgam_estimator import (
@@ -27,6 +27,7 @@ from tsgam_estimator._design import (
     _normalize_interaction_pairs,
     _process_exog_config,
     _timestamps_to_indices,
+    validate_predict_frequency,
 )
 
 
@@ -1304,9 +1305,44 @@ def fitted_component_frame(
     *,
     regressor_names: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    """Return fitted additive component contributions for a fitted estimator."""
+    """Extract native fitted components at training timestamps, including gaps.
+
+    X selects timestamps/labels, not new regressor values. For evaluation with
+    new inputs or future timestamps, use predicted_component_frame instead.
+    """
+    (X_sorted,) = _ensure_sorted_index(X, sort_index=estimator.config.sort_index)
+    timestamps, _ = _ensure_timestamp_index(X_sorted)
+    indices = _timestamps_to_indices(timestamps, estimator.time_reference_, estimator.freq_)
+    out = estimator.decomposition_
+    if np.any(indices != indices.astype(int)) or np.any(indices < 0) or np.any(indices >= len(out["fit_mask"])):
+        raise ValueError("Use predicted_component_frame for timestamps outside the fitted grid.")
+    names = list(regressor_names) if regressor_names is not None else list(X_sorted.columns)
+    names.extend(f"x{ix}" for ix in range(len(names), len(estimator.config.exog_config or [])))
+    labels = {"intercept": "constant", "reconstruction": "fitted"}
+    labels.update({f"exog_{ix}": f"regressor:{name}" for ix, name in enumerate(names)})
+    labels.update({
+        f"interaction_{ix}": f"interaction:{names[left]} x {names[right]}"
+        for ix, (left, right) in enumerate(_normalize_interaction_pairs(estimator.config))
+    })
+    frame = components_to_frame(out, mask=out["fit_mask"]).drop(columns="residual").rename(columns=labels)
+    for role in ("periodic", "trend"):
+        if role not in frame:
+            frame[role] = np.where(out["fit_mask"], 0.0, np.nan)
+    frame = frame.iloc[indices.astype(int)].copy()
+    frame.index = timestamps
+    return frame
+
+
+def predicted_component_frame(
+    estimator: TsgamEstimator,
+    X: pd.DataFrame,
+    *,
+    regressor_names: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Evaluate components on a regular prediction window, excluding fitted outliers."""
     (X_sorted,) = _ensure_sorted_index(X, sort_index=estimator.config.sort_index)
     timestamps, X_array = _ensure_timestamp_index(X_sorted)
+    validate_predict_frequency(timestamps, estimator.freq_)
     time_indices = _timestamps_to_indices(
         timestamps, estimator.time_reference_, estimator.freq_
     )
@@ -1372,7 +1408,11 @@ def fitted_component_frame(
     components["trend"] = _trend_contribution(estimator, time_indices, n_samples)
 
     component_frame = pd.DataFrame(components, index=timestamps)
-    component_frame["fitted"] = component_frame.sum(axis=1)
+    component_frame["fitted"] = component_frame.sum(axis=1, skipna=False)
+    supported = np.ones(n_samples, dtype=bool)
+    for ix, cfg in enumerate(exog_config):
+        supported &= make_offset_basis(X_array[:, ix], tuple(-lag for lag in cfg.lags)).valid_mask
+    component_frame.loc[~supported] = np.nan
     return component_frame
 
 

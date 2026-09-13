@@ -670,7 +670,7 @@ def _(
                 _knots_aq = estimator_aq.exog_knots_[0]
                 _x_vals_aq = X_train_aq['temperature'].values
                 _H_aq = make_spline_basis(_x_vals_aq, _knots_aq)
-                _log_response_aq = _H_aq @ _exog_coef_aq.reshape(_exog_coef_aq.shape[0], -1)[:, 0]
+                _log_response_aq = _H_aq @ _exog_coef_aq.reshape(len(_knots_aq) - 1, -1, order="F")[:, estimator_aq.config.exog_config[0].lags.index(0)]
                 _ax4_aq.scatter(_x_vals_aq, _log_response_aq, s=1, alpha=0.3)
                 _ax4_aq.axhline(y=0, color='r', linestyle='--', linewidth=1)
                 _ax4_aq.set_xlabel('Temperature (°C)', fontsize=11)
@@ -738,7 +738,7 @@ def _(
                 _knots_la = estimator_la.exog_knots_[0]
                 _x_vals_la = X_train_la['temperature_degF'].values
                 _H_la = make_spline_basis(_x_vals_la, _knots_la)
-                _log_response_la = _H_la @ _exog_coef_la.reshape(_exog_coef_la.shape[0], -1)[:, 0]  # Use lag 0
+                _log_response_la = _H_la @ _exog_coef_la.reshape(len(_knots_la) - 1, -1, order="F")[:, estimator_la.config.exog_config[0].lags.index(0)]
                 _ax3_la.scatter(_x_vals_la, _log_response_la, s=1, alpha=0.3)
                 _ax3_la.axhline(y=0, color='r', linestyle='--', linewidth=1)
                 _ax3_la.set_xlabel('Temperature (°F)', fontsize=11)
@@ -754,7 +754,7 @@ def _(
                 _knots_la_hum = estimator_la.exog_knots_[1]
                 _x_vals_la_hum = X_train_la['humidity_pc'].values
                 _H_la_hum = make_spline_basis(_x_vals_la_hum, _knots_la_hum)
-                _log_response_la_hum = _H_la_hum @ _exog_coef_la_hum.reshape(_exog_coef_la_hum.shape[0], -1)[:, 0]  # Use lag 0
+                _log_response_la_hum = _H_la_hum @ _exog_coef_la_hum.reshape(len(_knots_la_hum) - 1, -1, order="F")[:, estimator_la.config.exog_config[1].lags.index(0)]
                 _ax4_la.scatter(_x_vals_la_hum, _log_response_la_hum, s=1, alpha=0.3, color='green')
                 _ax4_la.axhline(y=0, color='r', linestyle='--', linewidth=1)
                 _ax4_la.set_xlabel('Humidity (%)', fontsize=11)
@@ -896,7 +896,7 @@ def _(
                     _knots = estimator_aq.exog_knots_[_idx]
                     _x_vals = X_train_aq[_var_name].values
                     _H = make_spline_basis(_x_vals, _knots)
-                    _log_response = _H @ _exog_coef.reshape(_exog_coef.shape[0], -1)[:, 0]
+                    _log_response = _H @ _exog_coef.reshape(len(_knots) - 1, -1, order="F")[:, estimator_aq.config.exog_config[_idx].lags.index(0)]
                     _ax.scatter(_x_vals, _log_response, s=1, alpha=0.3, color=_color)
                     _ax.axhline(y=0, color='r', linestyle='--', linewidth=1)
                     _ax.set_xlabel(_var_label, fontsize=10)

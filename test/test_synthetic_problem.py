@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal, assert_series_equal
 
-from tsgam_estimator import TsgamEstimator, TsgamLinearConfig, TsgamSplineConfig, TrendType
+from tsgam_estimator import TsgamEstimator, TsgamEstimatorConfig, TsgamLinearConfig, TsgamSplineConfig, TrendType
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -33,6 +33,7 @@ from examples.synthetic_problem import (
     describe_problem_config,
     estimator_config_rows,
     fitted_component_frame,
+    predicted_component_frame,
     fourier_coefficient_frame,
     generate_synthetic_problem,
     problem_dashboard_rows,
@@ -700,6 +701,27 @@ def test_describe_problem_config_gives_compact_overview():
     assert "noise 0.05" in description
 
 
+def test_fitted_components_use_native_grid_for_gaps_and_lags():
+    X = pd.DataFrame({"x": np.random.default_rng(7).normal(size=60)}, index=pd.date_range("2024", periods=60, freq="1h"))
+    y = 2 + X.x.to_numpy()
+    keep = np.arange(len(X)) != 20
+    model = TsgamEstimator(TsgamEstimatorConfig(None, [TsgamLinearConfig(lags=[-2, 0])])).fit(X.loc[keep], y[keep])
+    frame = fitted_component_frame(model, X.loc[keep])
+    expected = model.decomposition_["values"]["exog_0"][keep].copy()
+    supported = model.decomposition_["fit_mask"][keep]
+    expected[~supported] = np.nan
+    np.testing.assert_allclose(frame["regressor:x"], expected)
+    assert frame.loc[X.index[22]].isna().all()
+    assert frame.loc[X.index[21]].notna().all()
+    # Fitted extraction must not re-evaluate new driver values at old timestamps.
+    assert_frame_equal(frame, fitted_component_frame(model, 3 * X.loc[keep]))
+    future = X.copy()
+    future.index += pd.Timedelta(days=10)
+    with pytest.raises(ValueError, match="predicted_component_frame"):
+        fitted_component_frame(model, future)
+    np.testing.assert_allclose(predicted_component_frame(model, future).fitted, model.predict(future))
+
+
 def test_fitted_component_frame_reconstructs_predictions():
     config = _make_problem_config()
     problem = generate_synthetic_problem(config)
@@ -738,7 +760,7 @@ def test_component_fit_quality_rows_scores_known_truth_terms():
     estimator.fit(split.X_train, split.y_train.to_numpy())
 
     train_components = fitted_component_frame(estimator, split.X_train)
-    test_components = fitted_component_frame(estimator, split.X_test)
+    test_components = predicted_component_frame(estimator, split.X_test)
     rows = component_fit_quality_rows(
         config=config,
         truth_components=problem.truth_components,
