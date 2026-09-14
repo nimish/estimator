@@ -722,6 +722,17 @@ def test_fitted_components_use_native_grid_for_gaps_and_lags():
     np.testing.assert_allclose(predicted_component_frame(model, future).fitted, model.predict(future))
 
 
+@pytest.mark.parametrize("minutes", [-15, 15, 60 * 60])
+def test_fitted_component_frame_rejects_nonmember_timestamps(minutes):
+    X = pd.DataFrame({"x": np.arange(60.)}, index=pd.date_range("2024", periods=60, freq="1h", tz="UTC"))
+    model = TsgamEstimator(TsgamEstimatorConfig(None, [TsgamLinearConfig()])).fit(X, X.x.to_numpy())
+    query = X.iloc[:1].copy()
+    query.index += pd.Timedelta(minutes=minutes)
+    with pytest.raises(ValueError, match="outside the fitted grid"):
+        fitted_component_frame(model, query)
+    assert fitted_component_frame(model, X.iloc[[0, 10, 59]]).index.equals(X.index[[0, 10, 59]])
+
+
 def test_fitted_component_frame_reconstructs_predictions():
     config = _make_problem_config()
     problem = generate_synthetic_problem(config)

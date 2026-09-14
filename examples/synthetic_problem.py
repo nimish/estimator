@@ -27,6 +27,7 @@ from tsgam_estimator._design import (
     _normalize_interaction_pairs,
     _process_exog_config,
     _timestamps_to_indices,
+    step_timedelta,
     validate_predict_frequency,
 )
 
@@ -1312,9 +1313,12 @@ def fitted_component_frame(
     """
     (X_sorted,) = _ensure_sorted_index(X, sort_index=estimator.config.sort_index)
     timestamps, _ = _ensure_timestamp_index(X_sorted)
-    indices = _timestamps_to_indices(timestamps, estimator.time_reference_, estimator.freq_)
     out = estimator.decomposition_
-    if np.any(indices != indices.astype(int)) or np.any(indices < 0) or np.any(indices >= len(out["fit_mask"])):
+    fitted_grid = pd.date_range(
+        estimator.time_reference_, periods=len(out["fit_mask"]), freq=step_timedelta(estimator.freq_),
+    )
+    indices = fitted_grid.get_indexer(timestamps)
+    if np.any(indices < 0):
         raise ValueError("Use predicted_component_frame for timestamps outside the fitted grid.")
     names = list(regressor_names) if regressor_names is not None else list(X_sorted.columns)
     names.extend(f"x{ix}" for ix in range(len(names), len(estimator.config.exog_config or [])))
