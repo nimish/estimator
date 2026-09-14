@@ -37,8 +37,24 @@ def make_supported_scorer(scoring: str) -> Callable[..., float]:
     scorer = get_scorer(scoring)
 
     def supported_score(estimator, X, y, sample_weight=None) -> float:
+        from ._design import sort_fit_inputs
+        from ._estimator import TsgamEstimator
+        from ._forecast import TsgamForecastEstimator
+
+        # TSGAM returns chronological predictions, unlike ordinary sklearn
+        # regressors. Apply the same permutation to targets and weights first.
+        if isinstance(estimator, (TsgamEstimator, TsgamForecastEstimator)):
+            config = estimator.config.base_config if isinstance(estimator, TsgamForecastEstimator) else estimator.config
+            check_consistent_length(X, y, sample_weight)
+            X, y, sample_weight = sort_fit_inputs(
+                X, sort_index=config.sort_index, y=np.asarray(y), sample_weight=sample_weight,
+            )
         predicted = np.asarray(estimator.predict(X), dtype=float)
         target = np.asarray(y, dtype=float)
+        if target.ndim == 2 and target.shape[1] == 1:
+            target = target[:, 0]
+        if predicted.ndim == 2 and predicted.shape[1] == 1:
+            predicted = predicted[:, 0]
         if target.shape != predicted.shape or target.ndim not in (1, 2):
             raise ValueError("Targets and predictions must have matching 1D or 2D shapes.")
         if not np.all(np.isfinite(target)) or np.any(np.isinf(predicted)):
