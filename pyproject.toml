@@ -3,7 +3,7 @@ name = "tsgam-estimator"
 version = "0.1.0"
 description = "Time series GAM (Generalized Additive Model) estimators for load forecasting"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 authors = [
@@ -20,6 +20,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Scientific/Engineering :: Information Analysis",
@@ -30,7 +31,7 @@ dependencies = [
     "pandas>=3.0.3,<4",
     "scipy>=1.18.0,<2",
     "scikit-learn>=1.7.2,<2",
-    "signaldecomp @ git+https://github.com/cvxgrp/cvx-sd-skill.git@4cfcc3271f9a24fb3a442882df45ca1668590e6f",
+    "signaldecomp @ git+https://github.com/cvxgrp/cvx-sd-skill.git@70e7388406b76fe06f9e8b0ed02cda11cc37e987",
 ]
 
 [project.optional-dependencies]
@@ -106,7 +107,7 @@ module-name = "tsgam_estimator"
 module-root = "src"
 
 [tool.ty.environment]
-python-version = "3.13"
+python-version = "3.12"
 root = ["./src"]
 
 [tool.ty.src]

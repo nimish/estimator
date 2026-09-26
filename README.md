@@ -16,8 +16,8 @@ For local development:
 uv sync --group dev
 ```
 
-This branch requires Python 3.13 or newer, matching the pinned SignalDecomp
-development revision and its dependency minimums; Python 3.12 is not supported.
+Requires Python 3.12 or newer. SignalDecomp is pinned to an immutable Git
+development revision with Python 3.12 support.
 
 ## Documentation
 
