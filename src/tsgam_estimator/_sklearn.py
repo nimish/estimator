@@ -13,6 +13,7 @@ import numpy as np
 from numpy import ndarray
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import get_scorer
+from sklearn.pipeline import Pipeline
 from sklearn.utils.validation import check_consistent_length
 
 
@@ -33,6 +34,7 @@ def make_supported_scorer(scoring: str) -> Callable[..., float]:
     before prediction would change lag support. Targets must remain finite.
     For multi-output predictions, use rows supported by every output. When
     comparing different lag configurations, their scored supports may differ.
+    Row-preserving sklearn pipelines ending in TSGAM are supported too.
     """
     scorer = get_scorer(scoring)
 
@@ -40,6 +42,17 @@ def make_supported_scorer(scoring: str) -> Callable[..., float]:
         from ._design import sort_fit_inputs
         from ._estimator import TsgamEstimator
         from ._forecast import TsgamForecastEstimator
+
+        final_estimator = estimator
+        while isinstance(final_estimator, Pipeline):
+            final_estimator = final_estimator.steps[-1][1]
+        if isinstance(final_estimator, (TsgamEstimator, TsgamForecastEstimator)):
+            # Transform once, then align using the actual timestamp layout seen
+            # by TSGAM, just as Pipeline.score delegates after preprocessing.
+            while isinstance(estimator, Pipeline):
+                if len(estimator.steps) > 1:
+                    X = estimator[:-1].transform(X)
+                estimator = estimator.steps[-1][1]
 
         # TSGAM returns chronological predictions, unlike ordinary sklearn
         # regressors. Apply the same permutation to targets and weights first.
