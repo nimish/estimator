@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -793,6 +794,48 @@ def test_component_fit_quality_rows_scores_known_truth_terms():
     assert math.isfinite(float(wind_row["test_rmse"]))
     assert math.isfinite(float(temp_row["train_correlation"]))
     assert math.isfinite(float(wind_row["test_relative_rmse"]))
+
+
+def test_component_quality_uses_common_finite_support_with_lags():
+    config = _make_problem_config()
+    config = replace(config, regressors=tuple(replace(spec, lags=(-2, 0)) for spec in config.regressors))
+    problem = generate_synthetic_problem(config)
+    split = split_problem_frames(problem)
+    model = TsgamEstimator(build_estimator_config(config, solver_name="CLARABEL")).fit(split.X_train, split.y_train.to_numpy())
+    frames = {"train": fitted_component_frame(model, split.X_train), "test": predicted_component_frame(model, split.X_test)}
+    snapshots = {key: frame.copy() for key, frame in frames.items()}
+    truth = problem.truth_components.copy()
+    component = "regressor:temp"
+    for frame in frames.values():
+        assert frame.iloc[:2].isna().all().all()
+        truth.loc[frame.index[:2], component] = 1e6
+        truth.loc[frame.index[4], component] = np.nan
+    rows = component_fit_quality_rows(config=config, truth_components=truth, fitted_train=frames["train"], fitted_test=frames["test"])
+    row = next(row for row in rows if row["component"] == component)
+    for key, frame in frames.items():
+        actual = frame[component].to_numpy()
+        expected = truth.loc[frame.index, component].to_numpy()
+        mask = np.isfinite(actual) & np.isfinite(expected)
+        actual, expected = actual[mask], expected[mask]
+        for metric, value in synthetic_metrics(expected, actual).items():
+            np.testing.assert_allclose(row[f"{key}_{metric}"], value)
+        np.testing.assert_allclose(row[f"{key}_mean_offset"], np.mean(actual - expected))
+        np.testing.assert_allclose(row[f"{key}_correlation"], np.corrcoef(expected, actual)[0, 1])
+        np.testing.assert_allclose(row[f"{key}_relative_rmse"], np.sqrt(np.mean((actual - expected)**2) / np.mean(expected**2)))
+        assert_frame_equal(frame, snapshots[key])
+
+
+@pytest.mark.parametrize("empty_frame", [False, True])
+@pytest.mark.filterwarnings("error")
+def test_component_quality_marks_empty_support_as_undefined(empty_frame):
+    config = _make_problem_config()
+    index = pd.date_range("2024", periods=3, freq="1h")
+    truth = pd.DataFrame({"regressor:temp": [1., 2., 3.]}, index=index)
+    unavailable = truth * np.nan
+    if empty_frame:
+        unavailable = unavailable.iloc[:0]
+    rows = component_fit_quality_rows(config=config, truth_components=truth, fitted_train=unavailable, fitted_test=unavailable)
+    assert all(np.isnan(value) for name, value in rows[0].items() if name.startswith(("train_", "test_")))
 
 
 def test_component_fit_stat_rows_make_split_metrics_readable():
