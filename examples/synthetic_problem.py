@@ -1447,31 +1447,27 @@ def _component_score_row(
     fitted_train: pd.DataFrame,
     fitted_test: pd.DataFrame,
 ) -> dict[str, str | float]:
-    train_truth = truth.loc[fitted_train.index].to_numpy(dtype=float)
-    train_fit = fitted_train[component].to_numpy(dtype=float)
-    test_truth = truth.loc[fitted_test.index].to_numpy(dtype=float)
-    test_fit = fitted_test[component].to_numpy(dtype=float)
-    train_metrics = synthetic_metrics(train_truth, train_fit)
-    test_metrics = synthetic_metrics(test_truth, test_fit)
-    train_mean_offset = float(np.mean(train_fit) - np.mean(train_truth))
-    test_mean_offset = float(np.mean(test_fit) - np.mean(test_truth))
-    return {
+    row: dict[str, str | float] = {
         "component": component,
         "truth_term": truth_term,
         "model_term": model_term,
-        "train_mean_offset": train_mean_offset,
-        "test_mean_offset": test_mean_offset,
-        "train_rmse": train_metrics["rmse"],
-        "test_rmse": test_metrics["rmse"],
-        "train_mae": train_metrics["mae"],
-        "test_mae": test_metrics["mae"],
-        "train_r2": train_metrics["r2"],
-        "test_r2": test_metrics["r2"],
-        "train_correlation": _safe_correlation(train_truth, train_fit),
-        "test_correlation": _safe_correlation(test_truth, test_fit),
-        "train_relative_rmse": _relative_rmse(train_metrics["rmse"], train_truth),
-        "test_relative_rmse": _relative_rmse(test_metrics["rmse"], test_truth),
     }
+    for split, frame in (("train", fitted_train), ("test", fitted_test)):
+        expected = truth.loc[frame.index].to_numpy(dtype=float)
+        fitted = frame[component].to_numpy(dtype=float)
+        supported = np.isfinite(expected) & np.isfinite(fitted)
+        expected, fitted = expected[supported], fitted[supported]
+        if fitted.size:
+            metrics = synthetic_metrics(expected, fitted)
+            metrics.update(
+                mean_offset=float(np.mean(fitted - expected)),
+                correlation=_safe_correlation(expected, fitted),
+                relative_rmse=_relative_rmse(metrics["rmse"], expected),
+            )
+        else:
+            metrics = dict.fromkeys(("rmse", "mae", "r2", "mean_offset", "correlation", "relative_rmse"), np.nan)
+        row.update({f"{split}_{name}": value for name, value in metrics.items()})
+    return row
 
 
 def component_fit_stat_rows(
