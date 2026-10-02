@@ -41,6 +41,7 @@ def _():
         alt,
         build_day_hour_matrix,
         mo,
+        np,
         pd,
         plt,
         sys,
@@ -90,10 +91,12 @@ def _(
     TIDAL_CONSTITUENT_PERIODS_HOURS,
     TIDE_ONLY_OPTION,
     TIDE_TO_WEATHER,
+    np,
     pd,
     sys,
 ):
     import json as _json
+    from dataclasses import replace as _replace
     from collections import OrderedDict as _OrderedDict
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -121,6 +124,7 @@ def _(
         compute_periodogram,
         extract_fourier_components,
         infer_samples_per_hour,
+        fitted_components,
     )
     from tsgam_estimator import (
         TrendType,
@@ -305,8 +309,8 @@ def _(
         configs, default = make_tidal_spline_configs(sph)
         out = []
         for var in selected_regressors:
-            cfg = configs.get(var, TsgamSplineConfig(n_knots=knot_count_val, lags=[0], reg_weight=1e-5, diff_reg_weight=0.3))
-            out.append(cfg)
+            cfg = configs.get(var, default)
+            out.append(_replace(cfg, n_knots=knot_count_val))
         return out if out else None
 
     def build_multi_periodic_config(sph, harmonic_map, fourier_reg_weight):
@@ -323,6 +327,7 @@ def _(
         )
 
     def prepare_model_frames(merged_df, train_start_text, train_end_text, test_start_text, test_end_text, selected_regressors):
+        merged_df = merged_df.asfreq(pd.tseries.frequencies.to_offset(merged_df.index.to_series().diff().median()))
         train_df = merged_df.loc[str(train_start_text):str(train_end_text)].copy()
         test_df = merged_df.loc[str(test_start_text):str(test_end_text)].copy()
         for sub in (train_df, test_df):
@@ -393,8 +398,10 @@ def _(
             solver_config=solver_config,
             random_state=42,
         ))
-        est.fit(prepared["X_train"], prepared["y_train"])
-        y_pred_train = est.predict(prepared["X_train"])
+        observed = np.isfinite(prepared["y_train"])
+        est.fit(prepared["X_train"].loc[observed], prepared["y_train"][observed])
+        components = fitted_components(est, prepared["train_df"].index)
+        y_pred_train = components["reconstruction"].to_numpy()
         y_pred_test = est.predict(prepared["X_test"])
 
         metrics = tidal_metrics(prepared["y_test"], y_pred_test)
@@ -406,25 +413,21 @@ def _(
             random_state=42,
         ))
         fourier_est.fit(
-            pd.DataFrame(index=prepared["X_train"].index),
-            prepared["y_train"],
+            pd.DataFrame(index=prepared["X_train"].index[observed]),
+            prepared["y_train"][observed],
         )
-        fourier_resid_train = prepared["y_train"] - fourier_est.predict(
-            pd.DataFrame(index=prepared["X_train"].index)
-        )
+        fourier_resid_train = fitted_components(
+            fourier_est, prepared["train_df"].index,
+        )["residual"].to_numpy()
         spectrum = compute_periodogram(
             prepared["train_df"].index, fourier_resid_train,
         )
         peaks = summarize_periodogram_peaks(spectrum)
         harmonic_cands = build_harmonic_candidates(spectrum)
 
-        component_dict = {}
-        try:
-            component_dict = extract_fourier_components(
-                est, labels=TIDAL_COMPONENT_LABELS,
-            )
-        except Exception:
-            pass
+        component_dict = extract_fourier_components(
+            est, labels=TIDAL_COMPONENT_LABELS, index=prepared["train_df"].index,
+        )
 
         preview_hours = min(7 * 24 * sph, len(prepared["train_df"]))
         comp_index = prepared["train_df"].index[:preview_hours]
@@ -459,6 +462,7 @@ def _(
 
         return {
             "prepared": prepared,
+            "components": components,
             "y_pred_train": y_pred_train,
             "y_pred_test": y_pred_test,
             "metrics": metrics,

@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import scipy.stats as stats
 import click
+from signaldecomp.spline import make_spline_basis
 from sklearn.metrics import r2_score
 from solardatatools import DataHandler
 
@@ -480,8 +481,8 @@ def _fit_and_visualize_trend_model(
     print("Fitting model...")
     try:
         estimator.fit(X, y)
-        status = estimator.problem_.status
-        opt_val = estimator.problem_.value if hasattr(estimator.problem_, 'value') else None
+        status = estimator.decomposition_["status"]
+        opt_val = estimator.decomposition_["problem"].value
         print(f"Fit complete! Problem status: {status}")
         if opt_val is not None:
             print(f"Optimal value: {opt_val:.6e}")
@@ -505,11 +506,11 @@ def _fit_and_visualize_trend_model(
     }
 
     # Get trend slope if available
-    if hasattr(estimator, 'variables_') and 'trend_slope' in estimator.variables_:
-        slope = estimator.variables_['trend_slope'].value
+    if hasattr(estimator, 'decomposition_') and 'trend_slope' in estimator.decomposition_["values"]:
+        slope = estimator.decomposition_["values"]['trend_slope']
         result['trend_slope'] = slope
-    elif hasattr(estimator, 'variables_') and 'trend' in estimator.variables_:
-        trend = estimator.variables_['trend'].value
+    elif hasattr(estimator, 'decomposition_') and 'trend_group_values' in estimator.decomposition_["values"]:
+        trend = estimator.decomposition_["values"]['trend_group_values']
         if trend is not None and len(trend) > 1:
             # Calculate average slope from differences
             result['trend_slope'] = np.mean(np.diff(trend))
@@ -602,8 +603,8 @@ def _visualize_model_results(
     print(f"Saved: {plot_path}")
 
     # Trend plot
-    if hasattr(estimator, 'variables_') and 'trend' in estimator.variables_:
-        trend = estimator.variables_['trend'].value
+    if hasattr(estimator, 'decomposition_') and 'trend_group_values' in estimator.decomposition_["values"]:
+        trend = estimator.decomposition_["values"]['trend_group_values']
         if trend is not None:
             # Print trend statistics for debugging
             print("\nTrend statistics:")
@@ -629,8 +630,8 @@ def _visualize_model_results(
             print(f"    Min: {np.min(trend_diff):.6f}")
             print(f"    Max: {np.max(trend_diff):.6f}")
 
-            if 'trend_slope' in estimator.variables_:
-                slope = estimator.variables_['trend_slope'].value
+            if 'trend_slope' in estimator.decomposition_["values"]:
+                slope = estimator.decomposition_["values"]['trend_slope']
                 if slope is not None:
                     print(f"  Fitted slope: {slope:.6f}")
 
@@ -660,8 +661,8 @@ def _visualize_model_results(
                 # Add linear fit line for comparison (only for linear trend)
                 est_trend_type = estimator.config.trend_config.trend_type.value if estimator.config.trend_config else 'none'
                 if len(trend) > 1 and est_trend_type == 'linear':
-                    if 'trend_slope' in estimator.variables_ and estimator.variables_['trend_slope'].value is not None:
-                        slope = estimator.variables_['trend_slope'].value
+                    if 'trend_slope' in estimator.decomposition_["values"]:
+                        slope = estimator.decomposition_["values"]['trend_slope']
                         y_fit = slope * period_indices  # trend[0] == 0 by constraint
                         ax1.plot(period_indices, y_fit, 'r--', linewidth=2,
                                 label=f'Expected linear (slope={slope:.8f})', alpha=0.7)
@@ -689,8 +690,8 @@ def _visualize_model_results(
                     # Show last 50 points
                     zoom_start = max(0, len(trend) - 50)
                     axins.plot(period_indices[zoom_start:], trend[zoom_start:], marker='o', markersize=2, linewidth=1)
-                    if est_trend_type == 'linear' and 'trend_slope' in estimator.variables_ and estimator.variables_['trend_slope'].value is not None:
-                        slope = estimator.variables_['trend_slope'].value
+                    if est_trend_type == 'linear' and 'trend_slope' in estimator.decomposition_["values"]:
+                        slope = estimator.decomposition_["values"]['trend_slope']
                         axins.plot(period_indices[zoom_start:], slope * period_indices[zoom_start:],
                                   'r--', linewidth=1.5, alpha=0.7)
                     axins.grid(True, alpha=0.3)
@@ -716,8 +717,8 @@ def _visualize_model_results(
             with sns.axes_style('whitegrid'):
                 ax.plot(period_indices, trend, marker='o', markersize=2, linewidth=1, label='Trend values')
                 est_trend_type = estimator.config.trend_config.trend_type.value if estimator.config.trend_config else 'none'
-                if est_trend_type == 'linear' and 'trend_slope' in estimator.variables_ and estimator.variables_['trend_slope'].value is not None:
-                    slope = estimator.variables_['trend_slope'].value
+                if est_trend_type == 'linear' and 'trend_slope' in estimator.decomposition_["values"]:
+                    slope = estimator.decomposition_["values"]['trend_slope']
                     y_fit = slope * period_indices
                     ax.plot(period_indices, y_fit, 'r--', linewidth=2,
                            label=f'Expected linear (slope={slope:.8f})', alpha=0.7)
@@ -755,14 +756,13 @@ def _visualize_model_results(
             print(f"Saved: {plot_path} (detailed log space view)")
 
             # Plot trend term for every timestep (stairstep pattern)
-            if hasattr(estimator, 'trend_T_matrix_') and estimator.trend_T_matrix_ is not None:
-                T = estimator.trend_T_matrix_
-                # Expand trend to all timesteps: trend_term = T @ trend
-                trend_term_timesteps = T @ trend
+            if 'trend' in estimator.decomposition_["values"]:
+                trend_term_timesteps = np.asarray(
+                    estimator.decomposition_["values"]["trend"]
+                )[estimator.time_indices_.astype(int)]
 
                 # Debug: Print information about T matrix and periods
                 print("\nT matrix debug info:")
-                print(f"  T shape: {T.shape}")
                 print(f"  Trend length (periods): {len(trend)}")
                 print(f"  Trend term timesteps length: {len(trend_term_timesteps)}")
                 print(f"  Expected samples per period: {len(trend_term_timesteps) / len(trend):.1f}")
@@ -952,14 +952,14 @@ def _visualize_model_results(
                 print(f"Saved: {plot_path} (trend term for every timestep - stairstep)")
 
     # Response functions
-    if hasattr(estimator, 'variables_') and 'exog_coef_0' in estimator.variables_:
-        exog_coef = estimator.variables_['exog_coef_0'].value
+    if hasattr(estimator, 'decomposition_') and 'exog_0_coef' in estimator.decomposition_["values"]:
+        exog_coef = estimator.decomposition_["values"]['exog_0_coef']
         if exog_coef is not None:
             knots = estimator.exog_knots_[0] if estimator.exog_knots_ and len(estimator.exog_knots_) > 0 else None
             if knots is not None:
-                H1 = estimator._make_H(x1, knots, include_offset=False)
+                H1 = make_spline_basis(x1, knots)
                 fig, ax = plt.subplots(figsize=(8, 6))
-                ax.plot(x1 * x1_max, np.exp(H1 @ exog_coef[:, 0]), ls='none', marker='.', markersize=1)
+                ax.plot(x1 * x1_max, np.exp(H1 @ exog_coef), ls='none', marker='.', markersize=1)
                 ax.set_title('Inferred temperature response')
                 ax.set_xlabel('module temp [deg C]')
                 ax.set_ylabel('correction factor [1]')
@@ -968,14 +968,14 @@ def _visualize_model_results(
                 plt.savefig(plot_path, dpi=150)
                 print(f"Saved: {plot_path}")
 
-    if hasattr(estimator, 'variables_') and 'exog_coef_1' in estimator.variables_:
-        exog_coef = estimator.variables_['exog_coef_1'].value
+    if hasattr(estimator, 'decomposition_') and 'exog_1_coef' in estimator.decomposition_["values"]:
+        exog_coef = estimator.decomposition_["values"]['exog_1_coef']
         if exog_coef is not None:
             knots = estimator.exog_knots_[1] if estimator.exog_knots_ and len(estimator.exog_knots_) > 1 else None
             if knots is not None:
-                H2 = estimator._make_H(x2, knots, include_offset=False)
+                H2 = make_spline_basis(x2, knots)
                 fig, ax = plt.subplots(figsize=(8, 6))
-                ax.plot(x2 * x2_max, np.exp(H2 @ exog_coef[:, 0]), ls='none', marker='.', markersize=1)
+                ax.plot(x2 * x2_max, np.exp(H2 @ exog_coef), ls='none', marker='.', markersize=1)
                 ax.set_title('Inferred irradiance response')
                 ax.set_xlabel('POA irradiance [W/m^2]')
                 ax.set_ylabel('correction factor [1]')

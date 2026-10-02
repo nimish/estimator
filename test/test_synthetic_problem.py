@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +11,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal, assert_series_equal
 
-from tsgam_estimator import TsgamEstimator, TsgamLinearConfig, TsgamSplineConfig, TrendType
+from tsgam_estimator import TsgamEstimator, TsgamEstimatorConfig, TsgamLinearConfig, TsgamSplineConfig, TrendType
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -33,6 +34,7 @@ from examples.synthetic_problem import (
     describe_problem_config,
     estimator_config_rows,
     fitted_component_frame,
+    predicted_component_frame,
     fourier_coefficient_frame,
     generate_synthetic_problem,
     problem_dashboard_rows,
@@ -700,6 +702,38 @@ def test_describe_problem_config_gives_compact_overview():
     assert "noise 0.05" in description
 
 
+def test_fitted_components_use_native_grid_for_gaps_and_lags():
+    X = pd.DataFrame({"x": np.random.default_rng(7).normal(size=60)}, index=pd.date_range("2024", periods=60, freq="1h"))
+    y = 2 + X.x.to_numpy()
+    keep = np.arange(len(X)) != 20
+    model = TsgamEstimator(TsgamEstimatorConfig(None, [TsgamLinearConfig(lags=[-2, 0])])).fit(X.loc[keep], y[keep])
+    frame = fitted_component_frame(model, X.loc[keep])
+    expected = model.decomposition_["values"]["exog_0"][keep].copy()
+    supported = model.decomposition_["fit_mask"][keep]
+    expected[~supported] = np.nan
+    np.testing.assert_allclose(frame["regressor:x"], expected)
+    assert frame.loc[X.index[22]].isna().all()
+    assert frame.loc[X.index[21]].notna().all()
+    # Fitted extraction must not re-evaluate new driver values at old timestamps.
+    assert_frame_equal(frame, fitted_component_frame(model, 3 * X.loc[keep]))
+    future = X.copy()
+    future.index += pd.Timedelta(days=10)
+    with pytest.raises(ValueError, match="predicted_component_frame"):
+        fitted_component_frame(model, future)
+    np.testing.assert_allclose(predicted_component_frame(model, future).fitted, model.predict(future))
+
+
+@pytest.mark.parametrize("minutes", [-15, 15, 60 * 60])
+def test_fitted_component_frame_rejects_nonmember_timestamps(minutes):
+    X = pd.DataFrame({"x": np.arange(60.)}, index=pd.date_range("2024", periods=60, freq="1h", tz="UTC"))
+    model = TsgamEstimator(TsgamEstimatorConfig(None, [TsgamLinearConfig()])).fit(X, X.x.to_numpy())
+    query = X.iloc[:1].copy()
+    query.index += pd.Timedelta(minutes=minutes)
+    with pytest.raises(ValueError, match="outside the fitted grid"):
+        fitted_component_frame(model, query)
+    assert fitted_component_frame(model, X.iloc[[0, 10, 59]]).index.equals(X.index[[0, 10, 59]])
+
+
 def test_fitted_component_frame_reconstructs_predictions():
     config = _make_problem_config()
     problem = generate_synthetic_problem(config)
@@ -738,7 +772,7 @@ def test_component_fit_quality_rows_scores_known_truth_terms():
     estimator.fit(split.X_train, split.y_train.to_numpy())
 
     train_components = fitted_component_frame(estimator, split.X_train)
-    test_components = fitted_component_frame(estimator, split.X_test)
+    test_components = predicted_component_frame(estimator, split.X_test)
     rows = component_fit_quality_rows(
         config=config,
         truth_components=problem.truth_components,
@@ -760,6 +794,48 @@ def test_component_fit_quality_rows_scores_known_truth_terms():
     assert math.isfinite(float(wind_row["test_rmse"]))
     assert math.isfinite(float(temp_row["train_correlation"]))
     assert math.isfinite(float(wind_row["test_relative_rmse"]))
+
+
+def test_component_quality_uses_common_finite_support_with_lags():
+    config = _make_problem_config()
+    config = replace(config, regressors=tuple(replace(spec, lags=(-2, 0)) for spec in config.regressors))
+    problem = generate_synthetic_problem(config)
+    split = split_problem_frames(problem)
+    model = TsgamEstimator(build_estimator_config(config, solver_name="CLARABEL")).fit(split.X_train, split.y_train.to_numpy())
+    frames = {"train": fitted_component_frame(model, split.X_train), "test": predicted_component_frame(model, split.X_test)}
+    snapshots = {key: frame.copy() for key, frame in frames.items()}
+    truth = problem.truth_components.copy()
+    component = "regressor:temp"
+    for frame in frames.values():
+        assert frame.iloc[:2].isna().all().all()
+        truth.loc[frame.index[:2], component] = 1e6
+        truth.loc[frame.index[4], component] = np.nan
+    rows = component_fit_quality_rows(config=config, truth_components=truth, fitted_train=frames["train"], fitted_test=frames["test"])
+    row = next(row for row in rows if row["component"] == component)
+    for key, frame in frames.items():
+        actual = frame[component].to_numpy()
+        expected = truth.loc[frame.index, component].to_numpy()
+        mask = np.isfinite(actual) & np.isfinite(expected)
+        actual, expected = actual[mask], expected[mask]
+        for metric, value in synthetic_metrics(expected, actual).items():
+            np.testing.assert_allclose(row[f"{key}_{metric}"], value)
+        np.testing.assert_allclose(row[f"{key}_mean_offset"], np.mean(actual - expected))
+        np.testing.assert_allclose(row[f"{key}_correlation"], np.corrcoef(expected, actual)[0, 1])
+        np.testing.assert_allclose(row[f"{key}_relative_rmse"], np.sqrt(np.mean((actual - expected)**2) / np.mean(expected**2)))
+        assert_frame_equal(frame, snapshots[key])
+
+
+@pytest.mark.parametrize("empty_frame", [False, True])
+@pytest.mark.filterwarnings("error")
+def test_component_quality_marks_empty_support_as_undefined(empty_frame):
+    config = _make_problem_config()
+    index = pd.date_range("2024", periods=3, freq="1h")
+    truth = pd.DataFrame({"regressor:temp": [1., 2., 3.]}, index=index)
+    unavailable = truth * np.nan
+    if empty_frame:
+        unavailable = unavailable.iloc[:0]
+    rows = component_fit_quality_rows(config=config, truth_components=truth, fitted_train=unavailable, fitted_test=unavailable)
+    assert all(np.isnan(value) for name, value in rows[0].items() if name.startswith(("train_", "test_")))
 
 
 def test_component_fit_stat_rows_make_split_metrics_readable():
@@ -899,7 +975,7 @@ def test_fourier_coefficient_frame_ignores_extra_cross_basis_coefficients():
     estimator_config = build_estimator_config(config)
     estimator = SimpleNamespace(
         config=estimator_config,
-        variables_={"fourier_coef": SimpleNamespace(value=np.arange(14.0))},
+        decomposition_={"values": {"periodic_theta": np.arange(14.0)}},
     )
 
     frame = fourier_coefficient_frame(config, estimator)
@@ -948,7 +1024,7 @@ def test_cross_basis_coefficient_frame_reports_truth_and_fitted_coefficients():
     estimator_config = build_estimator_config(config)
     estimator = SimpleNamespace(
         config=estimator_config,
-        variables_={"fourier_coef": SimpleNamespace(value=np.arange(8.0))},
+        decomposition_={"values": {"periodic_theta": np.arange(8.0)}},
     )
 
     frame = cross_basis_coefficient_frame(config, estimator)
@@ -993,7 +1069,7 @@ def test_fourier_coefficient_frame_does_not_fail_when_fitted_coefficients_are_sh
     estimator_config = build_estimator_config(config)
     estimator = SimpleNamespace(
         config=estimator_config,
-        variables_={"fourier_coef": SimpleNamespace(value=np.array([1.0, 2.0]))},
+        decomposition_={"values": {"periodic_theta": np.array([1.0, 2.0])}},
     )
 
     frame = fourier_coefficient_frame(config, estimator)

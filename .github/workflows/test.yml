@@ -9,6 +9,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     permissions:
       contents: write
       issues: read
@@ -23,7 +27,7 @@ jobs:
       uses: astral-sh/setup-uv@v7
       with:
         version: "0.11.19"
-        python-version: "3.13"
+        python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
       run: uv sync --frozen --group dev
@@ -44,6 +48,7 @@ jobs:
       run: uv run --with twine twine check dist/*
 
     - name: Publish Test Results
+      if: matrix.python-version == '3.12'
       uses: EnricoMi/publish-unit-test-result-action@v2
       with:
         files: junit.xml
@@ -52,12 +57,13 @@ jobs:
     - name: Upload coverage reports to artifacts
       uses: actions/upload-artifact@v7
       with:
-        name: coverage-reports
+        name: coverage-reports-${{ matrix.python-version }}
         path: |
           coverage.xml
           htmlcov/
 
     - name: Coverage Comment
+      if: matrix.python-version == '3.12'
       uses: py-cov-action/python-coverage-comment-action@v3
       with:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
