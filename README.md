@@ -16,6 +16,9 @@ For local development:
 uv sync --group dev
 ```
 
+Requires Python 3.12 or newer. SignalDecomp is pinned to an immutable Git
+development revision with Python 3.12 support.
+
 ## Documentation
 
 ### Building Documentation Locally
@@ -48,6 +51,67 @@ You can also use the Makefile in the `docs` directory:
 cd docs
 make html
 ```
+
+## Prediction support
+
+`predict` returns NaN where lagged inputs are unavailable. `estimator.score`
+computes R² on supported rows only. For explicit sklearn metrics, use
+`make_supported_scorer("neg_root_mean_squared_error")` from `tsgam_estimator`
+as the `scoring` argument to `GridSearchCV` or `cross_validate`. Ordinary sklearn
+scorers do not ignore NaNs. The wrapper predicts on the full validation window
+before filtering, preserving lag alignment. Targets must be finite; an entirely
+unsupported window raises an error. When tuning lag sets, check that candidates
+are compared on equivalent support. For multi-output scoring, a row must be
+supported by every output.
+
+Spline configs accept `whiten=True` to delegate exact full-rank numerical
+whitening to SignalDecomp. Ridge, lag-smoothing, and horizon-coupling penalties
+remain on the original coefficients, as do the compatibility views. Whitening
+uses the joint fitting mask and raises on rank deficiency; it never silently
+drops basis directions. The existing training-extrema knot policy is unchanged.
+Native component metadata retains `support_diagnostics` (knot-interval counts
+and base-basis rank/conditioning) and, when enabled, `whitening` (the full lagged
+design audit and coordinate transform). Coupled forecasts retain these under
+`horizon_component_metadata_` in horizon order.
+
+Duplicate timestamps are rejected before grid expansion; aggregate repeated
+observations and their weights explicitly. Spline responses require at least
+three knots. For former two-knot linear responses, use `TsgamLinearConfig` with
+the same lags and regularization weights.
+
+TSGAM uses SignalDecomp as its decomposition engine, pinned to an immutable Git
+revision. SignalDecomp owns generic bases, component penalties, and masked
+residual linking; TSGAM owns timestamps, model configuration, forecasting, and AR
+policy. Examples also use SignalDecomp's basis helpers; `spcqe` is not a direct
+dependency (it remains a transitive dependency of `solar-data-tools`).
+
+After an ordinary fit, `estimator.decomposition_` is the native solved result.
+Use `signaldecomp.components_to_frame(result, mask=result["fit_mask"])` for
+fitted components and reconstruction. This is distinct from `predict`, which
+applies forecasting policy and does not replay fitted outliers.
+
+Coupled forecasts expose numeric `horizon_values_` in `horizons_` order, with
+native names such as `exog_0_beta`, `exog_0_coef`, and `periodic_theta`.
+For existing consumers, `variables_` preserves the historical keys, coefficient
+shapes, and `.value` access using views of native CVXPY expressions. Ordinary
+fits also expose `problem_` and `output_` (an alias of `decomposition_`). Coupled
+`variables_` retains horizon-column matrices and lists of exogenous coefficient
+matrices. These are inspection interfaces, not supported mutation hooks:
+prediction continues to use native solved values. No optimization is duplicated.
+The historical `_make_H` response-plot helper delegates directly to
+SignalDecomp's spline basis builder, so existing response plots can stay unchanged.
+
+New consumers should use `components_to_frame` for fitted time-series components
+and reconstruction, reserving coefficient access for response diagnostics.
+Native single-offset spline coefficients can be vectors; reshape to
+`(basis_width, n_offsets)` with `order="F"` for offset-specific responses.
+
+Exogenous offsets use `x[t + lag]`. Include the required past or future driver
+rows in the prediction input, then select the desired output interval. Rows
+without the required driver history return `NaN`, including in forecast and
+sample outputs. Removing exogenous components removes this requirement.
+Residual AR preserves the fitted time grid and excludes lag windows spanning
+missing observations.
 
 ## Direct Target-History Forecasting
 

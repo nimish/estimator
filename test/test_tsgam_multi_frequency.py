@@ -193,7 +193,8 @@ class TestExogWithLags:
         est.fit(X, y)
         preds = est.predict(X)
         assert preds.shape == (len(X),)
-        assert np.all(np.isfinite(preds))
+        assert np.all(np.isfinite(preds[1:-1]))
+        assert np.all(np.isnan(preds[[0, -1]]))
 
 
 # ── mixed spline + linear exog ──────────────────────────────────────────
@@ -234,7 +235,8 @@ class TestMixedExog:
         est.fit(X, y)
         preds = est.predict(X)
         assert preds.shape == (len(X),)
-        assert np.all(np.isfinite(preds))
+        assert np.all(np.isfinite(preds[1:-1]))
+        assert np.all(np.isnan(preds[[0, -1]]))
 
 
 def test_interactions_with_non_hourly_data(freq_key):
@@ -256,10 +258,12 @@ def test_interactions_with_non_hourly_data(freq_key):
     preds = est.predict(X)
 
     assert preds.shape == (len(X),)
-    assert np.all(np.isfinite(preds))
-    assert est.variables_["exog_coef_0"].value.shape == (1, 3)
-    assert est.variables_["exog_coef_1"].value.shape == (1, 2)
-    assert est.variables_["interaction_coef_0"].value.shape == (1,)
+    assert np.all(np.isfinite(preds[1:-1]))
+    assert np.all(np.isnan(preds[[0, -1]]))
+    values = est.decomposition_["values"]
+    assert values["exog_0_beta"].shape == (3,)
+    assert values["exog_1_beta"].shape == (2,)
+    assert values["interaction_0_coef"].shape == (1, 1)
 
 
 # ── AR model + sample ───────────────────────────────────────────────────
@@ -327,7 +331,7 @@ class TestCoefShapes:
         )
         est = TsgamEstimator(config=cfg)
         est.fit(X, y)
-        coef = est.variables_["exog_coef_0"].value
+        coef = est.decomposition_["values"]["exog_0_coef"]
         assert coef.shape[1] == len(lags)
         assert coef.shape[0] > 1
 
@@ -342,8 +346,8 @@ class TestCoefShapes:
         )
         est = TsgamEstimator(config=cfg)
         est.fit(X, y)
-        coef = est.variables_["exog_coef_0"].value
-        assert coef.shape == (1, len(lags))
+        coef = est.decomposition_["values"]["exog_0_beta"]
+        assert coef.shape == (len(lags),)
 
 
 # ── get_recommended_periods ─────────────────────────────────────────────
@@ -419,14 +423,12 @@ class TestRepeatedFit:
         est = TsgamEstimator(config=cfg)
         est.fit(X, y)
         coefs_first = {
-            k: np.copy(v.value) for k, v in est.variables_.items() if v.value is not None
+            k: np.copy(v) for k, v in est.decomposition_["values"].items()
         }
         est.fit(X, y)
-        for k, v in est.variables_.items():
-            if v.value is None:
-                continue
+        for k, value in est.decomposition_["values"].items():
             np.testing.assert_allclose(
-                coefs_first[k], v.value, rtol=1e-6, atol=1e-6,
+                coefs_first[k], value, rtol=1e-6, atol=1e-6,
                 err_msg=f"Coefficient {k} changed on repeated fit",
             )
 

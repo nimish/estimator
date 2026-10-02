@@ -62,6 +62,7 @@ def _():
         describe_problem_config,
         estimator_config_rows,
         fitted_component_frame,
+        predicted_component_frame,
         fourier_coefficient_frame,
         generate_synthetic_problem,
         problem_dashboard_rows,
@@ -97,6 +98,7 @@ def _():
         describe_problem_config,
         estimator_config_rows,
         fitted_component_frame,
+        predicted_component_frame,
         fourier_coefficient_frame,
         generate_synthetic_problem,
         io,
@@ -1365,6 +1367,7 @@ def _(
     current_estimator_config,
     fit_signature,
     fitted_component_frame,
+    predicted_component_frame,
     fourier_coefficient_frame,
     get_fit_bundle,
     io,
@@ -1404,7 +1407,7 @@ def _(
                 residual_train = split.y_train.to_numpy() - y_pred_train
                 residual_test = split.y_test.to_numpy() - y_pred_test
                 fitted_components_train = fitted_component_frame(estimator, split.X_train)
-                fitted_components_test = fitted_component_frame(estimator, split.X_test)
+                fitted_components_test = predicted_component_frame(estimator, split.X_test)
                 component_quality = component_fit_quality_rows(
                     config=problem_config,
                     truth_components=problem.truth_components,

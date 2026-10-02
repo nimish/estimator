@@ -21,7 +21,6 @@ from tsgam_estimator import (
     TsgamTrendConfig,
 )
 
-
 SOLVER = TsgamSolverConfig(solver="CLARABEL", verbose=False)
 TREND_TOL = 1.0e-6
 
@@ -54,6 +53,33 @@ def test_predict_full_range(fitted):
     preds = est.predict(X)
     assert preds.shape == (len(X),)
     assert np.all(np.isfinite(preds))
+
+
+def test_remove_trend_omits_fitted_trend(fitted):
+    est, X = fitted
+    values = est.decomposition_["values"]
+    expected = np.asarray(values["trend"])[est.time_indices_.astype(int)]
+    np.testing.assert_allclose(
+        est.predict(X) - est.predict(X, remove_trend=True),
+        expected,
+        atol=1e-12,
+    )
+
+
+def test_signaldecomp_components_reconstruct_fit(fitted):
+    est, _ = fitted
+    _, fitted_y = _make_trend_data()
+    out = est.decomposition_
+    values = out["values"]
+    reconstructed = values["residual"] + sum(
+        values[role] for role in out["component_metadata"]
+    )
+    observed = est.time_indices_.astype(int)
+    fit_mask = out["fit_mask"][observed]
+    np.testing.assert_allclose(
+        reconstructed[observed][fit_mask],
+        fitted_y[fit_mask],
+    )
 
 
 def test_predict_subset_before_end(fitted):
@@ -117,8 +143,7 @@ def _fit_constrained_trend(trend_type: TrendType, direction: str) -> np.ndarray:
     )
     estimator = TsgamEstimator(config=config)
     estimator.fit(X, y)
-    trend = estimator.variables_["trend"].value
-    assert trend is not None
+    trend = estimator.decomposition_["values"]["trend_group_values"]
     return np.asarray(trend, dtype=float)
 
 

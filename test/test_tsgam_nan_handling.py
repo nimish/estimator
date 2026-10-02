@@ -16,6 +16,7 @@ import pandas as pd
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
+    TsgamLinearConfig,
     TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
 )
@@ -45,6 +46,23 @@ def basic_data():
     X = pd.DataFrame({'temp': np.random.randn(n_samples)}, index=timestamps)
     y = np.random.randn(n_samples)
     return X, y
+
+
+def test_timestamp_gap_is_missing_on_exogenous_offset_grid():
+    timestamps = pd.date_range("2024-01-01", periods=8, freq="1h")
+    keep = np.arange(8) != 3
+    X = pd.DataFrame({"driver": np.arange(8.0)}, index=timestamps).loc[keep]
+    estimator = TsgamEstimator(
+        TsgamEstimatorConfig(
+            multi_periodic_config=None,
+            exog_config=[TsgamLinearConfig(lags=[-1])],
+        )
+    ).fit(X, np.arange(8.0)[keep])
+
+    observed_indices = estimator.time_indices_.astype(int)
+    after_gap = int(np.flatnonzero(observed_indices == 4)[0])
+    assert not estimator.decomposition_["fit_mask"][observed_indices][after_gap]
+    assert estimator.decomposition_["fit_mask"].shape == (8,)
 
 
 def test_fit_rejects_nan_in_X(basic_config, basic_data):
@@ -131,31 +149,22 @@ def test_fit_works_without_nans(basic_config, basic_data):
     estimator.fit(X, y)
 
     # Verify that model was fitted
-    assert hasattr(estimator, 'problem_')
+    assert hasattr(estimator, 'decomposition_')
     assert hasattr(estimator, 'time_reference_')
     assert hasattr(estimator, 'freq_')
 
 
-def test_combined_valid_mask_excludes_nan_in_y(basic_config, basic_data):
-    """
-    Test that combined_valid_mask excludes NaN's in y.
-
-    Note: This test verifies defensive programming - even though we reject
-    NaN's in y, the mask should still be computed correctly.
-    """
+def test_fit_mask_includes_all_valid_rows(basic_config, basic_data):
     X, y = basic_data
     estimator = TsgamEstimator(config=basic_config)
 
     # Fit with valid data
     estimator.fit(X, y)
 
-    # Verify that combined_valid_mask is all True (no NaN's to mask)
-    assert np.all(estimator.combined_valid_mask_), \
-        "combined_valid_mask_ should be all True when there are no NaN's"
-    assert len(estimator.combined_valid_mask_) == len(y), \
-        "combined_valid_mask_ should have same length as y"
+    fit_mask = estimator.decomposition_["fit_mask"][estimator.time_indices_.astype(int)]
+    assert np.all(fit_mask)
+    assert len(fit_mask) == len(y)
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
-

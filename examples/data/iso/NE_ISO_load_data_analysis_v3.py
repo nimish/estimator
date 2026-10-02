@@ -651,7 +651,7 @@ def _():
     import scipy.stats as stats
     from sklearn.metrics import r2_score
     import statsmodels.api as sm
-    from spcqe import make_basis_matrix, make_regularization_matrix
+    from signaldecomp.basis import make_basis_matrix, make_regularization_matrix
     return (
         Path,
         cvx,

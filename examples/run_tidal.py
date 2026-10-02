@@ -138,7 +138,8 @@ def _fit_single_tidal(cfg):
             solver_config=TsgamSolverConfig(solver=solver, verbose=False),
             random_state=42,
         ))
-        est.fit(cfg['X_train'], cfg['y_train'])
+        observed = np.isfinite(cfg['y_train'])
+        est.fit(cfg['X_train'].loc[observed], np.asarray(cfg['y_train'])[observed])
         y_pred_test = est.predict(cfg['X_test'])
         y_pred_train = est.predict(cfg['X_train'])
         metrics = _tidal_metrics(cfg['y_test'], y_pred_test)

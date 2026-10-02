@@ -18,6 +18,8 @@ with app.setup:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
     from scipy import stats
+    from signaldecomp import make_offset_basis
+    from signaldecomp.spline import make_spline_basis
 
     from example_tidal import (
         DEFAULT_DATA_DIR,
@@ -33,7 +35,7 @@ with app.setup:
         resolve_tidal_cache_path,
         TIDAL_CONSTITUENT_PERIODS_HOURS as PERIODS,
     )
-    from tidal_analysis_helpers import compute_lagged_correlation, compute_periodogram, infer_samples_per_hour
+    from tidal_analysis_helpers import compute_lagged_correlation, compute_periodogram, infer_samples_per_hour, fitted_components
     from tidal_model_shared import prepare_split_regressors, tidal_metrics
     from tsgam_estimator import (
         TsgamEstimator,
@@ -458,11 +460,6 @@ def _(station_data):
         train_end,
         train_start,
     )
-
-
-@app.cell
-def _():
-    return
 
 
 @app.cell
@@ -1342,6 +1339,7 @@ def split_model_window(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     split_time = pd.Timestamp(train_end)
     window = df[str(train_start) : str(test_end)]
+    window = window.asfreq(pd.tseries.frequencies.to_offset(df.index.to_series().diff().median()))
     df_train = window[window.index < split_time]
     df_test = window[window.index >= split_time]
     ok_train = df_train["water_level"].notna()
@@ -1509,12 +1507,15 @@ def build_regressor_response_inputs(
     reg_config = exog_config[reg_idx]
     if lag not in reg_config.lags:
         raise ValueError(f"Lag {lag} is unavailable for {regressor_name}.")
-    coef = model.variables_[f"exog_coef_{reg_idx}"].value
-    if coef is None:
-        raise ValueError(f"No fitted exogenous coefficients are available for {regressor_name}.")
+    suffix = "coef" if isinstance(reg_config, TsgamSplineConfig) else "beta"
+    coef = model.decomposition_["values"][f"exog_{reg_idx}_{suffix}"]
 
-    raw_x = x_train_fit[regressor_name].to_numpy(dtype=float)
-    aligned_x = model._make_offset_H(raw_x.reshape(-1, 1), lag).reshape(-1)
+    grid_index = pd.date_range(x_train_fit.index.min(), x_train_fit.index.max(), freq=model.freq_)
+    raw_x = x_train_fit[regressor_name].reindex(grid_index).to_numpy(dtype=float)
+    offset_basis = make_offset_basis(raw_x, offsets=(-lag,))
+    aligned_x = pd.Series(
+        np.where(offset_basis.valid_mask, offset_basis.design[:, 0], np.nan), index=grid_index,
+    ).reindex(x_train_fit.index).to_numpy()
     y_scatter_raw = np.asarray(fit_result["tr_obs_clean"], dtype=float)
     valid = np.isfinite(aligned_x) & np.isfinite(y_scatter_raw)
     if not np.any(valid):
@@ -1524,10 +1525,10 @@ def build_regressor_response_inputs(
     time_index = pd.DatetimeIndex(x_train_fit.index[valid])
     grid = np.linspace(float(np.min(x_scatter)), float(np.max(x_scatter)), grid_size)
     lag_idx = reg_config.lags.index(lag)
-    coef_matrix = np.asarray(coef, dtype=float)
+    coef_matrix = np.asarray(coef, dtype=float).reshape(-1, len(reg_config.lags), order="F")
     if isinstance(reg_config, TsgamSplineConfig):
         knots = model.exog_knots_[reg_idx]
-        H_grid = model._make_H(grid, knots, include_offset=False)
+        H_grid = make_spline_basis(grid, knots)
         response = H_grid @ coef_matrix[:, lag_idx]
     else:
         response = grid * float(coef_matrix[0, lag_idx])
@@ -1794,49 +1795,32 @@ def run_tidal_model(
             exog_config=exog_config,
         )
 
-    try:
-        model = TsgamEstimator(
-            TsgamEstimatorConfig(
-                multi_periodic_config=periodic_config,
-                exog_config=exog_config,
-                interaction_pairs=interaction_index_pairs or None,
-                solver_config=TsgamSolverConfig(solver="SCS", verbose=solver_verbose),
-                debug=debug,
-            )
-        )
-        model.fit(x_train_fit, y_train)
-        return pack_model_result(
-            df_train,
-            df_test,
-            y_train,
-            ok_train,
-            ok_test,
-            model.predict(x_train_pred),
-            model.predict(x_test_pred),
-            picked,
-            active_regs,
-            active_interactions,
-            sph,
-            x_train_fit=x_train_fit,
+    model = TsgamEstimator(
+        TsgamEstimatorConfig(
+            multi_periodic_config=periodic_config,
             exog_config=exog_config,
-            model=model,
+            interaction_pairs=interaction_index_pairs or None,
+            solver_config=TsgamSolverConfig(solver="SCS", verbose=solver_verbose),
+            debug=debug,
         )
-    except Exception:
-        return pack_model_result(
-            df_train,
-            df_test,
-            y_train,
-            ok_train,
-            ok_test,
-            np.full(len(df_train), np.nan),
-            np.full(len(df_test), np.nan),
-            picked,
-            active_regs,
-            active_interactions,
-            sph,
-            x_train_fit=x_train_fit,
-            exog_config=exog_config,
-        )
+    )
+    model.fit(x_train_fit, y_train)
+    return pack_model_result(
+        df_train,
+        df_test,
+        y_train,
+        ok_train,
+        ok_test,
+        fitted_components(model, df_train.index)["reconstruction"].to_numpy(),
+        model.predict(x_test_pred),
+        picked,
+        active_regs,
+        active_interactions,
+        sph,
+        x_train_fit=x_train_fit,
+        exog_config=exog_config,
+        model=model,
+    )
 
 
 @app.function
@@ -2158,14 +2142,13 @@ def build_residual_regressor_xcorr_figure(
     residuals = fit_result["residuals"]
     time_index = fit_result["te_index"]
     samples_per_hour = fit_result["sph"]
-    ok = np.isfinite(residuals)
-    reg_df = df.loc[time_index[ok]]
+    reg_df = df.reindex(time_index)
     max_lag = int(12 * samples_per_hour)
 
     fig = go.Figure()
     for column in regressors:
         lagged_corr = compute_lagged_correlation(
-            np.asarray(residuals[ok], dtype=float),
+            np.asarray(residuals, dtype=float),
             np.asarray(reg_df[column].values, dtype=float),
             max_lag,
         )
@@ -2300,6 +2283,7 @@ def build_shapley_result(
 ) -> ShapleyResult:
     unique_canonical_bits = sorted(set(raw_to_canonical.values()))
     canonical_metrics: dict[int, dict[str, float]] = {}
+    predictions: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     failed_runs = 0
     max_workers = min(os.cpu_count() or 4, len(unique_canonical_bits), 8)
 
@@ -2333,12 +2317,20 @@ def build_shapley_result(
         for future in as_completed(futures):
             canonical_bits = futures[future]
             fit_result = future.result()
-            metrics = fit_result["metrics_test"]
-            if np.isnan(metrics.get("r2", 0.0)):
-                failed_runs += 1
-            canonical_metrics[canonical_bits] = metrics
+            predictions[canonical_bits] = (fit_result["te_obs"], fit_result["te_pred"])
             if progress_callback is not None:
                 progress_callback()
+
+    common_support = np.logical_and.reduce([
+        np.isfinite(observed) & np.isfinite(predicted)
+        for observed, predicted in predictions.values()
+    ])
+    if not common_support.any():
+        raise ValueError("Shapley coalitions have no common supported test rows.")
+    for bits, (observed, predicted) in predictions.items():
+        canonical_metrics[bits] = tidal_metrics(observed[common_support], predicted[common_support])
+        if not np.isfinite(canonical_metrics[bits]["r2"]):
+            raise ValueError("Shapley R² requires nonconstant observations on the common test support.")
 
     coalition_metrics = {
         raw_bits: canonical_metrics[canonical_bits]

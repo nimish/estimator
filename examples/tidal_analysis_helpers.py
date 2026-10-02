@@ -2,14 +2,27 @@
 # Copyright (c) 2025 Alliance for Sustainable Energy, LLC and Nimish Telang
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Reusable helpers for the tidal analysis notebook."""
+"""Shared reporting and diagnostics for the tidal Marimo explorers."""
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from spcqe import make_basis_matrix
-from spcqe.functions import cross_bases, initialize_arrays
+from signaldecomp import components_to_frame
+from signaldecomp.basis import make_basis_matrix, cross_bases, initialize_arrays
+from tsgam_estimator import TsgamEstimator
+
+
+def fitted_components(estimator: TsgamEstimator, index: pd.DatetimeIndex) -> pd.DataFrame:
+    """Report native fitted components, preserving missing/unsupported rows."""
+    decomposition = estimator.decomposition_
+    grid = pd.date_range(
+        estimator.time_reference_, periods=len(decomposition["fit_mask"]),
+        freq=estimator.freq_,
+    )
+    return components_to_frame(
+        decomposition, index=grid, mask=decomposition["fit_mask"],
+    ).reindex(index)
 
 
 def infer_samples_per_hour(index: pd.DatetimeIndex) -> int:
@@ -120,15 +133,14 @@ def compute_lagged_correlation(
 def extract_fourier_components(
     estimator: object,
     labels: list[str] | None = None,
+    index: pd.DatetimeIndex | None = None,
 ) -> dict[str, np.ndarray]:
     """Reconstruct per-period Fourier contributions from a fitted estimator."""
     multi_periodic = estimator.config.multi_periodic_config
     if multi_periodic is None:
         raise ValueError("Estimator does not have a multi-periodic configuration.")
 
-    fourier_coef = estimator.variables_["fourier_coef"].value
-    if fourier_coef is None:
-        raise ValueError("Estimator does not have fitted Fourier coefficients.")
+    fourier_coef = estimator.decomposition_["values"]["periodic_theta"]
 
     sort_idx, sorted_periods, sorted_harmonics, _ = initialize_arrays(
         multi_periodic.num_harmonics,
@@ -178,4 +190,12 @@ def extract_fourier_components(
             coef_idx += n_coef
 
     components["combined"] = np.sum(list(components.values()), axis=0)
+    if index is not None:
+        observed = estimator.time_reference_ + pd.to_timedelta(
+            time_indices * pd.Timedelta(estimator.freq_).total_seconds(), unit="s",
+        )
+        components = {
+            name: pd.Series(values, index=observed).reindex(index).to_numpy()
+            for name, values in components.items()
+        }
     return components

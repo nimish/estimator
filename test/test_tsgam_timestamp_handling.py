@@ -11,15 +11,21 @@ This test suite verifies that:
 4. Error cases are handled appropriately
 """
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
+
 from tsgam_estimator import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamMultiPeriodicConfig,
-    TsgamSplineConfig,
     TsgamSolverConfig,
+    TsgamSplineConfig,
+)
+from tsgam_estimator._design import (
+    _ensure_timestamp_index,
+    _timestamps_to_indices,
+    _validate_frequency,
 )
 
 
@@ -60,8 +66,7 @@ class TestTimestampExtraction:
         timestamps, temp, y = hourly_data
         X = pd.DataFrame({'temp': temp}, index=timestamps)
 
-        estimator = TsgamEstimator(config=basic_config)
-        extracted_timestamps, X_array = estimator._ensure_timestamp_index(X)
+        extracted_timestamps, X_array = _ensure_timestamp_index(X)
 
         assert isinstance(extracted_timestamps, pd.DatetimeIndex)
         assert len(extracted_timestamps) == len(timestamps)
@@ -76,8 +81,7 @@ class TestTimestampExtraction:
             'temp': temp
         })
 
-        estimator = TsgamEstimator(config=basic_config)
-        extracted_timestamps, X_array = estimator._ensure_timestamp_index(X)
+        extracted_timestamps, X_array = _ensure_timestamp_index(X)
 
         assert isinstance(extracted_timestamps, pd.DatetimeIndex)
         assert len(extracted_timestamps) == len(timestamps)
@@ -88,18 +92,16 @@ class TestTimestampExtraction:
         timestamps, temp, y = hourly_data
         X = np.array(temp).reshape(-1, 1)  # NumPy array without timestamps
 
-        estimator = TsgamEstimator(config=basic_config)
         with pytest.raises(ValueError, match="must be a pandas DataFrame"):
-            estimator._ensure_timestamp_index(X)
+            _ensure_timestamp_index(X)
 
     def test_dataframe_no_datetime_error(self, hourly_data, basic_config):
         """Test that error is raised when DataFrame has no datetime."""
         timestamps, temp, y = hourly_data
         X = pd.DataFrame({'temp': temp})  # No DatetimeIndex or datetime column
 
-        estimator = TsgamEstimator(config=basic_config)
         with pytest.raises(ValueError, match="must have DatetimeIndex"):
-            estimator._ensure_timestamp_index(X)
+            _ensure_timestamp_index(X)
 
 
 class TestSortIndex:
@@ -173,17 +175,15 @@ class TestFrequencyValidation:
         """Test that correct frequency passes validation."""
         timestamps, temp, y = hourly_data
 
-        estimator = TsgamEstimator(config=basic_config)
         # Should not raise
-        estimator._validate_frequency(timestamps, '1h')
+        _validate_frequency(timestamps, '1h')
 
     def test_wrong_frequency_error(self, hourly_data, basic_config):
         """Test that wrong frequency raises error."""
         timestamps, temp, y = hourly_data
 
-        estimator = TsgamEstimator(config=basic_config)
         with pytest.raises(ValueError, match="frequency"):
-            estimator._validate_frequency(timestamps, '1D')  # Daily instead of hourly
+            _validate_frequency(timestamps, '1D')  # Daily instead of hourly
 
     def test_irregular_timestamps_error(self, basic_config):
         """Test that irregular timestamps raise error."""
@@ -195,17 +195,15 @@ class TestFrequencyValidation:
             '2020-01-01 04:00:00',
         ])
 
-        estimator = TsgamEstimator(config=basic_config)
         with pytest.raises(ValueError, match="frequency"):
-            estimator._validate_frequency(timestamps, '1h')
+            _validate_frequency(timestamps, '1h')
 
     def test_single_sample_no_error(self, basic_config):
         """Test that single sample doesn't cause error (can't validate)."""
         timestamps = pd.DatetimeIndex(['2020-01-01 00:00:00'])
 
-        estimator = TsgamEstimator(config=basic_config)
         # Should not raise — single sample cannot be validated
-        estimator._validate_frequency(timestamps, '1h')
+        _validate_frequency(timestamps, '1h')
 
 
 class TestTimestampConversion:
@@ -215,9 +213,8 @@ class TestTimestampConversion:
         """Test conversion of timestamps to hours since reference."""
         timestamps, temp, y = hourly_data
 
-        estimator = TsgamEstimator(config=basic_config)
         reference = timestamps[0]
-        indices = estimator._timestamps_to_indices(timestamps, reference)
+        indices = _timestamps_to_indices(timestamps, reference)
 
         assert len(indices) == len(timestamps)
         assert indices[0] == 0.0  # First timestamp is reference
@@ -228,9 +225,8 @@ class TestTimestampConversion:
         """Test conversion with different reference point."""
         timestamps, temp, y = hourly_data
 
-        estimator = TsgamEstimator(config=basic_config)
         reference = timestamps[10]  # Use 10th timestamp as reference
-        indices = estimator._timestamps_to_indices(timestamps, reference)
+        indices = _timestamps_to_indices(timestamps, reference)
 
         assert indices[10] == 0.0  # Reference point is zero
         assert indices[9] < 0  # Before reference is negative
@@ -512,5 +508,3 @@ class TestEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-

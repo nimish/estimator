@@ -221,4 +221,3 @@ def test_combined_coefficients_match_notebook(tsgam_estimator_baseline, notebook
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

@@ -11,6 +11,7 @@ both alone and mixed with TsgamSplineConfig.
 import numpy as np
 import pandas as pd
 import pytest
+from signaldecomp import make_offset_basis
 
 from tsgam_estimator import (
     TsgamArConfig,
@@ -30,6 +31,34 @@ def _make_data(n_samples=500, n_exog=1, seed=42):
     X = pd.DataFrame(exog, index=timestamps)
     y = 3.0 + 0.5 * X.iloc[:, 0].values + rng.standard_normal(n_samples) * 0.1
     return X, y
+
+
+def test_exogenous_offset_sign_convention():
+    """Negative offsets select past rows; positive offsets select future rows."""
+    values = np.arange(5.0).reshape(-1, 1)
+    lag = make_offset_basis(values, offsets=(1,))
+    lead = make_offset_basis(values, offsets=(-1,))
+    np.testing.assert_equal(
+        np.where(lag.valid_mask[:, None], lag.design, np.nan).ravel(),
+        np.array([np.nan, 0.0, 1.0, 2.0, 3.0]),
+    )
+    np.testing.assert_equal(
+        np.where(lead.valid_mask[:, None], lead.design, np.nan).ravel(),
+        np.array([1.0, 2.0, 3.0, 4.0, np.nan]),
+    )
+
+
+def test_explicit_spline_knots_fit_and_are_preserved():
+    X, y = _make_data(n_samples=80)
+    knots = np.linspace(X["x0"].min(), X["x0"].max(), 5)
+    estimator = TsgamEstimator(
+        TsgamEstimatorConfig(
+            multi_periodic_config=None,
+            exog_config=[TsgamSplineConfig(n_knots=None, knots=knots)],
+        )
+    ).fit(X, y)
+
+    np.testing.assert_allclose(estimator.exog_knots_[0], knots)
 
 
 @pytest.fixture
@@ -62,7 +91,8 @@ class TestLinearConfigFitPredict:
         est.fit(X, y)
         preds = est.predict(X)
         assert preds.shape == (len(X),)
-        assert not np.any(np.isnan(preds))
+        assert np.all(np.isfinite(preds[1:-1]))
+        assert np.all(np.isnan(preds[[0, -1]]))
 
     def test_linear_with_fourier(self, solver_config):
         X, y = _make_data()
@@ -135,5 +165,5 @@ class TestLinearConfigFitPredict:
         )
         est = TsgamEstimator(config=config)
         est.fit(X, y)
-        coef = est.variables_["exog_coef_0"].value
-        assert coef.shape == (1, len(lags))
+        coef = est.decomposition_["values"]["exog_0_beta"]
+        assert coef.shape == (len(lags),)
