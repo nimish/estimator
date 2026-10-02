@@ -74,52 +74,34 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrEnum</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">overload</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">cast</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndarray</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">cvxpy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">numpy.random</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomState</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">stats</span><span class="p">,</span> <span class="n">signal</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">spmatrix</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegressorMixin</span><span class="p">,</span> <span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">check_is_fitted</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_random_state</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndarray</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy.random</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomState</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">signal</span><span class="p">,</span> <span class="n">stats</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">signaldecomp</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_offset_basis</span><span class="p">,</span> <span class="n">solve</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">signaldecomp.spline</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_spline_basis</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">RegressorMixin</span><span class="p">,</span> <span class="n">check_is_fitted</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_random_state</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">._design</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_build_exog_Hs</span><span class="p">,</span>
-    <span class="n">_ensure_numeric_prefix</span><span class="p">,</span>
-    <span class="n">_ensure_sorted_index</span><span class="p">,</span>
-    <span class="n">_ensure_timestamp_index</span><span class="p">,</span>
     <span class="n">_extract_timestamps</span><span class="p">,</span>
-    <span class="n">_get_zero_lag_H</span><span class="p">,</span>
-    <span class="n">_infer_frequency_from_differences</span><span class="p">,</span>
-    <span class="n">_interaction_contribution_from_blocks</span><span class="p">,</span>
-    <span class="n">_make_offset_H</span><span class="p">,</span>
-    <span class="n">_make_regularization_matrix</span><span class="p">,</span>
-    <span class="n">_make_spline_H</span><span class="p">,</span>
-    <span class="n">_min_samples_required</span><span class="p">,</span>
-    <span class="n">_normalize_interaction_pairs</span><span class="p">,</span>
-    <span class="n">_outer_column_product</span><span class="p">,</span>
-    <span class="n">_process_exog_config</span><span class="p">,</span>
-    <span class="n">_timestamps_to_indices</span><span class="p">,</span>
     <span class="n">_to_pandas_timedelta_frequency</span><span class="p">,</span>
-    <span class="n">_validate_frequency</span><span class="p">,</span>
     <span class="n">build_tsgam_design</span><span class="p">,</span>
     <span class="n">infer_fit_frequency</span><span class="p">,</span>
-    <span class="n">resolve_exog_knots</span><span class="p">,</span>
     <span class="n">sort_fit_inputs</span><span class="p">,</span>
     <span class="n">sort_predict_X</span><span class="p">,</span>
     <span class="n">validate_predict_frequency</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._problem</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">evaluate_single_output_prediction</span><span class="p">,</span>
-    <span class="n">make_single_output_standard_variables</span><span class="p">,</span>
-    <span class="n">single_output_prediction_expression</span><span class="p">,</span>
-    <span class="n">solve_problem</span><span class="p">,</span>
-    <span class="n">weighted_squared_loss</span><span class="p">,</span>
+    <span class="n">build_single_output_decomposition</span><span class="p">,</span>
+    <span class="n">legacy_variable_views</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnConfigMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnConfigMixin</span><span class="p">,</span> <span class="n">make_supported_scorer</span>
 
 
 <div class="viewcode-block" id="TsgamMultiPeriodicConfig">
@@ -200,9 +182,10 @@
 <span class="sd">        min and max of the variable. If None, knots must be provided explicitly.</span>
 <span class="sd">        Ignored if knots is non-empty.</span>
 <span class="sd">    lags : list[int], default=[0]</span>
-<span class="sd">        Lead/lag offsets for the exogenous variable. Positive values = lag</span>
-<span class="sd">        (looking back), negative values = lead (looking forward). For example,</span>
-<span class="sd">        [-3, -2, -1, 0, 1, 2, 3] includes 3 hours ahead, current, and 3 hours back.</span>
+<span class="sd">        Time offsets for the exogenous variable, evaluated as ``x[t + offset]``.</span>
+<span class="sd">        Negative values are lags (past values), and positive values are leads</span>
+<span class="sd">        (future values). For example, ``[-3, -2, -1, 0]`` includes the current</span>
+<span class="sd">        value and the previous three samples.</span>
 <span class="sd">    reg_weight : float, default=1.0e-4</span>
 <span class="sd">        Regularization weight for spline coefficients. Higher values increase</span>
 <span class="sd">        smoothness. Typical range: 1e-5 to 1e-3.</span>
@@ -213,6 +196,11 @@
 <span class="sd">    knots : list[float], default=[]</span>
 <span class="sd">        Explicit knot locations for the spline. If empty list, knots will be</span>
 <span class="sd">        auto-generated using n_knots. If provided, n_knots is ignored.</span>
+<span class="sd">    whiten : bool, default=False</span>
+<span class="sd">        Use SignalDecomp&#39;s exact full-rank whitening on the fitting mask.</span>
+<span class="sd">        Original coefficient penalties are preserved; rank deficiency raises.</span>
+<span class="sd">    rank_tolerance : float or None, default=None</span>
+<span class="sd">        Absolute numerical-rank threshold for SignalDecomp diagnostics/whitening.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -225,11 +213,23 @@
 <span class="sd">    ...     lags=[0]</span>
 <span class="sd">    ... )</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">n_knots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">n_knots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">lags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:[</span><span class="mi">0</span><span class="p">])</span>
     <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0e-4</span>
     <span class="n">diff_reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>
-    <span class="n">knots</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span></div>
+    <span class="n">knots</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">whiten</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">rank_tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knots</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knots</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knots</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_knots</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_knots</span> <span class="o">&lt;</span> <span class="mi">3</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Spline responses require at least three knots. For a linear &quot;</span>
+                <span class="s2">&quot;response (formerly n_knots=2), use TsgamLinearConfig with the &quot;</span>
+                <span class="s2">&quot;same lags and regularization weights.&quot;</span>
+            <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="TsgamLinearConfig">
@@ -246,9 +246,10 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    lags : list[int], default=[0]</span>
-<span class="sd">        Lead/lag offsets for the exogenous variable. Positive values = lag</span>
-<span class="sd">        (looking back), negative values = lead (looking forward). For example,</span>
-<span class="sd">        [-1, 0, 1] includes 1 hour ahead, current, and 1 hour back.</span>
+<span class="sd">        Time offsets for the exogenous variable, evaluated as ``x[t + offset]``.</span>
+<span class="sd">        Negative values are lags (past values), and positive values are leads</span>
+<span class="sd">        (future values). For example, ``[-1, 0]`` includes the current value and</span>
+<span class="sd">        the previous sample.</span>
 <span class="sd">    reg_weight : float, default=1.0e-4</span>
 <span class="sd">        Regularization weight for linear coefficients. Higher values increase</span>
 <span class="sd">        regularization. Typical range: 1e-5 to 1e-3.</span>
@@ -353,7 +354,10 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">trend_type</span><span class="p">:</span> <span class="n">TrendType</span> <span class="o">=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span>
     <span class="n">grouping</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># todo: rename this to something better</span>
-    <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span></div>
+    <span class="n">reg_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">=</span> <span class="n">TrendType</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trend_type</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="TsgamOutlierConfig">
@@ -832,7 +836,8 @@
 <span class="sd">    - Optional outlier detector (sparse multiplicative corrections per period)</span>
 <span class="sd">    - Optional autoregressive (AR) modeling of residuals</span>
 
-<span class="sd">    The model uses regularized optimization via CVXPY to fit coefficients.</span>
+<span class="sd">    The model composes its structural components with SignalDecomp and uses</span>
+<span class="sd">    CVXPY to fit coefficients.</span>
 <span class="sd">    While the model can work with targets in any scale, log transformation is</span>
 <span class="sd">    commonly used when components are multiplicative rather than additive.</span>
 
@@ -843,36 +848,29 @@
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
-<span class="sd">    problem_ : cvxpy.Problem</span>
-<span class="sd">        The solved optimization problem. Check `problem_.status` to verify</span>
-<span class="sd">        convergence (should be &#39;optimal&#39; or &#39;optimal_inaccurate&#39;).</span>
 <span class="sd">    freq_ : str</span>
 <span class="sd">        Inferred frequency of the time series (e.g., &#39;h&#39; for hourly).</span>
 <span class="sd">    time_reference_ : Timestamp</span>
 <span class="sd">        Reference timestamp used for phase alignment (first timestamp from fit).</span>
 <span class="sd">    time_indices_ : ndarray</span>
 <span class="sd">        Numeric time indices (hours since reference) used during fit.</span>
+<span class="sd">    decomposition_ : dict</span>
+<span class="sd">        Native SignalDecomp solve result. Fitted components and coefficients are</span>
+<span class="sd">        available by role under ``decomposition_[&quot;values&quot;]``.</span>
 <span class="sd">    variables_ : dict</span>
-<span class="sd">        Dictionary of CVXPY variables containing fitted coefficients:</span>
-<span class="sd">        - &#39;constant&#39;: intercept term</span>
-<span class="sd">        - &#39;fourier_coef&#39;: Fourier coefficients (if multi_periodic_config provided)</span>
-<span class="sd">        - &#39;exog_coef_{i}&#39;: Exogenous variable coefficients for variable i</span>
-<span class="sd">        - &#39;trend&#39;: Trend coefficients (if trend_config provided)</span>
-<span class="sd">        - &#39;trend_slope&#39;: Trend slope (if trend_type=&#39;linear&#39;)</span>
-<span class="sd">        - &#39;outlier&#39;: Outlier coefficients (if outlier_config provided)</span>
+<span class="sd">        Historical coefficient names and shapes as CVXPY expression views.</span>
+<span class="sd">        Supports inspection through ``.value``; prediction uses native results.</span>
+<span class="sd">    output_ : dict</span>
+<span class="sd">        Alias of ``decomposition_`` (no separate result schema).</span>
+<span class="sd">    problem_ : cvxpy.Problem</span>
+<span class="sd">        The native optimization problem.</span>
 <span class="sd">    exog_knots_ : list</span>
 <span class="sd">        List of knot locations for spline exogenous variables (auto-computed</span>
 <span class="sd">        during fit, reused during predict).</span>
-<span class="sd">    trend_T_matrix_ : ndarray or None</span>
-<span class="sd">        Matrix mapping samples to periods for trend term (if trend_config provided).</span>
 <span class="sd">    trend_period_hours_ : float or None</span>
 <span class="sd">        Period length in hours used for trend (if trend_config provided).</span>
-<span class="sd">    outlier_T_matrix_ : ndarray or None</span>
-<span class="sd">        Matrix mapping samples to periods for outlier detector (if outlier_config provided).</span>
 <span class="sd">    outlier_period_hours_ : float or None</span>
 <span class="sd">        Period length in hours used for outlier detector (if outlier_config provided).</span>
-<span class="sd">    combined_valid_mask_ : ndarray</span>
-<span class="sd">        Boolean mask indicating valid samples (no NaN from lead/lag operations).</span>
 <span class="sd">    ar_coef_ : ndarray or None</span>
 <span class="sd">        Fitted AR coefficients (if ar_config provided and model converged).</span>
 <span class="sd">    ar_intercept_ : float or None</span>
@@ -916,7 +914,7 @@
 <span class="sd">    &gt;&gt;&gt; estimator.fit(X, y)</span>
 <span class="sd">    &gt;&gt;&gt;</span>
 <span class="sd">    &gt;&gt;&gt; # Access detected outliers</span>
-<span class="sd">    &gt;&gt;&gt; outlier_values = estimator.variables_[&#39;outlier&#39;].value</span>
+<span class="sd">    &gt;&gt;&gt; outlier_values = estimator.decomposition_[&quot;values&quot;][&quot;outlier_group_values&quot;]</span>
 <span class="sd">    &gt;&gt;&gt; print(f&quot;Detected {np.sum(np.abs(outlier_values) &gt; 0.1)} outlier days&quot;)</span>
 <span class="sd">    &gt;&gt;&gt;</span>
 <span class="sd">    &gt;&gt;&gt; # Make predictions</span>
@@ -927,404 +925,8 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">TsgamEstimatorConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_extract_timestamps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Extract timestamps from X.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        X : array-like or DataFrame</span>
-<span class="sd">            Input data. If DataFrame with DatetimeIndex, extracts index.</span>
-<span class="sd">            If DataFrame, checks first column for datetime.</span>
-<span class="sd">            Otherwise raises ValueError.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        timestamps : DatetimeIndex</span>
-<span class="sd">            Extracted timestamps.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_extract_timestamps</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
-
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_numeric_prefix</span><span class="p">(</span><span class="n">freq</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensure frequency string has a numeric prefix (e.g. ``&#39;h&#39;`` -&gt; ``&#39;1h&#39;``).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_ensure_numeric_prefix</span><span class="p">(</span><span class="n">freq</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_timestamps_to_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Convert timestamps to numeric indices (hours since reference).</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        timestamps : DatetimeIndex</span>
-<span class="sd">            Timestamps to convert.</span>
-<span class="sd">        reference : Timestamp</span>
-<span class="sd">            Reference timestamp (time 0).</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        indices : ndarray</span>
-<span class="sd">            Numeric indices in hours since reference.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_timestamps_to_indices</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="n">reference</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;freq_&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_trend_period_hours</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">,</span> <span class="n">period_hours</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Determine trend period in hours from data frequency.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        timestamps : DatetimeIndex</span>
-<span class="sd">            Timestamps from the data.</span>
-<span class="sd">        period_hours : float or None, default=None</span>
-<span class="sd">            Explicit period in hours. If None, defaults to daily (24 hours for</span>
-<span class="sd">            sub-daily data, 1 day for daily data, etc.).</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        period_hours : float</span>
-<span class="sd">            Period length in hours.</span>
-<span class="sd">        samples_per_period : float</span>
-<span class="sd">            Number of samples per period (for creating T matrix).</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">period_hours</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Use explicit period</span>
-            <span class="c1"># Calculate samples per period from data frequency</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Need at least 2 timestamps to infer frequency.&quot;</span><span class="p">)</span>
-            <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-            <span class="n">median_diff_hours</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
-            <span class="n">samples_per_period</span> <span class="o">=</span> <span class="n">period_hours</span> <span class="o">/</span> <span class="n">median_diff_hours</span>
-            <span class="k">return</span> <span class="n">period_hours</span><span class="p">,</span> <span class="n">samples_per_period</span>
-
-        <span class="c1"># Default to daily period</span>
-        <span class="c1"># Infer frequency and calculate base time step</span>
-        <span class="n">inferred_freq</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">infer_freq</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">inferred_freq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Try to infer from differences</span>
-            <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-            <span class="n">median_diff</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span>
-            <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">median_diff</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">freq_td_str</span> <span class="o">=</span> <span class="n">inferred_freq</span> <span class="k">if</span> <span class="n">inferred_freq</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span> <span class="k">else</span> <span class="sa">f</span><span class="s1">&#39;1</span><span class="si">{</span><span class="n">inferred_freq</span><span class="si">}</span><span class="s1">&#39;</span>
-                <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_timedelta</span><span class="p">(</span><span class="n">_to_pandas_timedelta_frequency</span><span class="p">(</span><span class="n">freq_td_str</span><span class="p">))</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
-            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">IndexError</span><span class="p">):</span>
-                <span class="n">diffs</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">timestamps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-                <span class="n">base_step_hours</span> <span class="o">=</span> <span class="n">diffs</span><span class="o">.</span><span class="n">median</span><span class="p">()</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">/</span> <span class="mf">3600.0</span>
-
-        <span class="c1"># Default period: daily (24 hours)</span>
-        <span class="n">period_hours</span> <span class="o">=</span> <span class="mf">24.0</span>
-        <span class="n">samples_per_period</span> <span class="o">=</span> <span class="n">period_hours</span> <span class="o">/</span> <span class="n">base_step_hours</span>
-
-        <span class="k">return</span> <span class="n">period_hours</span><span class="p">,</span> <span class="n">samples_per_period</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_infer_frequency_from_differences</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Infer the intended frequency from time differences, even when there are gaps.</span>
-
-<span class="sd">        This method finds the most common time difference between consecutive timestamps</span>
-<span class="sd">        and maps it to a pandas frequency string.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        timestamps : DatetimeIndex</span>
-<span class="sd">            Timestamps (may have gaps)</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        freq : str</span>
-<span class="sd">            Inferred frequency string (e.g., &#39;h&#39;, &#39;15min&#39;, &#39;D&#39;)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_infer_frequency_from_differences</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_frequency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamps</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">,</span> <span class="n">expected_freq</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">allow_gaps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Validate that timestamps match expected frequency, optionally allowing gaps.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        timestamps : DatetimeIndex</span>
-<span class="sd">            Timestamps to validate.</span>
-<span class="sd">        expected_freq : str</span>
-<span class="sd">            Expected pandas frequency string (e.g., &#39;h&#39; for hourly, &#39;H&#39; also accepted).</span>
-<span class="sd">        allow_gaps : bool, default=False</span>
-<span class="sd">            If True, allow gaps in timestamps and infer base frequency from</span>
-<span class="sd">            time differences.  If False, require perfectly regular timestamps.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If frequency doesn&#39;t match or timestamps are not regular (when allow_gaps=False).</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">_validate_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="n">expected_freq</span><span class="p">,</span> <span class="n">allow_gaps</span><span class="o">=</span><span class="n">allow_gaps</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_timestamp_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Ensure X has proper timestamp index/column, extracting timestamps.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        X : array-like or DataFrame</span>
-<span class="sd">            Input data.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        timestamps : DatetimeIndex</span>
-<span class="sd">            Extracted timestamps.</span>
-<span class="sd">        X_array : ndarray</span>
-<span class="sd">            X as array without timestamp column if it was extracted.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_ensure_timestamp_index</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
-
-    <span class="nd">@overload</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_sorted_index</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">sample_weight</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span> <span class="o">...</span>
-    <span class="nd">@overload</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_sorted_index</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">sample_weight</span><span class="p">:</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]:</span> <span class="o">...</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_sorted_index</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
-        <span class="n">y</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">sample_weight</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Sort X (and y, sample_weight if provided) by datetime index, or require sorted.</span>
-
-<span class="sd">        If config.sort_index is True, sort by timestamps so row order matches</span>
-<span class="sd">        time order. If False, require the index to be chronologically sorted</span>
-<span class="sd">        and raise ValueError if not.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        X : DataFrame</span>
-<span class="sd">            Input data with DatetimeIndex or datetime column.</span>
-<span class="sd">        y : array-like of shape (n_samples,) or None</span>
-<span class="sd">            Target values (fit only). If provided, reordered in the same way as X.</span>
-<span class="sd">        sample_weight : array-like of shape (n_samples,) or None</span>
-<span class="sd">            Sample weights (fit only). If provided, reordered with X and y.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        If y is None: (X_sorted,)</span>
-<span class="sd">        If y is not None: (X_sorted, y_sorted, sample_weight_sorted or None)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">_ensure_sorted_index</span><span class="p">(</span>
-                <span class="n">X</span><span class="p">,</span>
-                <span class="n">sort_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">sort_index</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">_ensure_sorted_index</span><span class="p">(</span>
-            <span class="n">X</span><span class="p">,</span>
-            <span class="n">sort_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">sort_index</span><span class="p">,</span>
-            <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
-            <span class="n">sample_weight</span><span class="o">=</span><span class="n">sample_weight</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_make_regularization_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_harmonics</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
-                                   <span class="n">weight</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-                                   <span class="n">periods</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
-                                   <span class="n">drop_constant</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-                                   <span class="n">standing_wave</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-                                   <span class="n">trend</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-                                   <span class="n">max_cross_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-                                   <span class="n">custom_basis</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">spmatrix</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Create regularization matrix for Fourier coefficients.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        num_harmonics : int or array-like</span>
-<span class="sd">            Number of harmonics for each period.</span>
-<span class="sd">        weight : float</span>
-<span class="sd">            Regularization weight.</span>
-<span class="sd">        periods : float or array-like</span>
-<span class="sd">            Periods for each harmonic block.</span>
-<span class="sd">        standing_wave : bool or array-like, default=False</span>
-<span class="sd">            Whether to use standing wave basis.</span>
-<span class="sd">        trend : bool, default=False</span>
-<span class="sd">            Whether to include trend term.</span>
-<span class="sd">        max_cross_k : int or None, default=None</span>
-<span class="sd">            Maximum cross terms.</span>
-<span class="sd">        custom_basis : dict or None, default=None</span>
-<span class="sd">            Custom basis matrices.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        D : sparse matrix</span>
-<span class="sd">            Regularization matrix.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_make_regularization_matrix</span><span class="p">(</span>
-            <span class="n">num_harmonics</span><span class="p">,</span>
-            <span class="n">weight</span><span class="p">,</span>
-            <span class="n">periods</span><span class="p">,</span>
-            <span class="n">drop_constant</span><span class="o">=</span><span class="n">drop_constant</span><span class="p">,</span>
-            <span class="n">standing_wave</span><span class="o">=</span><span class="n">standing_wave</span><span class="p">,</span>
-            <span class="n">trend</span><span class="o">=</span><span class="n">trend</span><span class="p">,</span>
-            <span class="n">max_cross_k</span><span class="o">=</span><span class="n">max_cross_k</span><span class="p">,</span>
-            <span class="n">custom_basis</span><span class="o">=</span><span class="n">custom_basis</span><span class="p">,</span>
-        <span class="p">)</span>
-
-
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_make_H</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">knots</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">include_offset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Create cubic spline basis matrix.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        x : array-like</span>
-<span class="sd">            Input values.</span>
-<span class="sd">        knots : array-like</span>
-<span class="sd">            Knot locations.</span>
-<span class="sd">        include_offset : bool, default=False</span>
-<span class="sd">            Whether to include constant term.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        H : ndarray</span>
-<span class="sd">            Basis matrix.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_make_spline_H</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">knots</span><span class="p">,</span> <span class="n">include_offset</span><span class="o">=</span><span class="n">include_offset</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_make_offset_H</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">H</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">offset</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Create lead/lag version of basis matrix.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        H : ndarray</span>
-<span class="sd">            Original basis matrix.</span>
-<span class="sd">        offset : int</span>
-<span class="sd">            Lead/lag offset (positive = lag, negative = lead).</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        newH : ndarray</span>
-<span class="sd">            Offset basis matrix with NaN padding.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_make_offset_H</span><span class="p">(</span><span class="n">H</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_running_view</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arr</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">window</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">lag</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Create running view of array for AR terms.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        arr : array-like</span>
-<span class="sd">            Input array.</span>
-<span class="sd">        window : int</span>
-<span class="sd">            Window size (number of AR lags).</span>
-<span class="sd">        lag : int, default=1</span>
-<span class="sd">            Lag offset (typically 1 for standard AR).</span>
-<span class="sd">        axis : int, default=-1</span>
-<span class="sd">            Axis along which to create running view.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        view : ndarray</span>
-<span class="sd">            Running view with extra dimension of shape (len(arr), window).</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">mod_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">window</span> <span class="o">+</span> <span class="n">lag</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">arr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
-        <span class="n">shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">mod_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-        <span class="n">shape</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">-=</span> <span class="p">(</span><span class="n">window</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="n">shape</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Array too short for window=</span><span class="si">{</span><span class="n">window</span><span class="si">}</span><span class="s2">, lag=</span><span class="si">{</span><span class="n">lag</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">stride_tricks</span><span class="o">.</span><span class="n">as_strided</span><span class="p">(</span>
-            <span class="n">mod_arr</span><span class="p">,</span>
-            <span class="n">shape</span><span class="o">=</span><span class="n">shape</span> <span class="o">+</span> <span class="p">[</span><span class="n">window</span><span class="p">],</span>
-            <span class="n">strides</span><span class="o">=</span><span class="n">mod_arr</span><span class="o">.</span><span class="n">strides</span> <span class="o">+</span> <span class="p">(</span><span class="n">mod_arr</span><span class="o">.</span><span class="n">strides</span><span class="p">[</span><span class="n">axis</span><span class="p">],)</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_build_exog_Hs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exog_cfg</span><span class="p">:</span> <span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">,</span> <span class="n">exog_var</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">knots</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Build basis matrices for an exogenous variable with lead/lag.</span>
-
-<span class="sd">        This is a helper method that can be reused in both fit and predict.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        exog_cfg : TsgamSplineConfig or TsgamLinearConfig</span>
-<span class="sd">            Configuration for the exogenous variable.</span>
-<span class="sd">        exog_var : ndarray</span>
-<span class="sd">            Single exogenous variable column (shape: (n_samples,)).</span>
-<span class="sd">        knots : ndarray or None, default=None</span>
-<span class="sd">            Knot locations for spline (if None and spline config, will be computed or error).</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        Hs : list of ndarray</span>
-<span class="sd">            List of basis matrices, one for each lag in exog_cfg.lags.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_build_exog_Hs</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">exog_var</span><span class="p">,</span> <span class="n">knots</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_process_exog_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exog_cfg</span><span class="p">:</span> <span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">,</span> <span class="n">exog_var</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">knots</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Process an exogenous variable configuration to build basis matrices.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        exog_cfg : TsgamSplineConfig or TsgamLinearConfig</span>
-<span class="sd">            Configuration for the exogenous variable.</span>
-<span class="sd">        exog_var : ndarray</span>
-<span class="sd">            Single exogenous variable column (shape: (n_samples,)).</span>
-<span class="sd">        knots : ndarray or None, optional</span>
-<span class="sd">            Pre-computed knots to use (for prediction). If None, computes from config or data.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        valid_mask : ndarray</span>
-<span class="sd">            Boolean mask indicating valid samples (no NaN from lead/lag operations).</span>
-<span class="sd">        Hs : list of ndarray</span>
-<span class="sd">            List of basis matrices, one for each lag in exog_cfg.lags.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_process_exog_config</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">exog_var</span><span class="p">,</span> <span class="n">knots</span><span class="o">=</span><span class="n">knots</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_zero_lag_H</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exog_cfg</span><span class="p">:</span> <span class="n">TsgamSplineConfig</span> <span class="o">|</span> <span class="n">TsgamLinearConfig</span><span class="p">,</span> <span class="n">Hs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ndarray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the current-index basis block for an exogenous term.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_get_zero_lag_H</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">Hs</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_outer_column_product</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arr1</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">arr2</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a q*r interaction design block from two response matrices.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_outer_column_product</span><span class="p">(</span><span class="n">arr1</span><span class="p">,</span> <span class="n">arr2</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_interaction_contribution_from_blocks</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">arr1</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">arr2</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">interaction_coef</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">nan_to_zero</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Contract two response matrices against flattened interaction coefficients.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_interaction_contribution_from_blocks</span><span class="p">(</span>
-            <span class="n">arr1</span><span class="p">,</span>
-            <span class="n">arr2</span><span class="p">,</span>
-            <span class="n">interaction_coef</span><span class="p">,</span>
-            <span class="n">nan_to_zero</span><span class="o">=</span><span class="n">nan_to_zero</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_normalize_interaction_pairs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate and normalize configured exogenous interaction pairs.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_normalize_interaction_pairs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_min_samples_required</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Calculate minimum number of samples required based on lags.</span>
-
-<span class="sd">        For positive lags (looking back), we need at least that many samples.</span>
-<span class="sd">        For negative lags (leads/looking forward), we need at least abs(lag) samples.</span>
-<span class="sd">        For AR lags, we need at least max(ar_lags) samples.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        min_samples : int</span>
-<span class="sd">            Minimum number of samples required.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">_min_samples_required</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+    <span class="c1"># Historical response-plot helper; implementation belongs to SignalDecomp.</span>
+    <span class="n">_make_H</span> <span class="o">=</span> <span class="nb">staticmethod</span><span class="p">(</span><span class="n">make_spline_basis</span><span class="p">)</span>
 
 <div class="viewcode-block" id="TsgamEstimator.fit">
 <a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimator.fit">[docs]</a>
@@ -1391,186 +993,83 @@
         <span class="n">timestamps</span> <span class="o">=</span> <span class="n">_extract_timestamps</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">freq_</span> <span class="o">=</span> <span class="n">infer_fit_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">time_reference_</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span> <span class="o">=</span> <span class="n">resolve_exog_knots</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">X</span><span class="p">)</span>
         <span class="n">design</span> <span class="o">=</span> <span class="n">build_tsgam_design</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
             <span class="n">X</span><span class="p">,</span>
             <span class="n">y</span><span class="p">,</span>
             <span class="n">sample_weight</span><span class="p">,</span>
-            <span class="n">knots_by_exog</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span><span class="p">,</span>
             <span class="n">reference</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time_reference_</span><span class="p">,</span>
             <span class="n">freq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">assert</span> <span class="n">design</span><span class="o">.</span><span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="k">assert</span> <span class="n">design</span><span class="o">.</span><span class="n">sample_weight</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="n">X_array</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">X_array</span>
-        <span class="n">fit_y</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">y</span>
         <span class="n">time_indices</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">time_indices</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">time_indices_</span> <span class="o">=</span> <span class="n">time_indices</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sample_weight_</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">sample_weight</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">valid_mask</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">interaction_pairs_</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">interaction_pairs</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_fit_design_</span> <span class="o">=</span> <span class="n">design</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">,</span> <span class="n">regularization_term</span> <span class="o">=</span> <span class="n">make_single_output_standard_variables</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
-            <span class="n">design</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">model_term</span> <span class="o">=</span> <span class="n">single_output_prediction_expression</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
-            <span class="n">design</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">,</span>
-        <span class="p">)</span>
 
-        <span class="c1"># Add trend term if configured</span>
-        <span class="n">constraints</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">trend_period</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
-            <span class="n">trend_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span>
+            <span class="n">trend_period</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">grouping</span> <span class="ow">or</span> <span class="mf">24.0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trend_period_hours_</span> <span class="o">=</span> <span class="n">trend_period</span>
 
-            <span class="c1"># Determine period and samples per period</span>
-            <span class="n">period_hours</span><span class="p">,</span> <span class="n">samples_per_period</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_trend_period_hours</span><span class="p">(</span>
-                <span class="n">timestamps</span><span class="p">,</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">grouping</span>
-            <span class="p">)</span>
-
-            <span class="c1"># Calculate number of periods</span>
-            <span class="c1"># Use time_indices to determine which period each sample belongs to</span>
-            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="n">period_hours</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
-            <span class="n">n_periods</span> <span class="o">=</span> <span class="n">period_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
-
-            <span class="c1"># Create T matrix: maps each sample to its period</span>
-            <span class="c1"># T[i, j] = 1 if sample i belongs to period j, else 0</span>
-            <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">fit_y</span><span class="p">),</span> <span class="n">n_periods</span><span class="p">))</span>
-            <span class="c1"># Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i</span>
-            <span class="n">T</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">period_indices</span><span class="p">)),</span> <span class="n">period_indices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
-
-            <span class="c1"># Create trend variable (one value per period)</span>
-            <span class="n">trend</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span><span class="n">n_periods</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">trend</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">trend_T_matrix_</span> <span class="o">=</span> <span class="n">T</span>  <span class="c1"># Store for prediction</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">trend_period_hours_</span> <span class="o">=</span> <span class="n">period_hours</span>  <span class="c1"># Store period for prediction</span>
-
-            <span class="c1"># Add trend term to model</span>
-            <span class="n">trend_term</span> <span class="o">=</span> <span class="n">T</span> <span class="o">@</span> <span class="n">trend</span>
-            <span class="n">model_term</span> <span class="o">+=</span> <span class="n">trend_term</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
-
-            <span class="c1"># Add regularization for trend differences</span>
-            <span class="n">regularization_term</span> <span class="o">+=</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">*</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">))</span>
-
-            <span class="c1"># Add constraints based on trend type</span>
-            <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">trend</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># Baseline constraint</span>
-
-            <span class="k">if</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span><span class="p">:</span>
-                <span class="c1"># Linear trend: constant slope</span>
-                <span class="n">slope</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">slope</span>
-                <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">==</span> <span class="n">slope</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="ow">in</span> <span class="p">(</span>
-                <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR</span><span class="p">,</span>
-                <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR_DEC</span><span class="p">,</span>
-            <span class="p">):</span>
-                <span class="c1"># Nonlinear monotonic decreasing trend</span>
-                <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONLINEAR_INC</span><span class="p">:</span>
-                <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>
-            <span class="c1"># For &#39;none&#39;, trend_term is None so it won&#39;t be added</span>
-
-        <span class="c1"># Add outlier detector term if configured</span>
+        <span class="n">outlier_period</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">outlier_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span>
-            <span class="c1"># Determine period (default to 24 hours for daily)</span>
-            <span class="k">if</span> <span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">period_hours</span> <span class="o">=</span> <span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># Default to daily (24 hours)</span>
-                <span class="n">period_hours</span> <span class="o">=</span> <span class="mf">24.0</span>
+            <span class="n">outlier_period</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">outlier_config</span><span class="o">.</span><span class="n">period_hours</span> <span class="ow">or</span> <span class="mf">24.0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">outlier_period_hours_</span> <span class="o">=</span> <span class="n">outlier_period</span>
 
-            <span class="c1"># Calculate number of periods</span>
-            <span class="c1"># Use time_indices to determine which period each sample belongs to</span>
-            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="n">period_hours</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
-            <span class="n">n_periods</span> <span class="o">=</span> <span class="n">period_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
-
-            <span class="c1"># Create T matrix: maps each sample to its period</span>
-            <span class="c1"># T[i, j] = 1 if sample i belongs to period j, else 0</span>
-            <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">fit_y</span><span class="p">),</span> <span class="n">n_periods</span><span class="p">))</span>
-            <span class="c1"># Use numpy advanced indexing: T[i, period_indices[i]] = 1.0 for all i</span>
-            <span class="n">T</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">period_indices</span><span class="p">)),</span> <span class="n">period_indices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
-
-            <span class="c1"># Create outlier variable (one value per period)</span>
-            <span class="n">outlier</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span><span class="n">n_periods</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;outlier&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">outlier</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">outlier_T_matrix_</span> <span class="o">=</span> <span class="n">T</span>  <span class="c1"># Store for prediction</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">outlier_period_hours_</span> <span class="o">=</span> <span class="n">period_hours</span>  <span class="c1"># Store period for prediction</span>
-
-            <span class="c1"># Add outlier term to model (additive in log space, multiplicative in original scale)</span>
-            <span class="n">outlier_term</span> <span class="o">=</span> <span class="n">T</span> <span class="o">@</span> <span class="n">outlier</span>
-            <span class="n">model_term</span> <span class="o">+=</span> <span class="n">outlier_term</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
-
-            <span class="c1"># Add L1 regularization to encourage sparsity</span>
-            <span class="n">regularization_term</span> <span class="o">+=</span> <span class="n">outlier_config</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">*</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">norm1</span><span class="p">(</span><span class="n">outlier</span><span class="p">)</span>
-
-        <span class="c1"># Weighted least squares: sum(w_i * r_i^2) / sum(w_i) on valid samples</span>
-        <span class="n">y_valid</span> <span class="o">=</span> <span class="n">fit_y</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
-        <span class="n">weight_valid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_weight_</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
-        <span class="n">error</span> <span class="o">=</span> <span class="n">weighted_squared_loss</span><span class="p">(</span><span class="n">y_valid</span><span class="p">,</span> <span class="n">model_term</span><span class="p">,</span> <span class="n">weight_valid</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="n">error</span> <span class="o">+</span> <span class="n">regularization_term</span><span class="p">),</span> <span class="n">constraints</span><span class="p">)</span>
-        <span class="n">solve_problem</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="p">,</span>
-            <span class="n">failure_message</span><span class="o">=</span><span class="p">(</span>
-                <span class="s2">&quot;Optimization problem did not converge. &quot;</span>
-                <span class="s2">&quot;This may cause NaN predictions. Check your data and model configuration.&quot;</span>
-            <span class="p">),</span>
+        <span class="n">built</span> <span class="o">=</span> <span class="n">build_single_output_decomposition</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
+            <span class="n">design</span><span class="p">,</span>
+            <span class="n">trend_period</span><span class="o">=</span><span class="n">trend_period</span><span class="p">,</span>
+            <span class="n">outlier_period</span><span class="o">=</span><span class="n">outlier_period</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="n">decomposition</span> <span class="o">=</span> <span class="n">solve</span><span class="p">(</span>
+            <span class="n">built</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="n">verify_dcp</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">verbose</span><span class="p">,</span>
+            <span class="n">warm_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">warm_start</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">_solve_kwargs</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">decomposition_</span> <span class="o">=</span> <span class="n">decomposition</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_</span> <span class="o">=</span> <span class="n">decomposition</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span> <span class="o">=</span> <span class="n">decomposition</span><span class="p">[</span><span class="s2">&quot;problem&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span> <span class="o">=</span> <span class="n">legacy_variable_views</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">decomposition</span><span class="p">[</span><span class="s2">&quot;variables&quot;</span><span class="p">])</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="nb">float</span><span class="p">],</span> <span class="n">decomposition</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">])</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]],</span> <span class="n">decomposition</span><span class="p">[</span><span class="s2">&quot;component_metadata&quot;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;exog_</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">][</span><span class="s2">&quot;knots&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">exog_cfg</span><span class="p">,</span> <span class="n">TsgamSplineConfig</span><span class="p">)</span>
+            <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">exog_cfg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[])</span>
+        <span class="p">]</span>
 
         <span class="c1"># Check that constant term is valid</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;intercept_group_values&quot;</span><span class="p">])[</span><span class="mi">0</span><span class="p">]):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Constant term is None or NaN after optimization. Problem status: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">problem_</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Constant term is NaN after optimization. Status: </span><span class="si">{</span><span class="n">decomposition</span><span class="p">[</span><span class="s1">&#39;status&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
         <span class="c1"># Fit AR model if configured</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">ar_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ar_model</span><span class="p">(</span><span class="n">X_array</span><span class="p">,</span> <span class="n">fit_y</span><span class="p">,</span> <span class="n">time_indices</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ar_model</span><span class="p">()</span>
 
         <span class="k">return</span> <span class="bp">self</span></div>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_fit_ar_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X_array</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">time_indices</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Fit AR model on baseline residuals.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        X_array : ndarray</span>
-<span class="sd">            Exogenous variables array.</span>
-<span class="sd">        y : ndarray</span>
-<span class="sd">            Target values.</span>
-<span class="sd">        time_indices : ndarray</span>
-<span class="sd">            Time indices for Fourier basis.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">baseline_pred</span> <span class="o">=</span> <span class="n">evaluate_single_output_prediction</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_fit_design_</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Add trend term if present</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">and</span> <span class="s1">&#39;trend&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
-            <span class="n">trend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
-            <span class="k">if</span> <span class="n">trend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;trend_T_matrix_&#39;</span><span class="p">):</span>
-                <span class="n">T</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trend_T_matrix_</span>
-                <span class="n">baseline_pred</span> <span class="o">+=</span> <span class="n">T</span> <span class="o">@</span> <span class="n">trend</span>
-
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fit_ar_model</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit the AR model on the SignalDecomp residual.&quot;&quot;&quot;</span>
         <span class="c1"># Compute residuals on valid samples</span>
-        <span class="n">residuals</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span> <span class="o">-</span> <span class="n">baseline_pred</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">combined_valid_mask_</span><span class="p">]</span>
+        <span class="n">fit_mask</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">ndarray</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">decomposition_</span><span class="p">[</span><span class="s2">&quot;fit_mask&quot;</span><span class="p">])</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="nb">float</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">decomposition_</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">])</span>
+        <span class="n">residuals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">fit_mask</span><span class="p">,</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;residual&quot;</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
 
         <span class="c1"># Build AR design matrix</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">ar_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="n">ar_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">ar_config</span>
         <span class="n">ar_lags</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)</span>
-        <span class="n">B</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_running_view</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">ar_lags</span><span class="p">)</span>
-        <span class="n">ar_valid_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">B</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">basis</span> <span class="o">=</span> <span class="n">make_offset_basis</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)))</span>
+        <span class="n">B</span> <span class="o">=</span> <span class="n">basis</span><span class="o">.</span><span class="n">design</span>
+        <span class="n">ar_valid_mask</span> <span class="o">=</span> <span class="n">fit_mask</span> <span class="o">&amp;</span> <span class="n">basis</span><span class="o">.</span><span class="n">valid_mask</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">debug</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_B_running_view_</span> <span class="o">=</span> <span class="n">B</span>
@@ -1600,7 +1099,7 @@
             <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">solver_config</span><span class="o">.</span><span class="n">_solve_kwargs</span><span class="p">(),</span>
         <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">ar_problem</span><span class="o">.</span><span class="n">status</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;infeasible&quot;</span><span class="p">,</span> <span class="s2">&quot;unbounded&quot;</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">ar_problem</span><span class="o">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;optimal&quot;</span><span class="p">,</span> <span class="s2">&quot;optimal_inaccurate&quot;</span><span class="p">]:</span>
             <span class="k">assert</span> <span class="n">theta</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;AR coefficients should be set&quot;</span>
             <span class="k">assert</span> <span class="n">constant</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;AR intercept should be set&quot;</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">ar_coef_</span> <span class="o">=</span> <span class="n">theta</span><span class="o">.</span><span class="n">value</span>
@@ -1616,6 +1115,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">ar_intercept_</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_loc_</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_scale_</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="TsgamEstimator.score">
+<a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimator.score">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">score</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">sample_weight</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return R² on supported prediction rows, retaining NaNs in predict().&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">make_supported_scorer</span><span class="p">(</span><span class="s2">&quot;r2&quot;</span><span class="p">)(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">sample_weight</span><span class="o">=</span><span class="n">sample_weight</span><span class="p">)</span></div>
+
 
 <div class="viewcode-block" id="TsgamEstimator.predict">
 <a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamEstimator.predict">[docs]</a>
@@ -1637,7 +1143,8 @@
 <span class="sd">        X : DataFrame</span>
 <span class="sd">            Input data with exogenous variables. Must have DatetimeIndex or</span>
 <span class="sd">            first column must be datetime. Must have same frequency as training data.</span>
-<span class="sd">            Column order must match training data.</span>
+<span class="sd">            Column order must match training data. Rows lacking source history</span>
+<span class="sd">            for an exogenous offset return NaN; include source padding to predict them.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1661,7 +1168,7 @@
 <span class="sd">        &gt;&gt;&gt; # Convert back to original scale</span>
 <span class="sd">        &gt;&gt;&gt; predictions_original = np.exp(predictions)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;problem_&#39;</span><span class="p">,</span> <span class="s1">&#39;time_reference_&#39;</span><span class="p">,</span> <span class="s1">&#39;freq_&#39;</span><span class="p">])</span>
+        <span class="n">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;decomposition_&#39;</span><span class="p">,</span> <span class="s1">&#39;time_reference_&#39;</span><span class="p">,</span> <span class="s1">&#39;freq_&#39;</span><span class="p">])</span>
 
         <span class="n">X</span> <span class="o">=</span> <span class="n">sort_predict_X</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">sort_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">sort_index</span><span class="p">)</span>
         <span class="n">timestamps</span> <span class="o">=</span> <span class="n">_extract_timestamps</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
@@ -1679,66 +1186,37 @@
         <span class="n">predictions</span> <span class="o">=</span> <span class="n">evaluate_single_output_prediction</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
             <span class="n">design</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">,</span>
+            <span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="nb">float</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">decomposition_</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">]),</span>
             <span class="n">remove_periodic</span><span class="o">=</span><span class="n">remove_periodic</span><span class="p">,</span>
             <span class="n">remove_exogenous</span><span class="o">=</span><span class="n">remove_exogenous</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="c1"># Add trend term if present</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">and</span> <span class="s1">&#39;trend&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span>
-            <span class="n">trend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
-            <span class="k">if</span> <span class="n">trend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Trend coefficients are None. Model may not have converged.&quot;</span><span class="p">)</span>
-
-            <span class="c1"># Use stored period_hours from fit (or recalculate if not stored)</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;trend_period_hours_&#39;</span><span class="p">):</span>
-                <span class="n">period_hours</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trend_period_hours_</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># Fallback: recalculate (shouldn&#39;t happen if fit was called first)</span>
-                <span class="n">period_hours</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_trend_period_hours</span><span class="p">(</span>
-                    <span class="n">timestamps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">grouping</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="nb">float</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">decomposition_</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="n">remove_trend</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span>
+        <span class="p">):</span>
+            <span class="n">trend</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;trend_group_values&quot;</span><span class="p">])</span>
+            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">trend_period_hours_</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">valid</span> <span class="o">=</span> <span class="n">period_indices</span> <span class="o">&gt;=</span> <span class="mi">0</span>
+            <span class="n">selected</span> <span class="o">=</span> <span class="n">period_indices</span><span class="p">[</span><span class="n">valid</span><span class="p">]</span>
+            <span class="n">contribution</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">selected</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">beyond</span> <span class="o">=</span> <span class="n">selected</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span><span class="p">:</span>
+                <span class="n">contribution</span><span class="p">[</span><span class="n">beyond</span><span class="p">]</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;trend_slope&quot;</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span>
+                    <span class="n">selected</span><span class="p">[</span><span class="n">beyond</span><span class="p">]</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
                 <span class="p">)</span>
-
-            <span class="c1"># Calculate period indices for prediction timestamps</span>
-            <span class="n">period_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_indices</span> <span class="o">/</span> <span class="n">period_hours</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
-            <span class="n">n_periods_fit</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">trend</span><span class="p">)</span>
-            <span class="n">n_periods_pred</span> <span class="o">=</span> <span class="n">period_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
-
-            <span class="c1"># Create T matrix for predictions</span>
-            <span class="n">T_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">),</span> <span class="n">n_periods_pred</span><span class="p">))</span>
-            <span class="c1"># Use numpy advanced indexing for efficiency</span>
-            <span class="c1"># Filter out negative indices (can occur if predicting before training data)</span>
-            <span class="n">valid_mask</span> <span class="o">=</span> <span class="n">period_indices</span> <span class="o">&gt;=</span> <span class="mi">0</span>
-            <span class="n">T_pred</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">period_indices</span><span class="p">))[</span><span class="n">valid_mask</span><span class="p">],</span> <span class="n">period_indices</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]]</span> <span class="o">=</span> <span class="mf">1.0</span>
-
-            <span class="c1"># Extend trend if prediction extends beyond training data</span>
-            <span class="k">if</span> <span class="n">n_periods_pred</span> <span class="o">&gt;</span> <span class="n">n_periods_fit</span><span class="p">:</span>
-                <span class="c1"># Extend trend using the last value or extrapolate based on trend type</span>
-                <span class="n">trend_extended</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_periods_pred</span><span class="p">)</span>
-                <span class="n">trend_extended</span><span class="p">[:</span><span class="n">n_periods_fit</span><span class="p">]</span> <span class="o">=</span> <span class="n">trend</span>
-
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">==</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">LINEAR</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_periods_fit</span><span class="p">,</span> <span class="n">n_periods_pred</span><span class="p">):</span>
-                        <span class="n">trend_extended</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;trend_slope&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">*</span> <span class="p">(</span><span class="n">i</span> <span class="o">-</span> <span class="n">n_periods_fit</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="c1"># fallback: use last value</span>
-                    <span class="n">trend_extended</span><span class="p">[</span><span class="n">n_periods_fit</span><span class="p">:]</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-
-                <span class="n">trend</span> <span class="o">=</span> <span class="n">trend_extended</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">trend</span> <span class="o">=</span> <span class="n">trend</span><span class="p">[:</span><span class="n">n_periods_pred</span><span class="p">]</span>
-
-            <span class="c1"># Add trend term to predictions</span>
-            <span class="n">predictions</span> <span class="o">+=</span> <span class="n">T_pred</span> <span class="o">@</span> <span class="n">trend</span>
+            <span class="n">predictions</span><span class="p">[</span><span class="n">valid</span><span class="p">]</span> <span class="o">+=</span> <span class="n">contribution</span>
 
         <span class="c1"># Final check for NaN in predictions</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">predictions</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">design</span><span class="o">.</span><span class="n">valid_mask</span><span class="p">):</span>
             <span class="n">nan_count</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">predictions</span><span class="p">))</span>
             <span class="n">nan_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">predictions</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Predictions contain </span><span class="si">{</span><span class="n">nan_count</span><span class="si">}</span><span class="s2"> NaN values out of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span><span class="si">}</span><span class="s2">. &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;First few NaN indices: </span><span class="si">{</span><span class="n">nan_indices</span><span class="p">[:</span><span class="mi">10</span><span class="p">]</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">nan_indices</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">[]</span><span class="si">}</span><span class="s2">. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Constant value: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Constant value: </span><span class="si">{</span><span class="n">cast</span><span class="p">(</span><span class="n">ndarray</span><span class="p">,</span><span class="w"> </span><span class="n">values</span><span class="p">[</span><span class="s1">&#39;intercept_group_values&#39;</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;Time indices range: [</span><span class="si">{</span><span class="n">time_indices</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">time_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">]&quot;</span>
             <span class="p">)</span>
 
@@ -1793,7 +1271,7 @@
 <span class="sd">        &gt;&gt;&gt; p5 = np.percentile(samples_original, 5, axis=0)</span>
 <span class="sd">        &gt;&gt;&gt; p95 = np.percentile(samples_original, 95, axis=0)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;problem_&#39;</span><span class="p">,</span> <span class="s1">&#39;time_reference_&#39;</span><span class="p">,</span> <span class="s1">&#39;freq_&#39;</span><span class="p">])</span>
+        <span class="n">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;decomposition_&#39;</span><span class="p">,</span> <span class="s1">&#39;time_reference_&#39;</span><span class="p">,</span> <span class="s1">&#39;freq_&#39;</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">random_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">random_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">random_state</span>
         <span class="n">random_state</span> <span class="o">=</span> <span class="n">check_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
@@ -1837,63 +1315,23 @@
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_loc_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_scale_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> \
             <span class="s2">&quot;AR noise distribution parameters must be set before generating samples&quot;</span>
 
-        <span class="k">if</span> <span class="n">random_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">random_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">):</span>
-                <span class="n">rng</span> <span class="o">=</span> <span class="n">random_state</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">()</span>
-
-        <span class="n">ar_coef</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ar_coef_</span>
-        <span class="n">ar_intercept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ar_intercept_</span>
-        <span class="n">ar_noise_loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_loc_</span>
-        <span class="n">ar_noise_scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_scale_</span>
-        <span class="n">ar_lags</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ar_coef</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">ar_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="n">ar_lags</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)</span>
         <span class="n">length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">baseline_pred</span><span class="p">)</span>
-        <span class="n">nvals</span> <span class="o">=</span> <span class="n">length</span> <span class="o">+</span> <span class="n">ar_lags</span> <span class="o">*</span> <span class="mi">2</span>
-        <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">baseline_pred</span><span class="p">)))</span>
-        <span class="c1"># Prepare filter coefficients</span>
-        <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="mi">1</span><span class="p">],</span> <span class="o">-</span><span class="n">ar_coef</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
-        <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
-            <span class="c1"># Generate i.i.d. noise for the entire sequence</span>
-            <span class="n">noise</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">laplace</span><span class="o">.</span><span class="n">rvs</span><span class="p">(</span>
-                <span class="n">loc</span><span class="o">=</span><span class="n">ar_noise_loc</span><span class="p">,</span>
-                <span class="n">scale</span><span class="o">=</span><span class="n">ar_noise_scale</span><span class="p">,</span>
-                <span class="n">size</span><span class="o">=</span><span class="n">nvals</span><span class="p">,</span>
-                <span class="n">random_state</span><span class="o">=</span><span class="n">rng</span>
-            <span class="p">)</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">ar_lags</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">a</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">ar_coef_</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">noise</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">laplace</span><span class="o">.</span><span class="n">rvs</span><span class="p">(</span>
+            <span class="n">loc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_loc_</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ar_noise_scale_</span><span class="p">,</span>
+            <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">length</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">ar_lags</span><span class="p">),</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Preserve each path&#39;s original filter state and burn-in.</span>
+        <span class="n">ar_noise</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">lfilter</span><span class="p">(</span>
+            <span class="p">[</span><span class="mf">1.0</span><span class="p">],</span> <span class="n">a</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ar_intercept_</span> <span class="o">+</span> <span class="n">noise</span><span class="p">[:,</span> <span class="n">ar_lags</span><span class="p">:],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">zi</span><span class="o">=</span><span class="n">noise</span><span class="p">[:,</span> <span class="p">:</span><span class="n">ar_lags</span><span class="p">][:,</span> <span class="p">::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">baseline_pred</span> <span class="o">+</span> <span class="n">ar_noise</span><span class="p">[:,</span> <span class="o">-</span><span class="n">length</span><span class="p">:]</span></div>
 
-            <span class="c1"># Input to the filter</span>
-            <span class="n">x</span> <span class="o">=</span> <span class="n">ar_intercept</span> <span class="o">+</span> <span class="n">noise</span>
-
-            <span class="c1"># Initialize the filter state with the first ar_lags noise values</span>
-            <span class="c1"># This matches the original &quot;window&quot; initialization</span>
-            <span class="n">initial_window</span> <span class="o">=</span> <span class="n">noise</span><span class="p">[:</span><span class="n">ar_lags</span><span class="p">]</span>
-
-            <span class="c1"># Convert initial window to filter initial conditions</span>
-            <span class="c1"># For an AR process, we need to set zi such that the first outputs match our window</span>
-            <span class="k">if</span> <span class="n">ar_lags</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">zi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">ar_lags</span><span class="p">)</span>
-                <span class="c1"># Work backwards through the initial window to set up the state</span>
-                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ar_lags</span><span class="p">):</span>
-                    <span class="n">zi</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">initial_window</span><span class="p">[</span><span class="n">ar_lags</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">j</span><span class="p">]</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">zi</span> <span class="o">=</span> <span class="kc">None</span>
-
-            <span class="c1"># Apply the AR filter starting after the initial window</span>
-            <span class="k">if</span> <span class="n">zi</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">ar_noise</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">lfilter</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">x</span><span class="p">[</span><span class="n">ar_lags</span><span class="p">:],</span> <span class="n">zi</span><span class="o">=</span><span class="n">zi</span><span class="p">)</span>
-                <span class="c1"># Prepend the initial window</span>
-                <span class="n">ar_noise</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">initial_window</span><span class="p">,</span> <span class="n">ar_noise</span><span class="p">])</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">ar_noise</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">lfilter</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
-
-            <span class="c1"># Use last length values (after burn-in)</span>
-            <span class="n">ar_noise</span> <span class="o">=</span> <span class="n">ar_noise</span><span class="p">[</span><span class="o">-</span><span class="n">length</span><span class="p">:]</span>
-            <span class="n">samples</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">baseline_pred</span> <span class="o">+</span> <span class="n">ar_noise</span>
-        <span class="k">return</span> <span class="n">samples</span></div>
 
 
 

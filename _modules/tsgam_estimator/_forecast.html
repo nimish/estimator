@@ -73,7 +73,7 @@
 <span class="c1"># SPDX-License-Identifier: BSD-3-Clause</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">replace</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">cast</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">cvxpy</span>
@@ -84,6 +84,8 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">._design</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">build_tsgam_design</span><span class="p">,</span>
+    <span class="n">_is_spline_config</span><span class="p">,</span>
+    <span class="n">_make_fourier_basis</span><span class="p">,</span>
     <span class="n">infer_fit_frequency</span><span class="p">,</span>
     <span class="n">normalize_X</span><span class="p">,</span>
     <span class="n">resolve_exog_knots</span><span class="p">,</span>
@@ -99,13 +101,13 @@
     <span class="n">TsgamLinearConfig</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._problem</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">evaluate_horizon_prediction</span><span class="p">,</span>
-    <span class="n">horizon_prediction_expression</span><span class="p">,</span>
-    <span class="n">make_horizon_standard_variables</span><span class="p">,</span>
+    <span class="n">evaluate_single_output_prediction</span><span class="p">,</span>
+    <span class="n">build_single_output_decomposition</span><span class="p">,</span>
+    <span class="n">legacy_variable_views</span><span class="p">,</span>
     <span class="n">solve_problem</span><span class="p">,</span>
-    <span class="n">weighted_squared_loss</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._sklearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">SklearnConfigMixin</span>
+
 
 <div class="viewcode-block" id="TsgamForecastCouplingConfig">
 <a class="viewcode-back" href="../../api.html#tsgam_estimator.TsgamForecastCouplingConfig">[docs]</a>
@@ -210,11 +212,12 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Configuration for direct multi-horizon forecast mode.</span>
 
-<span class="sd">    Forecast mode trains one direct regression per horizon, including the</span>
-<span class="sd">    horizon-zero nowcast. For horizon ``h``,</span>
+<span class="sd">    Forecast mode trains one direct regression per requested horizon. For</span>
+<span class="sd">    horizon ``h``,</span>
 <span class="sd">    each row uses exogenous data available at the forecast origin and the target</span>
 <span class="sd">    at ``origin + h``. ``horizon`` is the largest requested horizon, so</span>
-<span class="sd">    ``predict`` returns ``horizon_0`` through ``horizon_H``.</span>
+<span class="sd">    ``predict`` returns ``horizon_0`` through ``horizon_H`` when</span>
+<span class="sd">    ``include_nowcast=True``, or ``horizon_1`` through ``horizon_H`` otherwise.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">horizon</span><span class="p">:</span> <span class="nb">int</span>
@@ -222,6 +225,7 @@
     <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;independent&quot;</span><span class="p">,</span> <span class="s2">&quot;coupled&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;independent&quot;</span>
     <span class="n">coupling_config</span><span class="p">:</span> <span class="n">TsgamForecastCouplingConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">forecast_ar_config</span><span class="p">:</span> <span class="n">TsgamForecastArConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">include_nowcast</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_config</span><span class="p">,</span> <span class="n">TsgamEstimatorConfig</span><span class="p">):</span>
@@ -229,12 +233,26 @@
                 <span class="s2">&quot;base_config must be a TsgamEstimatorConfig, got &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_config</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizon</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">))</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizon</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;horizon must be a non-negative integer, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">horizon</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizon</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">))</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">horizon</span><span class="p">,</span> <span class="nb">bool</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;horizon must be a non-negative integer, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">horizon</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">horizon</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;horizon must be non-negative, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">horizon</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">include_nowcast</span><span class="p">,</span> <span class="p">(</span><span class="nb">bool</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;include_nowcast must be a boolean, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">include_nowcast</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_nowcast</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">include_nowcast</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_nowcast</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">horizon</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;horizon must be at least 1 when include_nowcast=False.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;independent&quot;</span><span class="p">,</span> <span class="s2">&quot;coupled&quot;</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;mode must be &#39;independent&#39; or &#39;coupled&#39;, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;mode must be &#39;independent&#39; or &#39;coupled&#39;, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_config</span><span class="o">.</span><span class="n">ar_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;base_config.ar_config models residuals for stochastic sampling and &quot;</span>
@@ -251,9 +269,7 @@
             <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;independent&quot;</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">coupling_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;coupling_config is only valid when mode=&#39;coupled&#39;.&quot;</span>
-                <span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;coupling_config is only valid when mode=&#39;coupled&#39;.&quot;</span><span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">coupling_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">coupling_config</span> <span class="o">=</span> <span class="n">TsgamForecastCouplingConfig</span><span class="p">()</span>
         <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coupling_config</span><span class="p">,</span> <span class="n">TsgamForecastCouplingConfig</span><span class="p">):</span>
@@ -293,7 +309,9 @@
             <span class="n">TsgamLinearConfig</span><span class="p">(</span><span class="n">lags</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">reg_weight</span><span class="o">=</span><span class="n">ar_config</span><span class="o">.</span><span class="n">reg_weight</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span>
         <span class="p">]</span>
-        <span class="n">model_config</span><span class="o">.</span><span class="n">exog_config</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">model_config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[])</span> <span class="o">+</span> <span class="n">history_configs</span>
+        <span class="n">model_config</span><span class="o">.</span><span class="n">exog_config</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">list</span><span class="p">(</span><span class="n">model_config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[])</span> <span class="o">+</span> <span class="n">history_configs</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">model_config</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_target_history_frame</span><span class="p">(</span>
@@ -316,7 +334,9 @@
         <span class="n">earliest</span> <span class="o">=</span> <span class="n">origins</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">-</span> <span class="nb">max</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_</span>
         <span class="n">latest</span> <span class="o">=</span> <span class="n">origins</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
         <span class="n">regular_index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">earliest</span><span class="p">,</span> <span class="n">latest</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">)</span>
-        <span class="n">filled</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">reindex</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">regular_index</span><span class="p">))</span><span class="o">.</span><span class="n">sort_index</span><span class="p">()</span><span class="o">.</span><span class="n">ffill</span><span class="p">()</span>
+        <span class="n">filled</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">history</span><span class="o">.</span><span class="n">reindex</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">regular_index</span><span class="p">))</span><span class="o">.</span><span class="n">sort_index</span><span class="p">()</span><span class="o">.</span><span class="n">ffill</span><span class="p">()</span>
+        <span class="p">)</span>
         <span class="n">columns</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">lag</span> <span class="ow">in</span> <span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">:</span>
             <span class="n">required</span> <span class="o">=</span> <span class="n">origins</span> <span class="o">-</span> <span class="n">lag</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_</span>
@@ -340,17 +360,14 @@
         <span class="n">ar_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">forecast_ar_config</span>
         <span class="k">assert</span> <span class="n">ar_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="n">conflicts</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_forecast_ar_column</span><span class="p">(</span><span class="n">lag</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">lag</span> <span class="ow">in</span> <span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_forecast_ar_column</span><span class="p">(</span><span class="n">lag</span><span class="p">)</span> <span class="k">for</span> <span class="n">lag</span> <span class="ow">in</span> <span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span>
         <span class="p">}</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">conflicts</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;X contains reserved forecast target-history columns: &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">conflicts</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_target_history_frame</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">index</span><span class="p">),</span> <span class="n">history</span><span class="p">)</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_target_history_frame</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">index</span><span class="p">),</span> <span class="n">history</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_prepare_forecast_ar_fit_data</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -450,7 +467,9 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">feature_names_in_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">)</span>
         <span class="n">timestamps</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">index</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Forecast inputs must have a DatetimeIndex after normalization.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;Forecast inputs must have a DatetimeIndex after normalization.&quot;</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">freq_</span> <span class="o">=</span> <span class="n">infer_fit_frequency</span><span class="p">(</span><span class="n">timestamps</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">step_</span> <span class="o">=</span> <span class="n">step_timedelta</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">time_reference_</span> <span class="o">=</span> <span class="n">timestamps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -464,14 +483,15 @@
         <span class="n">y</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
         <span class="n">sample_weight</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;TsgamForecastEstimator&quot;</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit direct models for horizons 0 through ``config.horizon``.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit direct models for the configured forecast horizons.&quot;&quot;&quot;</span>
         <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">sample_weight</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_fit_inputs</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">sample_weight</span><span class="p">)</span>
         <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">sample_weight</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_forecast_ar_fit_data</span><span class="p">(</span>
             <span class="n">X</span><span class="p">,</span>
             <span class="n">y</span><span class="p">,</span>
             <span class="n">sample_weight</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">horizon</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">first_horizon</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">include_nowcast</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">first_horizon</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">horizon</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;independent&quot;</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_fit_independent</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">sample_weight</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -487,14 +507,14 @@
         <span class="n">sample_weight</span><span class="p">:</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;TsgamForecastEstimator&quot;</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forecast_estimators_</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">attribute</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;variables_&quot;</span><span class="p">,</span> <span class="s2">&quot;horizon_values_&quot;</span><span class="p">,</span> <span class="s2">&quot;problem_&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">attribute</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">horizon</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span><span class="p">:</span>
             <span class="n">X_horizon</span><span class="p">,</span> <span class="n">y_horizon</span><span class="p">,</span> <span class="n">weight_horizon</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_data_for_horizon</span><span class="p">(</span>
                 <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">sample_weight</span><span class="p">,</span> <span class="n">horizon</span>
             <span class="p">)</span>
             <span class="n">estimator_config</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_config</span>
-                <span class="k">if</span> <span class="n">horizon</span> <span class="o">==</span> <span class="mi">0</span>
-                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config_</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_config</span> <span class="k">if</span> <span class="n">horizon</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config_</span>
             <span class="p">)</span>
             <span class="n">estimator</span> <span class="o">=</span> <span class="n">TsgamEstimator</span><span class="p">(</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">estimator_config</span><span class="p">))</span>
             <span class="k">if</span> <span class="n">horizon</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uses_forecast_ar</span><span class="p">:</span>
@@ -512,23 +532,22 @@
         <span class="n">first_ar_ix</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[])</span>
         <span class="n">standardized</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;independent&quot;</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">horizon</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="k">for</span> <span class="n">horizon_ix</span><span class="p">,</span> <span class="n">horizon</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">horizon</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">continue</span>
                 <span class="n">estimator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forecast_estimators_</span><span class="p">[</span><span class="n">horizon</span><span class="p">]</span>
-                <span class="k">for</span> <span class="n">lag_ix</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)):</span>
-                    <span class="n">value</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;exog_coef_</span><span class="si">{</span><span class="n">first_ar_ix</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lag_ix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
-                    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Forecast AR coefficients are unavailable.&quot;</span><span class="p">)</span>
-                    <span class="n">standardized</span><span class="p">[</span><span class="n">horizon</span><span class="p">,</span> <span class="n">lag_ix</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">lag_ix</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)):</span>
-                <span class="n">horizon_variables</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
-                    <span class="nb">list</span><span class="p">[</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">],</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;exog_coef_</span><span class="si">{</span><span class="n">first_ar_ix</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lag_ix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span>
+                <span class="n">values</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
+                    <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="nb">float</span><span class="p">],</span> <span class="n">estimator</span><span class="o">.</span><span class="n">decomposition_</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">]</span>
                 <span class="p">)</span>
-                <span class="k">for</span> <span class="n">horizon</span><span class="p">,</span> <span class="n">variable</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">horizon_variables</span><span class="p">):</span>
-                    <span class="k">if</span> <span class="n">variable</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Forecast AR coefficients are unavailable.&quot;</span><span class="p">)</span>
-                    <span class="n">standardized</span><span class="p">[</span><span class="n">horizon</span><span class="p">,</span> <span class="n">lag_ix</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">variable</span><span class="o">.</span><span class="n">value</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+                <span class="k">for</span> <span class="n">lag_ix</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)):</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;exog_</span><span class="si">{</span><span class="n">first_ar_ix</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lag_ix</span><span class="si">}</span><span class="s2">_beta&quot;</span><span class="p">]</span>
+                    <span class="n">standardized</span><span class="p">[</span><span class="n">horizon_ix</span><span class="p">,</span> <span class="n">lag_ix</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">horizon_ix</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizon_values_</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">lag_ix</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)):</span>
+                    <span class="n">standardized</span><span class="p">[</span><span class="n">horizon_ix</span><span class="p">,</span> <span class="n">lag_ix</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span>
+                        <span class="n">values</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;exog_</span><span class="si">{</span><span class="n">first_ar_ix</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lag_ix</span><span class="si">}</span><span class="s2">_beta&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                    <span class="p">)</span>
         <span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;lag_</span><span class="si">{</span><span class="n">lag</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">lag</span> <span class="ow">in</span> <span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">]</span>
         <span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;horizon&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forecast_ar_standardized_coefficients_</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
@@ -543,7 +562,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_validate_coupled_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">base_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_config</span>
         <span class="k">if</span> <span class="n">base_config</span><span class="o">.</span><span class="n">outlier_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Coupled forecast mode does not support outlier_config yet.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Coupled forecast mode does not support outlier_config yet.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">base_config</span><span class="o">.</span><span class="n">trend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="ow">and</span> <span class="n">base_config</span><span class="o">.</span><span class="n">trend_config</span><span class="o">.</span><span class="n">trend_type</span> <span class="o">!=</span> <span class="n">TrendType</span><span class="o">.</span><span class="n">NONE</span>
@@ -564,7 +585,8 @@
         <span class="k">assert</span> <span class="n">coupling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="n">roughness_order</span> <span class="o">=</span> <span class="n">coupling</span><span class="o">.</span><span class="n">roughness_order</span>
         <span class="n">n_horizons</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span><span class="p">)</span>
-        <span class="n">n_forecast_horizons</span> <span class="o">=</span> <span class="n">n_horizons</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">first_forecast_ix</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">include_nowcast</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="n">n_forecast_horizons</span> <span class="o">=</span> <span class="n">n_horizons</span> <span class="o">-</span> <span class="n">first_forecast_ix</span>
         <span class="k">if</span> <span class="n">n_forecast_horizons</span> <span class="o">&lt;=</span> <span class="n">roughness_order</span><span class="p">:</span>
             <span class="n">roughness_order</span> <span class="o">=</span> <span class="mi">1</span>
 
@@ -574,7 +596,7 @@
         <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Expression</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">coupling</span><span class="o">.</span><span class="n">roughness_weight</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">n_forecast_horizons</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">term</span>
-            <span class="n">forecast_coefs</span> <span class="o">=</span> <span class="n">coef_by_horizon</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
+            <span class="n">forecast_coefs</span> <span class="o">=</span> <span class="n">coef_by_horizon</span><span class="p">[:,</span> <span class="n">first_forecast_ix</span><span class="p">:]</span>
             <span class="k">return</span> <span class="n">term</span> <span class="o">+</span> <span class="n">coupling</span><span class="o">.</span><span class="n">roughness_weight</span> <span class="o">*</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">sum_squares</span><span class="p">(</span>
                 <span class="n">cvxpy</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">forecast_coefs</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">roughness_order</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
             <span class="p">)</span>
@@ -597,41 +619,36 @@
             <span class="k">for</span> <span class="n">X_horizon</span><span class="p">,</span> <span class="n">y_horizon</span><span class="p">,</span> <span class="n">weight_horizon</span> <span class="ow">in</span> <span class="n">horizon_data</span>
         <span class="p">]</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">,</span> <span class="n">regularization_term</span> <span class="o">=</span> <span class="n">make_horizon_standard_variables</span><span class="p">(</span>
-            <span class="n">base_config</span><span class="p">,</span>
-            <span class="n">designs</span><span class="p">,</span>
-            <span class="n">horizon_regularizer</span><span class="o">=</span><span class="n">add_horizon_roughness</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">losses</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="k">for</span> <span class="n">horizon_ix</span><span class="p">,</span> <span class="n">design</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">designs</span><span class="p">):</span>
-            <span class="n">valid_mask</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">valid_mask</span>
-            <span class="n">model_term</span> <span class="o">=</span> <span class="n">horizon_prediction_expression</span><span class="p">(</span>
-                <span class="n">base_config</span><span class="p">,</span>
-                <span class="n">design</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">,</span>
-                <span class="n">horizon_ix</span><span class="p">,</span>
-                <span class="n">valid_mask</span><span class="p">,</span>
+        <span class="n">built</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">build_single_output_decomposition</span><span class="p">(</span>
+                <span class="n">base_config</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">knots_by_exog</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="k">assert</span> <span class="n">design</span><span class="o">.</span><span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="k">assert</span> <span class="n">design</span><span class="o">.</span><span class="n">sample_weight</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="n">y_valid</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">y</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]</span>
-            <span class="n">weight_valid</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">sample_weight</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]</span>
-            <span class="n">losses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">weighted_squared_loss</span><span class="p">(</span><span class="n">y_valid</span><span class="p">,</span> <span class="n">model_term</span><span class="p">,</span> <span class="n">weight_valid</span><span class="p">))</span>
-
-        <span class="n">constraints</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uses_forecast_ar</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">design</span> <span class="ow">in</span> <span class="n">designs</span>
+        <span class="p">]</span>
+        <span class="c1"># Couple original coefficient coordinates, preserving each component&#39;s penalty.</span>
+        <span class="n">variables</span> <span class="o">=</span> <span class="p">[</span><span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Expression</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;variables&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">built</span><span class="p">]</span>
+        <span class="n">problems</span> <span class="o">=</span> <span class="p">[</span><span class="n">cast</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Problem</span><span class="p">,</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;problem&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">built</span><span class="p">]</span>
+        <span class="n">coefficient_roles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;intercept_group_values&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span>
+            <span class="sa">f</span><span class="s2">&quot;exog_</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="s1">&#39;coef&#39;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">_is_spline_config</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;beta&#39;</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">cfg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">base_config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[])</span>
+        <span class="p">]</span>
+        <span class="n">coefficient_roles</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;interaction_</span><span class="si">{</span><span class="n">ix</span><span class="si">}</span><span class="s2">_coef&quot;</span> <span class="k">for</span> <span class="n">ix</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">designs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">interaction_pairs</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="n">base_config</span><span class="o">.</span><span class="n">multi_periodic_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">coefficient_roles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;periodic_theta&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">horizon_component_metadata_</span> <span class="o">=</span> <span class="p">[</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;component_metadata&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">built</span><span class="p">]</span>
+        <span class="n">regularization_term</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Constant</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">role</span> <span class="ow">in</span> <span class="n">coefficient_roles</span><span class="p">:</span>
+            <span class="n">matrix</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">vec</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">role</span><span class="p">],</span> <span class="n">order</span><span class="o">=</span><span class="s2">&quot;F&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">variables</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+            <span class="n">regularization_term</span> <span class="o">=</span> <span class="n">add_horizon_roughness</span><span class="p">(</span><span class="n">regularization_term</span><span class="p">,</span> <span class="n">matrix</span><span class="p">)</span>
+        <span class="n">constraints</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">problem</span> <span class="ow">in</span> <span class="n">problems</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">problem</span><span class="o">.</span><span class="n">constraints</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uses_forecast_ar</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">include_nowcast</span><span class="p">:</span>
             <span class="n">first_ar_ix</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[])</span>
             <span class="n">ar_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">forecast_ar_config</span>
             <span class="k">assert</span> <span class="n">ar_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="k">for</span> <span class="n">lag_ix</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ar_config</span><span class="o">.</span><span class="n">lags</span><span class="p">)):</span>
-                <span class="n">horizon_variables</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
-                    <span class="nb">list</span><span class="p">[</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Variable</span><span class="p">],</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;exog_coef_</span><span class="si">{</span><span class="n">first_ar_ix</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lag_ix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span>
-                <span class="p">)</span>
-                <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">horizon_variables</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">variables</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="sa">f</span><span class="s2">&quot;exog_</span><span class="si">{</span><span class="n">first_ar_ix</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lag_ix</span><span class="si">}</span><span class="s2">_beta&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">problem_</span> <span class="o">=</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span>
-            <span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">losses</span><span class="p">)</span> <span class="o">+</span> <span class="n">regularization_term</span><span class="p">),</span>
+            <span class="n">cvxpy</span><span class="o">.</span><span class="n">Minimize</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">problem</span><span class="o">.</span><span class="n">objective</span><span class="o">.</span><span class="n">expr</span> <span class="k">for</span> <span class="n">problem</span> <span class="ow">in</span> <span class="n">problems</span><span class="p">)</span> <span class="o">+</span> <span class="n">regularization_term</span><span class="p">),</span>
             <span class="n">constraints</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">solve_problem</span><span class="p">(</span>
@@ -639,6 +656,23 @@
             <span class="n">base_config</span><span class="o">.</span><span class="n">solver_config</span><span class="p">,</span>
             <span class="n">failure_message</span><span class="o">=</span><span class="s2">&quot;Optimization problem did not converge.&quot;</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">horizon_values_</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="n">role</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">role</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">role</span> <span class="ow">in</span> <span class="n">coefficient_roles</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">variables</span>
+        <span class="p">]</span>
+        <span class="c1"># Inspection-only compatibility views; all solving stays in SignalDecomp.</span>
+        <span class="n">horizon_views</span> <span class="o">=</span> <span class="p">[</span><span class="n">legacy_variable_views</span><span class="p">(</span><span class="n">base_config</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span> <span class="k">for</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">variables</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">Expression</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">Expression</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">role</span> <span class="ow">in</span> <span class="n">horizon_views</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">expressions</span> <span class="o">=</span> <span class="p">[</span><span class="n">views</span><span class="p">[</span><span class="n">role</span><span class="p">]</span> <span class="k">for</span> <span class="n">views</span> <span class="ow">in</span> <span class="n">horizon_views</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">[</span><span class="n">role</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">expressions</span> <span class="k">if</span> <span class="n">role</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;exog_coef_&quot;</span><span class="p">)</span>
+                <span class="k">else</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span><span class="n">expressions</span><span class="p">)</span> <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;constant&quot;</span>
+                <span class="k">else</span> <span class="n">cvxpy</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">cvxpy</span><span class="o">.</span><span class="n">vec</span><span class="p">(</span><span class="n">expr</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s2">&quot;F&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">expr</span> <span class="ow">in</span> <span class="n">expressions</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span>
 
 <div class="viewcode-block" id="TsgamForecastEstimator.predict">
@@ -658,7 +692,9 @@
         <span class="n">X</span> <span class="o">=</span> <span class="n">sort_predict_X</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">sort_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_config</span><span class="o">.</span><span class="n">sort_index</span><span class="p">)</span>
         <span class="n">origin_index</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">index</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">origin_index</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Forecast inputs must have a DatetimeIndex after normalization.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;Forecast inputs must have a DatetimeIndex after normalization.&quot;</span>
+            <span class="p">)</span>
         <span class="n">validate_predict_frequency</span><span class="p">(</span><span class="n">origin_index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">)</span>
 
         <span class="n">model_X</span> <span class="o">=</span> <span class="n">X</span>
@@ -687,34 +723,36 @@
                     <span class="n">base_columns</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_config</span><span class="o">.</span><span class="n">exog_config</span> <span class="ow">or</span> <span class="p">[])</span>
                     <span class="n">horizon_X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="p">:</span><span class="n">base_columns</span><span class="p">]</span>
                 <span class="n">X_horizon</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_time_X</span><span class="p">(</span><span class="n">horizon_X</span><span class="p">,</span> <span class="n">horizon</span><span class="p">)</span>
-                <span class="n">columns</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;horizon_</span><span class="si">{</span><span class="n">horizon</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forecast_estimators_</span><span class="p">[</span><span class="n">horizon</span><span class="p">]</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span>
+                <span class="n">columns</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;horizon_</span><span class="si">{</span><span class="n">horizon</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forecast_estimators_</span><span class="p">[</span>
+                    <span class="n">horizon</span>
+                <span class="p">]</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span>
                     <span class="n">X_horizon</span><span class="p">,</span>
                     <span class="n">remove_periodic</span><span class="o">=</span><span class="n">remove_periodic</span><span class="p">,</span>
                     <span class="n">remove_exogenous</span><span class="o">=</span><span class="n">remove_exogenous</span><span class="p">,</span>
                     <span class="n">remove_trend</span><span class="o">=</span><span class="n">remove_trend</span><span class="p">,</span>
                 <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;problem_&quot;</span><span class="p">,</span> <span class="s2">&quot;variables_&quot;</span><span class="p">,</span> <span class="s2">&quot;exog_knots_&quot;</span><span class="p">])</span>
+            <span class="n">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;horizon_values_&quot;</span><span class="p">,</span> <span class="s2">&quot;exog_knots_&quot;</span><span class="p">])</span>
             <span class="k">if</span> <span class="n">remove_periodic</span> <span class="ow">or</span> <span class="n">remove_exogenous</span> <span class="ow">or</span> <span class="n">remove_trend</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;Component removal is not supported for coupled forecast predictions yet.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">design</span> <span class="o">=</span> <span class="n">build_tsgam_design</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">model_config_</span><span class="p">,</span> <span class="n">model_X</span><span class="p">,</span> <span class="n">knots_by_exog</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span><span class="p">,</span>
+                <span class="n">reference</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time_reference_</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">horizon_ix</span><span class="p">,</span> <span class="n">horizon</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">horizons_</span><span class="p">):</span>
-                <span class="n">X_horizon</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_time_X</span><span class="p">(</span><span class="n">model_X</span><span class="p">,</span> <span class="n">horizon</span><span class="p">)</span>
-                <span class="n">design</span> <span class="o">=</span> <span class="n">build_tsgam_design</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">model_config_</span><span class="p">,</span>
-                    <span class="n">X_horizon</span><span class="p">,</span>
-                    <span class="n">y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                    <span class="n">sample_weight</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                    <span class="n">knots_by_exog</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">exog_knots_</span><span class="p">,</span>
-                    <span class="n">reference</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time_reference_</span><span class="p">,</span>
-                    <span class="n">freq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">freq_</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">columns</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;horizon_</span><span class="si">{</span><span class="n">horizon</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">evaluate_horizon_prediction</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">model_config_</span><span class="p">,</span>
+                <span class="n">time_indices</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">time_indices</span> <span class="o">+</span> <span class="n">horizon</span>
+                <span class="n">horizon_design</span> <span class="o">=</span> <span class="n">replace</span><span class="p">(</span>
                     <span class="n">design</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">variables_</span><span class="p">,</span>
-                    <span class="n">horizon_ix</span><span class="p">,</span>
+                    <span class="n">time_indices</span><span class="o">=</span><span class="n">time_indices</span><span class="p">,</span>
+                    <span class="n">fourier_basis</span><span class="o">=</span><span class="p">(</span>
+                        <span class="n">design</span><span class="o">.</span><span class="n">fourier_basis</span> <span class="k">if</span> <span class="n">horizon</span> <span class="o">==</span> <span class="mi">0</span>
+                        <span class="k">else</span> <span class="n">_make_fourier_basis</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config_</span><span class="p">,</span> <span class="n">time_indices</span><span class="p">)</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">columns</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;horizon_</span><span class="si">{</span><span class="n">horizon</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">evaluate_single_output_prediction</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">model_config_</span><span class="p">,</span> <span class="n">horizon_design</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">horizon_values_</span><span class="p">[</span><span class="n">horizon_ix</span><span class="p">],</span>
                 <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">origin_index</span><span class="p">)</span></div>
