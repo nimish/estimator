@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Marimo Notebook: Los Angeles Energy Forecasting with TSGAM
+Marimo Notebook: Los Angeles Load Estimation with TSGAM
 
-This notebook demonstrates forecasting Los Angeles energy demand using:
+This notebook estimates Los Angeles load using:
 - Multi-periodic Fourier basis for seasonal patterns (daily, weekly, yearly)
 - Weather variables (temperature, humidity, solar irradiance) as exogenous variables with spline basis
 - Autoregressive (AR) modeling of residuals
@@ -12,7 +12,8 @@ This notebook demonstrates forecasting Los Angeles energy demand using:
 The notebook uses real energy and weather data from Los Angeles, CA (2018).
 Since there's only one year of data, we use a strategy of holding out the last
 week of every month for validation, creating gaps in the training data to test
-the estimator's ability to handle missing time periods.
+the estimator's ability to handle missing time periods. Estimates for held-out
+hours use observed weather and seasonal patterns learned from the remaining hours.
 """
 
 import marimo
@@ -24,15 +25,17 @@ app = marimo.App(width="medium")
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Los Angeles Energy Forecasting with TSGAM
+    # Los Angeles Load Estimation with TSGAM
 
-    This notebook demonstrates forecasting Los Angeles energy demand using TSGAM.
+    Estimate Los Angeles load from observed weather and daily, weekly, and yearly
+    patterns using TSGAM.
 
     ## Strategy
     Since we only have one year of data (2018), we use a cross-validation strategy
     that holds out the **last week of every month** for validation. This creates
     gaps in the training data, testing the estimator's ability to handle missing
-    time periods.
+    time periods. Load estimates for held-out hours use the observed weather series
+    and patterns learned from the remaining hours.
 
     ## Imports
     """)
@@ -743,15 +746,15 @@ def _(
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Make Predictions
+    ## Estimate Held-Out Load
     """)
     return
 
 
 @app.cell
 def _(X_predict, X_test, estimator, np, pd, take_log):
-    # Make predictions on test set
-    print("Making predictions on test set...")
+    # Estimate load at the held-out timestamps.
+    print("Estimating load for held-out hours...")
     y_pred_log = pd.Series(
         estimator.predict(X_predict), index=X_predict.index
     ).loc[X_test.index].to_numpy()
@@ -762,8 +765,8 @@ def _(X_predict, X_test, estimator, np, pd, take_log):
     else:
         y_pred = y_pred_log
 
-    print(f"Predictions complete: {len(y_pred)} samples")
-    print(f"Prediction range: {y_pred.min():.2f} to {y_pred.max():.2f} MW")
+    print(f"Estimates complete: {len(y_pred)} samples")
+    print(f"Estimated load range: {y_pred.min():.2f} to {y_pred.max():.2f} MW")
     return (y_pred,)
 
 
@@ -812,12 +815,12 @@ def _(plt, timestamps_test_aligned, y_pred, y_test_aligned):
     # Create comprehensive visualization
     fig_results, axes_results = plt.subplots(nrows=3, ncols=1, figsize=(14, 12))
 
-    # Plot 1: Predictions vs Actual over time
+    # Plot 1: Estimated vs observed load over time
     ax1_results = axes_results[0]
-    ax1_results.plot(timestamps_test_aligned, y_test_aligned, 'b-', linewidth=1, alpha=0.7, label='Actual')
-    ax1_results.plot(timestamps_test_aligned, y_pred, 'r-', linewidth=1, alpha=0.7, label='Predicted')
+    ax1_results.plot(timestamps_test_aligned, y_test_aligned, 'b-', linewidth=1, alpha=0.7, label='Observed')
+    ax1_results.plot(timestamps_test_aligned, y_pred, 'r-', linewidth=1, alpha=0.7, label='Estimated')
     ax1_results.set_ylabel('Energy (MW)', fontsize=10)
-    ax1_results.set_title('Predictions vs Actual Over Time', fontsize=12, fontweight='bold')
+    ax1_results.set_title('Estimated vs Observed Load Over Time', fontsize=12, fontweight='bold')
     ax1_results.legend()
     ax1_results.grid(True, alpha=0.3)
 
@@ -826,10 +829,10 @@ def _(plt, timestamps_test_aligned, y_pred, y_test_aligned):
     ax2_results.scatter(y_test_aligned, y_pred, alpha=0.5, s=10)
     _min_val = min(y_test_aligned.min(), y_pred.min())
     _max_val = max(y_test_aligned.max(), y_pred.max())
-    ax2_results.plot([_min_val, _max_val], [_min_val, _max_val], 'r--', linewidth=2, label='Perfect prediction')
-    ax2_results.set_xlabel('Actual (MW)', fontsize=10)
-    ax2_results.set_ylabel('Predicted (MW)', fontsize=10)
-    ax2_results.set_title('Predictions vs Actual (Scatter)', fontsize=12, fontweight='bold')
+    ax2_results.plot([_min_val, _max_val], [_min_val, _max_val], 'r--', linewidth=2, label='Perfect agreement')
+    ax2_results.set_xlabel('Observed (MW)', fontsize=10)
+    ax2_results.set_ylabel('Estimated (MW)', fontsize=10)
+    ax2_results.set_title('Estimated vs Observed Load (Scatter)', fontsize=12, fontweight='bold')
     ax2_results.legend()
     ax2_results.grid(True, alpha=0.3)
 

@@ -6,7 +6,7 @@ Combined Marimo Notebook: TSGAM Examples
 
 This notebook combines three example use cases:
 1. Air Quality Forecasting (Beijing PM2.5)
-2. LA Energy Demand Forecasting
+2. LA Load Estimation
 3. PV/Solar Power Analysis
 
 Select an example from the dropdown to load data and configure the model.
@@ -25,7 +25,7 @@ def _(mo):
 
     This notebook demonstrates TSGAM modeling with three different use cases:
     - **Air Quality**: Forecasting PM2.5 using meteorological variables
-    - **LA Energy**: Forecasting energy demand using weather variables
+    - **LA Energy**: Estimating load using observed weather variables
     - **PV/Solar**: Analyzing solar power generation with temperature and irradiance
 
     Select an example below to get started.
@@ -713,7 +713,7 @@ def _(
         _ax1_la.plot(_test_idx_la, y_test_la_aligned, 'b-', alpha=0.7, label='Actual', linewidth=1)
         _ax1_la.plot(_test_idx_la, predictions_la[:len(y_test_la_aligned)], 'r-', label='Predicted', linewidth=1.5)
         _ax1_la.set_ylabel('Energy (MW)', fontsize=11)
-        _ax1_la.set_title('LA Energy Forecast', fontsize=12, fontweight='bold')
+        _ax1_la.set_title('LA Load Estimation', fontsize=12, fontweight='bold')
         _ax1_la.legend()
         _ax1_la.grid(True, alpha=0.3)
 
