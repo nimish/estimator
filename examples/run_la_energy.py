@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Run script: LA Energy Demand example with ablation and report.
+Run script: LA Load Estimation example with ablation and report.
 Usage: uv run python examples/run_la_energy.py [OPTIONS]
 Requires: uv sync --group examples
 """
@@ -183,7 +183,7 @@ def main(
     test_end: str | None,
     n_jobs: int,
 ) -> None:
-    """Run LA Energy Demand example with ablation study and write reports."""
+    """Run LA Load Estimation example with ablation study and write reports."""
     data_dir = data_dir or DEFAULT_DATA_DIR
     output_dir = output_dir or default_output_dir()
     train_start = train_start or DEFAULT_TRAIN_START
@@ -191,7 +191,7 @@ def main(
     test_start = test_start or DEFAULT_TEST_START
     test_end = test_end or DEFAULT_TEST_END
 
-    section('LA Energy Demand — Ablation and report')
+    section('LA Load Estimation — Ablation and report')
     info(f'Data dir: {data_dir}')
     info(f'Output dir: {output_dir}')
     info(f'Target: {target}')
