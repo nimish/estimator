@@ -445,7 +445,7 @@ def _(df_train, mo):
 
 
 @app.cell
-def _(df_test, df_train, exog_vars, target_var):
+def _(df, df_test, df_train, exog_vars, pd, target_var):
     # Prepare exogenous variables (weather features)
     # Use selected weather columns
     weather_cols = exog_vars.value if len(exog_vars.value) > 0 else ['temperature_degF', 'humidity_pc']
@@ -458,6 +458,10 @@ def _(df_test, df_train, exog_vars, target_var):
     # Create X_train and X_test
     X_train = df_train[weather_cols].copy()
     X_test = df_test[weather_cols].copy()
+    # Evaluate hourly weather history before selecting disconnected holdout weeks.
+    X_predict = df[weather_cols].reindex(
+        pd.date_range(df.index.min(), df.index.max(), freq='1h')
+    )
 
     # Find valid samples (no NaN in target or weather data)
     train_valid = ~(df_train[target_var.value].isna() | X_train.isna().any(axis=1))
@@ -479,6 +483,7 @@ def _(df_test, df_train, exog_vars, target_var):
     print(f"y_test aligned: {len(y_test_aligned)} samples")
     print(f"\nExogenous variables: {list(X_train.columns)}")
     return (
+        X_predict,
         X_test,
         X_train,
         timestamps_test_aligned,
@@ -744,10 +749,12 @@ def _(mo):
 
 
 @app.cell
-def _(X_test, estimator, np, take_log):
+def _(X_predict, X_test, estimator, np, pd, take_log):
     # Make predictions on test set
     print("Making predictions on test set...")
-    y_pred_log = estimator.predict(X_test)
+    y_pred_log = pd.Series(
+        estimator.predict(X_predict), index=X_predict.index
+    ).loc[X_test.index].to_numpy()
 
     # Transform back if log was used
     if take_log.value:
@@ -770,17 +777,21 @@ def _(mo):
 
 @app.cell
 def _(np, y_pred, y_test_aligned):
-    # Calculate metrics
-    mae = np.mean(np.abs(y_pred - y_test_aligned))
-    rmse = np.sqrt(np.mean((y_pred - y_test_aligned) ** 2))
-    mape = np.mean(np.abs((y_pred - y_test_aligned) / (y_test_aligned + 1e-6))) * 100
+    # Offset boundary rows can be unsupported; report coverage and score pairs.
+    _supported = np.isfinite(y_pred) & np.isfinite(y_test_aligned)
+    _actual = y_test_aligned[_supported]
+    _predicted = y_pred[_supported]
+    mae = np.mean(np.abs(_predicted - _actual))
+    rmse = np.sqrt(np.mean((_predicted - _actual) ** 2))
+    mape = np.mean(np.abs((_predicted - _actual) / (_actual + 1e-6))) * 100
 
     # Calculate R-squared
-    ss_res = np.sum((y_test_aligned - y_pred) ** 2)
-    ss_tot = np.sum((y_test_aligned - np.mean(y_test_aligned)) ** 2)
+    ss_res = np.sum((_actual - _predicted) ** 2)
+    ss_tot = np.sum((_actual - np.mean(_actual)) ** 2)
     r2 = 1 - (ss_res / ss_tot)
 
     print("Model Performance Metrics:")
+    print(f"  Supported holdout samples: {_supported.sum()}/{len(_supported)}")
     print(f"  MAE:  {mae:.2f} MW")
     print(f"  RMSE: {rmse:.2f} MW")
     print(f"  MAPE: {mape:.2f}%")
@@ -852,10 +863,10 @@ def _(X_train, estimator, make_spline_basis, np, plt, weather_cols):
         # Create a grid of subplots for each weather variable
         n_vars = len(weather_cols)
         n_cols = 2
-        n_rows = 1
+        n_rows = max(1, (n_vars + n_cols - 1) // n_cols)
 
         fig_exog, axes_exog = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(14, 5))
-        axes_exog = axes_exog.flatten() if n_vars > 1 else [axes_exog]
+        axes_exog = np.asarray(axes_exog).reshape(-1)
 
         for var_idx, _weather_var_name in enumerate(weather_cols):
             _ax_exog = axes_exog[var_idx]
@@ -900,7 +911,8 @@ def _(X_train, estimator, make_spline_basis, np, plt, weather_cols):
             else:
                 _ax_exog.text(0.5, 0.5, 'Variable not fitted', ha='center', va='center', transform=_ax_exog.transAxes)
 
-        # No unused subplots to hide (exactly 2 variables, 2 subplots)
+        for _ax_unused in axes_exog[n_vars:]:
+            _ax_unused.axis('off')
 
         plt.tight_layout()
         return plt.gcf()
@@ -1525,6 +1537,7 @@ def _(
     TsgamOutlierConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
+    X_predict,
     X_test,
     X_train,
     ablation_test,
@@ -1826,12 +1839,16 @@ def _(
             if config_dict['exog'] is None or X_train.shape[1] == 0:
                 # Create empty DataFrame with same index
                 X_train_empty = pd.DataFrame(index=X_train.index)
-                X_test_empty = pd.DataFrame(index=X_test.index)
+                X_test_empty = pd.DataFrame(index=X_predict.index)
                 estimator_ablation.fit(X_train_empty, y_train_log_ablation)
-                y_pred_log_ablation = estimator_ablation.predict(X_test_empty)
+                y_pred_log_ablation = pd.Series(
+                    estimator_ablation.predict(X_test_empty), index=X_predict.index
+                ).loc[X_test.index].to_numpy()
             else:
                 estimator_ablation.fit(X_train, y_train_log_ablation)
-                y_pred_log_ablation = estimator_ablation.predict(X_test)
+                y_pred_log_ablation = pd.Series(
+                    estimator_ablation.predict(X_predict), index=X_predict.index
+                ).loc[X_test.index].to_numpy()
 
             # Transform back if log was used
             if take_log.value:
@@ -1840,11 +1857,14 @@ def _(
                 y_pred_ablation = y_pred_log_ablation
 
             # Calculate metrics
-            mae_ablation = np.mean(np.abs(y_pred_ablation - y_test_aligned))
-            rmse_ablation = np.sqrt(np.mean((y_pred_ablation - y_test_aligned) ** 2))
-            mape_ablation = np.mean(np.abs((y_pred_ablation - y_test_aligned) / (y_test_aligned + 1e-6))) * 100
-            ss_res_ablation = np.sum((y_test_aligned - y_pred_ablation) ** 2)
-            ss_tot_ablation = np.sum((y_test_aligned - np.mean(y_test_aligned)) ** 2)
+            _supported_ablation = np.isfinite(y_pred_ablation) & np.isfinite(y_test_aligned)
+            _actual_ablation = y_test_aligned[_supported_ablation]
+            _predicted_ablation = y_pred_ablation[_supported_ablation]
+            mae_ablation = np.mean(np.abs(_predicted_ablation - _actual_ablation))
+            rmse_ablation = np.sqrt(np.mean((_predicted_ablation - _actual_ablation) ** 2))
+            mape_ablation = np.mean(np.abs((_predicted_ablation - _actual_ablation) / (_actual_ablation + 1e-6))) * 100
+            ss_res_ablation = np.sum((_actual_ablation - _predicted_ablation) ** 2)
+            ss_tot_ablation = np.sum((_actual_ablation - np.mean(_actual_ablation)) ** 2)
             r2_ablation = 1 - (ss_res_ablation / ss_tot_ablation)
 
             ablation_results.append({
@@ -1857,6 +1877,7 @@ def _(
             })
 
             print(f"  Status: {estimator_ablation.decomposition_['status']}")
+            print(f"  Supported holdout samples: {_supported_ablation.sum()}/{len(_supported_ablation)}")
             print(f"  MAE:  {mae_ablation:.2f} MW")
             print(f"  RMSE: {rmse_ablation:.2f} MW")
             print(f"  MAPE: {mape_ablation:.2f}%")
