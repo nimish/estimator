@@ -570,28 +570,55 @@ def _(mo):
     use_ar = mo.ui.switch(label='Use AR model', value=False)
     use_outlier = mo.ui.switch(label='Use outlier detector', value=False)
     outlier_reg_weight = mo.ui.slider(0.0001, 2.0, step=0.0001, value=1e-4, label='Outlier L1 reg weight')
-    outlier_threshold = mo.ui.slider(0.001, 0.5, step=0.001, value=0.05, label='Outlier threshold (log space)')
     solver_select = mo.ui.dropdown(['CLARABEL', 'MOSEK'], value='CLARABEL', label='Solver')
     verbose = mo.ui.switch(label='Verbose solver output', value=True)
     fit_model = mo.ui.run_button(label='Fit Model')
-
-    mo.vstack([
-        mo.hstack([take_log, use_ar, use_outlier]),
-        mo.hstack([outlier_reg_weight, outlier_threshold]),
-        mo.hstack([solver_select, verbose]),
-        mo.hstack([fit_model])
-    ])
-
     return (
         fit_model,
         outlier_reg_weight,
-        outlier_threshold,
         solver_select,
         take_log,
         use_ar,
         use_outlier,
         verbose,
     )
+
+
+@app.cell
+def _(take_log):
+    outlier_units = 'log(load + 1)' if take_log.value else 'MW'
+    return (outlier_units,)
+
+
+@app.cell
+def _(mo, outlier_units):
+    outlier_threshold = mo.ui.slider(
+        0.001, 0.5, step=0.001, value=0.05,
+        label=f'Significant outlier threshold ({outlier_units})',
+    )
+    return (outlier_threshold,)
+
+
+@app.cell
+def _(
+    fit_model,
+    mo,
+    outlier_reg_weight,
+    outlier_threshold,
+    solver_select,
+    take_log,
+    use_ar,
+    use_outlier,
+    verbose,
+):
+    mo.vstack([
+        mo.hstack([take_log, use_ar, use_outlier]),
+        mo.hstack([outlier_reg_weight, outlier_threshold]),
+        mo.md('The threshold marks significant fitted corrections; the L1 weight controls sparsity during fitting.'),
+        mo.hstack([solver_select, verbose]),
+        mo.hstack([fit_model]),
+    ])
+    return
 
 
 @app.cell
@@ -1120,7 +1147,15 @@ def _(estimator, make_basis_matrix, np, plt):
 
 
 @app.cell
-def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
+def _(
+    estimator,
+    np,
+    outlier_threshold,
+    outlier_units,
+    plt,
+    take_log,
+    timestamps_train_aligned,
+):
     def _():
         # Visualize outlier detector if present
         # Check if outlier is configured
@@ -1148,9 +1183,7 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
         if len(_outlier_per_sample_vis):
             outlier_timestamps = timestamps_train_aligned[:len(_outlier_per_sample_vis)]
 
-            # Use threshold from UI (in log space)
-            # 0.05 in log space ≈ 5% multiplicative effect (exp(0.05) ≈ 1.05)
-            # 0.1 in log space ≈ 10% multiplicative effect (exp(0.1) ≈ 1.10)
+            # The threshold has the same units as the fitted target.
             threshold_value = outlier_threshold.value
 
             # Calculate statistics with different thresholds
@@ -1195,7 +1228,7 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
             ax1_outlier = axes_outlier[0]
             ax1_outlier.plot(outlier_timestamps, _outlier_per_sample_vis, 'b-', linewidth=0.5, alpha=0.7, label='Outlier correction')
             ax1_outlier.axhline(y=0, color='r', linestyle='--', linewidth=1, alpha=0.5)
-            ax1_outlier.set_ylabel('Outlier Correction (log space)', fontsize=10)
+            ax1_outlier.set_ylabel(f'Outlier Correction ({outlier_units})', fontsize=10)
             ax1_outlier.set_title('Outlier Detector: Corrections Over Time (per sample)', fontsize=12, fontweight='bold')
             ax1_outlier.legend(fontsize=9)
             ax1_outlier.grid(True, alpha=0.3)
@@ -1206,14 +1239,14 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
             ax2_outlier.plot(period_indices, _outlier_values_vis, 'go-', markersize=3, linewidth=0.5, alpha=0.7, label='Outlier per period')
             ax2_outlier.axhline(y=0, color='r', linestyle='--', linewidth=1, alpha=0.5)
             # Add threshold lines
-            ax2_outlier.axhline(y=threshold_value, color='orange', linestyle='--', linewidth=1, alpha=0.7, label=f'Threshold: ±{threshold_value:.3f}')
+            ax2_outlier.axhline(y=threshold_value, color='orange', linestyle='--', linewidth=1, alpha=0.7, label=f'Threshold: ±{threshold_value:.3f} {outlier_units}')
             ax2_outlier.axhline(y=-threshold_value, color='orange', linestyle='--', linewidth=1, alpha=0.7)
             # Highlight significant outliers
             if n_significant > 0:
                 significant_periods = period_indices[significant_mask]
                 significant_vals = _outlier_values_vis[significant_mask]
                 ax2_outlier.scatter(significant_periods, significant_vals, s=50, c='red', marker='x', linewidths=2, label=f'Significant outliers (n={n_significant})', zorder=5)
-            ax2_outlier.set_ylabel('Outlier Correction (log space)', fontsize=10)
+            ax2_outlier.set_ylabel(f'Outlier Correction ({outlier_units})', fontsize=10)
             ax2_outlier.set_xlabel(f'Period Index ({period_label} per period)', fontsize=10)
             ax2_outlier.set_title(f'Outlier Detector: Corrections Per Period (Non-zero: {n_non_zero}/{n_periods}, Significant: {n_significant}/{n_periods})', fontsize=12, fontweight='bold')
             ax2_outlier.legend(fontsize=9)
@@ -1224,13 +1257,13 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
             ax3_outlier.hist(_outlier_values_vis, bins=50, alpha=0.7, edgecolor='black', color='steelblue', label='All periods')
             ax3_outlier.axvline(x=0, color='r', linestyle='--', linewidth=1, alpha=0.5)
             # Add threshold lines
-            ax3_outlier.axvline(x=threshold_value, color='orange', linestyle='--', linewidth=1, alpha=0.7, label=f'Threshold: ±{threshold_value:.3f}')
+            ax3_outlier.axvline(x=threshold_value, color='orange', linestyle='--', linewidth=1, alpha=0.7, label=f'Threshold: ±{threshold_value:.3f} {outlier_units}')
             ax3_outlier.axvline(x=-threshold_value, color='orange', linestyle='--', linewidth=1, alpha=0.7)
             if len(non_zero_outliers) > 0:
                 ax3_outlier.axvline(x=np.mean(non_zero_outliers), color='g', linestyle='--', linewidth=1, alpha=0.7, label=f'Mean (non-zero): {np.mean(non_zero_outliers):.4f}')
             if len(significant_outliers) > 0:
                 ax3_outlier.axvline(x=np.mean(significant_outliers), color='red', linestyle='--', linewidth=1, alpha=0.7, label=f'Mean (significant): {np.mean(significant_outliers):.4f}')
-            ax3_outlier.set_xlabel('Outlier Correction Value (log space)', fontsize=10)
+            ax3_outlier.set_xlabel(f'Outlier Correction Value ({outlier_units})', fontsize=10)
             ax3_outlier.set_ylabel('Frequency', fontsize=10)
             ax3_outlier.set_title(f'Outlier Distribution (Non-zero: {n_non_zero}/{n_periods}, Significant: {n_significant}/{n_periods})', fontsize=12, fontweight='bold')
             ax3_outlier.legend(fontsize=9)
@@ -1241,27 +1274,31 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
             # Print statistics about outlier days
             print("\nOutlier Detector Statistics:")
             print(f"  Total periods: {n_periods}")
-            print(f"  Threshold for significant outliers: |outlier| > {threshold_value:.3f} (≈{100*(np.exp(threshold_value)-1):.1f}% multiplicative effect)")
+            print(f"  Threshold for significant outliers: |outlier| > {threshold_value:.3f} {outlier_units}")
+            if take_log.value:
+                print(f"  Threshold boundary effects on (load + 1): {100*np.expm1(-threshold_value):+.1f}% / {100*np.expm1(threshold_value):+.1f}%")
             print(f"  Non-zero outlier periods (|outlier| > 1e-6): {n_non_zero} ({100*n_non_zero/n_periods:.1f}%)")
             print(f"  Significant outlier periods (|outlier| > {threshold_value:.3f}): {n_significant} ({100*n_significant/n_periods:.1f}%)")
             print(f"  Number of outlier {day_label} (non-zero): {n_outlier_days_non_zero:.1f}")
             print(f"  Number of outlier {day_label} (significant): {n_outlier_days_significant:.1f}")
             if len(non_zero_outliers) > 0:
                 print("\n  Non-zero outlier statistics:")
-                print(f"    Mean: {np.mean(non_zero_outliers):.4f}")
-                print(f"    Max: {np.max(np.abs(_outlier_values_vis)):.4f}")
-                print(f"    Min: {np.min(non_zero_outliers):.4f}")
-                print(f"    Std: {np.std(non_zero_outliers):.4f}")
+                print(f"    Mean: {np.mean(non_zero_outliers):.4f} {outlier_units}")
+                print(f"    Max: {np.max(np.abs(_outlier_values_vis)):.4f} {outlier_units}")
+                print(f"    Min: {np.min(non_zero_outliers):.4f} {outlier_units}")
+                print(f"    Std: {np.std(non_zero_outliers):.4f} {outlier_units}")
             if len(significant_outliers) > 0:
                 print(f"\n  Significant outlier statistics (|outlier| > {threshold_value:.3f}):")
                 print(f"    Count: {n_significant}")
-                print(f"    Mean: {np.mean(significant_outliers):.4f}")
-                print(f"    Max: {np.max(np.abs(significant_outliers)):.4f}")
-                print(f"    Min: {np.min(significant_outliers):.4f}")
+                print(f"    Mean: {np.mean(significant_outliers):.4f} {outlier_units}")
+                print(f"    Max: {np.max(np.abs(significant_outliers)):.4f} {outlier_units}")
+                print(f"    Min: {np.min(significant_outliers):.4f} {outlier_units}")
                 print(f"    Period indices: {outlier_period_indices[:20]}{'...' if len(outlier_period_indices) > 20 else ''}")
-                # Show multiplier effects for significant outliers
-                multipliers = np.exp(significant_outliers)
-                print(f"    Multiplier range: {np.min(multipliers):.3f}x to {np.max(multipliers):.3f}x")
+                if take_log.value:
+                    multipliers = np.exp(significant_outliers)
+                    print(f"    Multiplier range on (load + 1): {np.min(multipliers):.3f}x to {np.max(multipliers):.3f}x")
+                else:
+                    print(f"    Additive correction range: {np.min(significant_outliers):+.4f} to {np.max(significant_outliers):+.4f} MW")
             else:
                 print(f"\n  No significant outliers detected (all |outlier| <= {threshold_value:.3f})")
                 if len(non_zero_period_indices) > 0:
@@ -1277,7 +1314,15 @@ def _(estimator, np, outlier_threshold, plt, timestamps_train_aligned):
 
 
 @app.cell
-def _(estimator, np, outlier_threshold, pd, timestamps_train_aligned):
+def _(
+    estimator,
+    np,
+    outlier_threshold,
+    outlier_units,
+    pd,
+    take_log,
+    timestamps_train_aligned,
+):
     def _():
         # Analyze if significant outlier days correspond to holidays or interesting dates
         if 'outlier_group_values' in estimator.decomposition_["values"]:
@@ -1322,7 +1367,7 @@ def _(estimator, np, outlier_threshold, pd, timestamps_train_aligned):
                 holiday_name = us_holidays.get(date_only, None)
                 is_weekend = date.weekday() >= 5  # Saturday = 5, Sunday = 6
                 outlier_val = outlier_values[i]
-                multiplier = np.exp(outlier_val)
+                multiplier = np.exp(outlier_val) if take_log.value else None
 
                 results.append({
                     'date': date,
@@ -1351,14 +1396,16 @@ def _(estimator, np, outlier_threshold, pd, timestamps_train_aligned):
 
             # Print detailed table
             print("\nDetailed Outlier Days:")
-            print(f"{'Date':<12} {'Day':<10} {'Outlier':<10} {'Multiplier':<12} {'Holiday/Notes':<30}")
+            correction_heading = f'Outlier ({outlier_units})'
+            multiplier_heading = 'Multiplier (load + 1)' if take_log.value else ''
+            print(f"{'Date':<12} {'Day':<10} {correction_heading:<24} {multiplier_heading:<24} {'Holiday/Notes':<30}")
             print(f"{'-'*80}")
 
             for result in sorted(results, key=lambda x: x['date']):
                 date_str = result['date'].strftime('%Y-%m-%d')
                 day_str = result['day_of_week']
                 outlier_str = f"{result['outlier_value']:.4f}"
-                mult_str = f"{result['multiplier']:.3f}x"
+                mult_str = f"{result['multiplier']:.3f}x" if take_log.value else ''
 
                 notes = []
                 if result['is_holiday']:
@@ -1369,7 +1416,7 @@ def _(estimator, np, outlier_threshold, pd, timestamps_train_aligned):
                     notes.append("Weekday")
 
                 notes_str = ", ".join(notes)
-                print(f"{date_str:<12} {day_str:<10} {outlier_str:<10} {mult_str:<12} {notes_str:<30}")
+                print(f"{date_str:<12} {day_str:<10} {outlier_str:<24} {mult_str:<24} {notes_str:<30}")
 
             # Additional insights
             print(f"\n{'='*80}")
@@ -1377,20 +1424,23 @@ def _(estimator, np, outlier_threshold, pd, timestamps_train_aligned):
             if holiday_count > 0:
                 print(f"  • {holiday_count} outlier day(s) correspond to holidays")
                 holiday_outliers = [r for r in results if r['is_holiday']]
-                print(f"    Average holiday outlier value: {np.mean([r['outlier_value'] for r in holiday_outliers]):.4f}")
-                print(f"    Average holiday multiplier: {np.mean([r['multiplier'] for r in holiday_outliers]):.3f}x")
+                print(f"    Average holiday outlier value: {np.mean([r['outlier_value'] for r in holiday_outliers]):.4f} {outlier_units}")
+                if take_log.value:
+                    print(f"    Average holiday multiplier on (load + 1): {np.mean([r['multiplier'] for r in holiday_outliers]):.3f}x")
 
             if weekend_count > 0:
                 print(f"  • {weekend_count} outlier day(s) are weekends")
                 weekend_outliers = [r for r in results if r['is_weekend']]
-                print(f"    Average weekend outlier value: {np.mean([r['outlier_value'] for r in weekend_outliers]):.4f}")
-                print(f"    Average weekend multiplier: {np.mean([r['multiplier'] for r in weekend_outliers]):.3f}x")
+                print(f"    Average weekend outlier value: {np.mean([r['outlier_value'] for r in weekend_outliers]):.4f} {outlier_units}")
+                if take_log.value:
+                    print(f"    Average weekend multiplier on (load + 1): {np.mean([r['multiplier'] for r in weekend_outliers]):.3f}x")
 
             weekday_outliers = [r for r in results if not r['is_holiday'] and not r['is_weekend']]
             if len(weekday_outliers) > 0:
                 print(f"  • {len(weekday_outliers)} outlier day(s) are regular weekdays (may indicate special events or data issues)")
-                print(f"    Average weekday outlier value: {np.mean([r['outlier_value'] for r in weekday_outliers]):.4f}")
-                print(f"    Average weekday multiplier: {np.mean([r['multiplier'] for r in weekday_outliers]):.3f}x")
+                print(f"    Average weekday outlier value: {np.mean([r['outlier_value'] for r in weekday_outliers]):.4f} {outlier_units}")
+                if take_log.value:
+                    print(f"    Average weekday multiplier on (load + 1): {np.mean([r['multiplier'] for r in weekday_outliers]):.3f}x")
 
             print(f"{'='*80}\n")
 
