@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from tsgam_estimator import TsgamSplineConfig
+from tsgam import TsgamSplineConfig
 
 _VAR_LAG_HOURS: dict[str, list[int]] = {
     "pressure": [-2, -1, 0, 1],

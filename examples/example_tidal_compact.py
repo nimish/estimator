@@ -37,7 +37,7 @@ with app.setup:
     )
     from tidal_analysis_helpers import compute_lagged_correlation, compute_periodogram, infer_samples_per_hour, fitted_components
     from tidal_model_shared import prepare_split_regressors, tidal_metrics
-    from tsgam_estimator import (
+    from tsgam import (
         TsgamEstimator,
         TsgamEstimatorConfig,
         TsgamLinearConfig,

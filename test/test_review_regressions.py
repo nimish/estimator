@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tsgam_estimator import (
+from tsgam import (
     TrendType, TsgamEstimator, TsgamEstimatorConfig, TsgamForecastConfig,
     TsgamForecastEstimator, TsgamSplineConfig, TsgamTrendConfig,
 )

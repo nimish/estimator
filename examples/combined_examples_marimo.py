@@ -48,13 +48,13 @@ def _():
     from datetime import timedelta
     from signaldecomp.spline import make_spline_basis
 
-    # Add src directory to path to import tsgam_estimator
+    # Add src directory to path to import tsgam
     _project_root = Path(__file__).parent.parent
     _src_dir = _project_root / 'src'
     if str(_src_dir) not in sys.path:
         sys.path.insert(0, str(_src_dir))
 
-    from tsgam_estimator import (
+    from tsgam import (
         TsgamEstimator,
         TsgamEstimatorConfig,
         TsgamMultiPeriodicConfig,

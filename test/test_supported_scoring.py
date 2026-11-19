@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator, TsgamEstimatorConfig, TsgamLinearConfig,
     TsgamForecastConfig, TsgamForecastEstimator,
     make_supported_scorer,

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from signaldecomp.basis import make_basis_matrix
 
-from tsgam_estimator._design import _timestamps_to_indices
+from tsgam._design import _timestamps_to_indices
 
 
 def test_timestamp_phase_matches_notebook_pattern():

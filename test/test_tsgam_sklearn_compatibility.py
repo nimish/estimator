@@ -7,7 +7,7 @@ import pytest
 from sklearn.base import clone, is_regressor
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamForecastArConfig,

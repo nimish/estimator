@@ -40,7 +40,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from tsgam_estimator import (
+from tsgam import (
     PERIOD_HOURLY_YEARLY,
     TrendType,
     TsgamEstimator,
@@ -335,7 +335,7 @@ def _noaa_url(station, product, begin_date, end_date):
         'units': 'metric',
         'time_zone': 'gmt',
         'format': 'json',
-        'application': 'tsgam_estimator',
+        'application': 'tsgam',
     }
     if product in _WATER_LEVEL_PRODUCTS:
         params['datum'] = 'MLLW'
@@ -348,7 +348,7 @@ def _noaa_url(station, product, begin_date, end_date):
 def _fetch_json(url):
     """Fetch and parse JSON from a URL."""
     req = urllib.request.Request(
-        url, headers={'User-Agent': 'tsgam_estimator/0.1'},
+        url, headers={'User-Agent': 'tsgam/0.1'},
     )
     with urllib.request.urlopen(req, timeout=120) as resp:
         return json.loads(resp.read().decode())
@@ -666,7 +666,7 @@ def download_lcd_weather(
         url = f'{LCD_BASE_URL}/{year}/{station_id}.csv'
         print(f'    Downloading LCD {year} ...')
         req = urllib.request.Request(
-            url, headers={'User-Agent': 'tsgam_estimator/0.1'},
+            url, headers={'User-Agent': 'tsgam/0.1'},
         )
         try:
             with urllib.request.urlopen(req, timeout=180) as resp:

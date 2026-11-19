@@ -45,7 +45,7 @@ from common_cli import (
     write_ablation_report,
 )
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamMultiPeriodicConfig,

@@ -40,7 +40,7 @@ from ._forecast_plotting import (
 )
 
 try:
-    __version__ = version("tsgam-estimator")
+    __version__ = version("tsgam")
 except PackageNotFoundError:
     __version__ = "0.1.0"
 

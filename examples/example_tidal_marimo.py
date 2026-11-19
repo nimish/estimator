@@ -126,7 +126,7 @@ def _(
         infer_samples_per_hour,
         fitted_components,
     )
-    from tsgam_estimator import (
+    from tsgam import (
         TrendType,
         TsgamEstimator,
         TsgamEstimatorConfig,

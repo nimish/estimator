@@ -4,7 +4,7 @@
 import numpy as np
 import pandas as pd
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamSolverConfig,

@@ -16,26 +16,26 @@ ALLOWED_SDIST_ROOT_FILES = {
     "pyproject.toml",
 }
 ALLOWED_SDIST_PACKAGE_FILES = {
-    "src/tsgam_estimator/__init__.py",
-    "src/tsgam_estimator/_design.py",
-    "src/tsgam_estimator/_estimator.py",
-    "src/tsgam_estimator/_forecast.py",
-    "src/tsgam_estimator/_forecast_plotting.py",
-    "src/tsgam_estimator/_problem.py",
-    "src/tsgam_estimator/_sklearn.py",
-    "src/tsgam_estimator/py.typed",
-    "src/tsgam_estimator/tsgam_estimator.py",
+    "src/tsgam/__init__.py",
+    "src/tsgam/_design.py",
+    "src/tsgam/_estimator.py",
+    "src/tsgam/_forecast.py",
+    "src/tsgam/_forecast_plotting.py",
+    "src/tsgam/_problem.py",
+    "src/tsgam/_sklearn.py",
+    "src/tsgam/py.typed",
+    "src/tsgam/tsgam_estimator.py",
 }
 ALLOWED_WHEEL_PACKAGE_FILES = {
-    "tsgam_estimator/__init__.py",
-    "tsgam_estimator/_design.py",
-    "tsgam_estimator/_estimator.py",
-    "tsgam_estimator/_forecast.py",
-    "tsgam_estimator/_forecast_plotting.py",
-    "tsgam_estimator/_problem.py",
-    "tsgam_estimator/_sklearn.py",
-    "tsgam_estimator/py.typed",
-    "tsgam_estimator/tsgam_estimator.py",
+    "tsgam/__init__.py",
+    "tsgam/_design.py",
+    "tsgam/_estimator.py",
+    "tsgam/_forecast.py",
+    "tsgam/_forecast_plotting.py",
+    "tsgam/_problem.py",
+    "tsgam/_sklearn.py",
+    "tsgam/py.typed",
+    "tsgam/tsgam_estimator.py",
 }
 
 
@@ -66,7 +66,7 @@ def _check_wheel(path: Path) -> list[str]:
     for name in names:
         if name in ALLOWED_WHEEL_PACKAGE_FILES:
             continue
-        if name.startswith("tsgam_estimator-") and ".dist-info/" in name:
+        if name.startswith("tsgam-") and ".dist-info/" in name:
             continue
         errors.append(f"{path.name}: unexpected wheel member {name}")
     return errors

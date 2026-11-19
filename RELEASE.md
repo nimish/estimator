@@ -2,7 +2,7 @@
 
 This project publishes Python distributions from GitHub Actions using PyPI
 trusted publishing. The package version is declared in `pyproject.toml`; the
-runtime `tsgam_estimator.__version__` is read from installed package metadata.
+runtime `tsgam.__version__` is read from installed package metadata.
 
 ## One-time PyPI setup
 

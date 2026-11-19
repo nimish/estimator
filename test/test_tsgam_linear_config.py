@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 from signaldecomp import make_offset_basis
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamArConfig,
     TsgamEstimator,
     TsgamEstimatorConfig,

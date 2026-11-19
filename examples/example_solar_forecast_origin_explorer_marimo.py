@@ -63,7 +63,7 @@ def _():
             sys.path.insert(0, str(local_path))
 
     from forecast_real_data_support import load_all_datasets
-    from tsgam_estimator import (
+    from tsgam import (
         TsgamEstimatorConfig,
         TsgamForecastArConfig,
         TsgamForecastConfig,

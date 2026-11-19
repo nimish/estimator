@@ -74,7 +74,7 @@ def _():
         synthetic_metrics,
         true_regressor_response_frame,
     )
-    from tsgam_estimator import TsgamEstimator
+    from tsgam import TsgamEstimator
 
     return (
         SyntheticDriverNoiseDistribution,

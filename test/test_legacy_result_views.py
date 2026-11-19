@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from signaldecomp.spline import make_spline_basis
 
-from tsgam_estimator import (
+from tsgam import (
     TrendType,
     TsgamEstimator,
     TsgamEstimatorConfig,

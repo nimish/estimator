@@ -10,7 +10,7 @@ import pandas as pd
 from signaldecomp import components_to_frame, make_interaction_basis, make_offset_basis
 from signaldecomp.basis import make_basis_matrix
 
-from tsgam_estimator import (
+from tsgam import (
     TrendType,
     TsgamEstimator,
     TsgamEstimatorConfig,
@@ -20,7 +20,7 @@ from tsgam_estimator import (
     TsgamSplineConfig,
     TsgamTrendConfig,
 )
-from tsgam_estimator._design import (
+from tsgam._design import (
     _ensure_sorted_index,
     _ensure_timestamp_index,
     _get_zero_lag_H,

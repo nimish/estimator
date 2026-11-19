@@ -15,14 +15,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamMultiPeriodicConfig,
     TsgamSolverConfig,
     TsgamSplineConfig,
 )
-from tsgam_estimator._design import (
+from tsgam._design import (
     _ensure_timestamp_index,
     _timestamps_to_indices,
     _validate_frequency,

@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from signaldecomp import make_offset_basis, offset_source_mask
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator, TsgamEstimatorConfig, TsgamForecastConfig,
     TsgamForecastCouplingConfig, TsgamForecastEstimator, TsgamLinearConfig,
     TsgamSolverConfig, TsgamSplineConfig,

@@ -357,7 +357,7 @@ class TsgamOutlierConfig(SklearnConfigMixin):
     >>> config = TsgamOutlierConfig(reg_weight=0.1)
     >>>
     >>> # Use in full estimator configuration
-    >>> from tsgam_estimator import TsgamEstimatorConfig
+    >>> from tsgam import TsgamEstimatorConfig
     >>> estimator_config = TsgamEstimatorConfig(
     ...     outlier_config=TsgamOutlierConfig(reg_weight=0.002)
     ... )
@@ -565,7 +565,7 @@ def get_recommended_periods(X: pd.DataFrame, include_harmonics: bool = False) ->
     --------
     >>> import pandas as pd
     >>> import numpy as np
-    >>> from tsgam_estimator import get_recommended_periods
+    >>> from tsgam import get_recommended_periods
     >>>
     >>> # For 1-minute data: periods are multiples of 1-minute intervals
     >>> dates = pd.date_range('2020-01-01', periods=1000, freq='1min')
@@ -781,7 +781,7 @@ class TsgamEstimator(RegressorMixin, BaseEstimator):
     --------
     >>> import pandas as pd
     >>> import numpy as np
-    >>> from tsgam_estimator import (
+    >>> from tsgam import (
     ...     TsgamEstimator, TsgamEstimatorConfig,
     ...     TsgamMultiPeriodicConfig, TsgamSplineConfig, TsgamOutlierConfig
     ... )

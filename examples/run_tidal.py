@@ -79,7 +79,7 @@ from tidal_model_shared import (
     tidal_metrics,
     usable_lcd_columns,
 )
-from tsgam_estimator import (
+from tsgam import (
     TrendType,
     TsgamEstimator,
     TsgamEstimatorConfig,

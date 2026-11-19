@@ -6,9 +6,9 @@
 import numpy as np
 import pandas as pd
 import pytest
-import tsgam_estimator._forecast as forecast_module
+import tsgam._forecast as forecast_module
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamArConfig,
@@ -22,7 +22,7 @@ from tsgam_estimator import (
     TsgamSolverConfig,
     TsgamSplineConfig,
 )
-from tsgam_estimator.tsgam_estimator import (
+from tsgam.tsgam_estimator import (
     TsgamForecastArConfig as ShimForecastArConfig,
     TsgamForecastEstimator as ShimForecastEstimator,
 )

@@ -53,7 +53,7 @@ def _():
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
 
-    from tsgam_estimator import (
+    from tsgam import (
         TsgamEstimatorConfig,
         TsgamForecastConfig,
         TsgamForecastCouplingConfig,

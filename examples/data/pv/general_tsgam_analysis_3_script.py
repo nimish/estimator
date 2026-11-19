@@ -25,7 +25,7 @@ from signaldecomp.spline import make_spline_basis
 from sklearn.metrics import r2_score
 from solardatatools import DataHandler
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamMultiPeriodicConfig,

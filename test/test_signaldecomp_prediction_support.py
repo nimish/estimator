@@ -5,9 +5,9 @@ from scipy import signal, stats
 from signaldecomp.basis import make_basis_matrix
 from signaldecomp import components_to_frame
 
-from tsgam_estimator._design import _make_fourier_basis
+from tsgam._design import _make_fourier_basis
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamArConfig, TsgamEstimator, TsgamEstimatorConfig,
     TsgamLinearConfig, TsgamSolverConfig,
     TsgamMultiPeriodicConfig,
@@ -58,8 +58,8 @@ def test_ar_nonoptimal_status_does_not_publish_coefficients(monkeypatch, status)
 
 
 def test_coupled_prediction_reuses_bases_and_detaches_solver_values(monkeypatch):
-    import tsgam_estimator._design as design_module
-    import tsgam_estimator._problem as problem_module
+    import tsgam._design as design_module
+    import tsgam._problem as problem_module
 
     def unused_interaction_basis(*args, **kwargs):
         raise AssertionError("No interaction basis is needed")

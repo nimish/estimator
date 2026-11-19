@@ -228,7 +228,7 @@ def _get_axes(ax: Axes | None, *, figsize: tuple[float, float]) -> Axes:
         import matplotlib.pyplot as plt
     except ImportError as error:  # pragma: no cover - depends on user environment
         raise ImportError(
-            "Forecast plotting requires matplotlib. Install tsgam-estimator[viz] "
+            "Forecast plotting requires matplotlib. Install tsgam[viz] "
             "or add matplotlib to the notebook environment."
         ) from error
     _, created_ax = plt.subplots(figsize=figsize, layout="constrained")

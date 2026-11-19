@@ -13,7 +13,7 @@ Tests that:
 import pytest
 import numpy as np
 import pandas as pd
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamLinearConfig,
@@ -124,7 +124,7 @@ def test_fit_rejects_multiple_nans_in_y(basic_config, basic_data):
 def test_fit_rejects_nan_in_X_with_exog(basic_config, basic_data):
     """Test that fit rejects NaN values in X when exogenous variables are present via check_X_y."""
     # Add exog config
-    from tsgam_estimator import TsgamSplineConfig
+    from tsgam import TsgamSplineConfig
     basic_config.exog_config = [
         TsgamSplineConfig(n_knots=10, lags=[0])
     ]

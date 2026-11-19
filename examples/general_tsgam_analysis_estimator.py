@@ -830,16 +830,16 @@ def _():
     import statsmodels.api as sm
     import sys
 
-    # Add src directory to path to import tsgam_estimator
+    # Add src directory to path to import tsgam
     # This notebook is in Archive/, so parent directory is project root
     _current = Path.cwd()
     if _current.name == 'Archive':
         _project_root = _current.parent
     else:
-        # Try to find project root by looking for src/tsgam_estimator/
+        # Try to find project root by looking for src/tsgam/
         _project_root = _current
         for _ in range(5):  # Max 5 levels up
-            if (_project_root / 'src' / 'tsgam_estimator').exists():
+            if (_project_root / 'src' / 'tsgam').exists():
                 break
             _project_root = _project_root.parent
 
@@ -847,7 +847,7 @@ def _():
     if str(_src_dir) not in sys.path:
         sys.path.insert(0, str(_src_dir))
 
-    from tsgam_estimator import (
+    from tsgam import (
         TrendType,
         TsgamEstimator,
         TsgamEstimatorConfig,

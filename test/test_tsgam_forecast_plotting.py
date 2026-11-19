@@ -12,18 +12,18 @@ import pytest
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt  # noqa: E402
 
-from tsgam_estimator import (  # noqa: E402
+from tsgam import (  # noqa: E402
     forecast_to_long_dataframe,
     plot_forecast_horizon,
     plot_forecast_origin,
 )
-from tsgam_estimator.tsgam_estimator import (  # noqa: E402
+from tsgam.tsgam_estimator import (  # noqa: E402
     forecast_to_long_dataframe as shim_forecast_to_long_dataframe,
 )
-from tsgam_estimator.tsgam_estimator import (  # noqa: E402
+from tsgam.tsgam_estimator import (  # noqa: E402
     plot_forecast_horizon as shim_plot_forecast_horizon,
 )
-from tsgam_estimator.tsgam_estimator import (  # noqa: E402
+from tsgam.tsgam_estimator import (  # noqa: E402
     plot_forecast_origin as shim_plot_forecast_origin,
 )
 

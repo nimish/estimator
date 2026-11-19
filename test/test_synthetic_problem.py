@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal, assert_series_equal
 
-from tsgam_estimator import TsgamEstimator, TsgamEstimatorConfig, TsgamLinearConfig, TsgamSplineConfig, TrendType
+from tsgam import TsgamEstimator, TsgamEstimatorConfig, TsgamLinearConfig, TsgamSplineConfig, TrendType
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

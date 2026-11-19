@@ -32,10 +32,10 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
 
-# Add src directory to path to import tsgam_estimator
+# Add src directory to path to import tsgam
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamEstimator,
     TsgamEstimatorConfig,
     TsgamMultiPeriodicConfig,
