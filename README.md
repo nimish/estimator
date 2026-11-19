@@ -1,15 +1,23 @@
-# Time-series generalized additive model (tsgam)
+# Time-series generalized additive model (TSGAM)
 
-TSGAM is developed at [cvxgrp/tsgam](https://github.com/cvxgrp/tsgam), where contributors can open issues and pull requests.
+TSGAM fits a time series as a sum of interpretable components. For electricity demand, those components might include a daily load profile that changes with the seasons, a nonlinear response to temperature, and a long-term trend. You can inspect each component’s contribution to the load at a particular hour. You can also build forecasts for several horizons using the information available at a forecast origin.
 
-Time series generalized additive model (tsgam) is a package for fitting "generalized addive models" (GAMs) augmented with time-dependent features. The idea is to fit a statistical model that estimates a target time-series based on linear or nonlinear responses to exogenous variables, features encoding one or more natural periodicies, and a features encoding long-term trends. For nonlinear exogenous variables, we model the response with natural cubic basis splines. The (multi-)periodic components are modeled with trucated Fourier series, plus cross terms when multiple periods are present (e.g., daily and year periodicities). We currently have long-term trend models for linear trends and monotonic nonlinear trends. Nonlinear trends can now be configured explicitly as `nonlinear_decreasing` or `nonlinear_increasing`, while legacy `nonlinear` remains a backward-compatible alias for the decreasing form.
+The formulation builds on Bennet Meyers and Stephen Boyd’s [*Signal Decomposition Using Masked Proximal Operators* (2023)](https://web.stanford.edu/~boyd/papers/sig_decomp_mprox.html). TSGAM uses the [`signaldecomp` library](https://github.com/cvxgrp/cvx-sd-skill) to assemble component models in CVXPY. TSGAM provides the time indexing, estimator interface, and forecasting methods.
+
+Choose linear or natural cubic spline responses for exogenous variables, truncated Fourier series for periodic patterns, and linear or monotone trends. Cross terms between Fourier series let the shape of one cycle vary with the phase of another. For example, summer and winter can have different hours of peak demand. For monotone trends, use `nonlinear_increasing` or `nonlinear_decreasing` (also accepted as `nonlinear`).
 
 ## Installation
 
-From PyPI:
+Install `tsgam` from Git in a downstream project (Python 3.12 or newer):
 
 ```bash
-uv add tsgam-estimator
+uv add "tsgam @ git+https://github.com/cvxgrp/tsgam.git"
+```
+
+From a local checkout:
+
+```bash
+uv sync
 ```
 
 For local development:
@@ -18,8 +26,14 @@ For local development:
 uv sync --group dev
 ```
 
-Requires Python 3.12 or newer. SignalDecomp is pinned to an immutable Git
-development revision with Python 3.12 support.
+## Worked examples
+
+- [What explains hourly load?](examples/example_la_energy_marimo.py) Fit Los Angeles electricity demand from weather and calendar patterns. The notebook holds out the last week of each month and estimates demand for those hours using observed weather.
+- [What can I forecast from this hour?](examples/example_simple_dmh_forecast_marimo.py) Follow one synthetic weather observation through a direct multi-horizon model. Each row of predictions contains a nowcast and forecasts for the next three hours.
+
+See the [example guide](examples/README_RUN_SCRIPTS.md) for launch commands and more notebooks.
+
+For a related application of the periodic cross terms, Giray Ogut, Bennet Meyers, and Stephen Boyd used interacting daily, weekly, and annual patterns to model hourly Rhode Island net load. Their study evaluates point forecasts, quantile forecasts, and samples of future load trajectories. [*Interpretable Net Load Forecasting Using Smooth Multiperiodic Features* (2024)](https://web.stanford.edu/~boyd/papers/multiperiodic_forecasting.html)
 
 ## Documentation
 
@@ -58,7 +72,7 @@ make html
 
 `predict` returns NaN where lagged inputs are unavailable. `estimator.score`
 computes R² on supported rows only. For explicit sklearn metrics, use
-`make_supported_scorer("neg_root_mean_squared_error")` from `tsgam_estimator`
+`make_supported_scorer("neg_root_mean_squared_error")` from `tsgam`
 as the `scoring` argument to `GridSearchCV` or `cross_validate`. Ordinary sklearn
 scorers do not ignore NaNs. The wrapper predicts on the full validation window
 before filtering, preserving lag alignment. Targets must be finite; an entirely
@@ -125,7 +139,7 @@ predictions or sampled residuals forward.
 ```python
 import pandas as pd
 
-from tsgam_estimator import (
+from tsgam import (
     TsgamForecastArConfig,
     TsgamForecastConfig,
     TsgamForecastEstimator,
@@ -162,11 +176,11 @@ Install the optional Matplotlib support and plot the origin-indexed output from
 `TsgamForecastEstimator.predict` directly:
 
 ```bash
-uv add "tsgam-estimator[viz]"
+uv sync --extra viz
 ```
 
 ```python
-from tsgam_estimator import plot_forecast_horizon, plot_forecast_origin
+from tsgam import plot_forecast_horizon, plot_forecast_origin
 
 predictions = forecaster.predict(X_test)
 
@@ -191,6 +205,8 @@ library.
 
 ## Development
 
+Development takes place at [cvxgrp/tsgam](https://github.com/cvxgrp/tsgam), where contributors can open issues and pull requests.
+
 ### Running Tests
 
 ```bash
@@ -208,7 +224,7 @@ uv run ty check
 ### Running Tests with Coverage
 
 ```bash
-uv run pytest --cov=tsgam_estimator --cov-report=html
+uv run pytest --cov=tsgam --cov-report=html
 ```
 
 ### Working with Examples and Notebooks
