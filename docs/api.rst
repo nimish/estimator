@@ -4,21 +4,34 @@
 API Reference
 =============
 
-This page provides detailed API documentation for the estimator package.
+Import both estimators and their configuration classes from ``tsgam``.
 
-TsgamEstimator
---------------
+Time-series decomposition
+-------------------------
 
-.. automodule:: tsgam_estimator
-   :members:
+Use ``TsgamEstimator`` to fit a series and inspect its fitted components
+through ``decomposition_``.
+
+.. autoclass:: tsgam.TsgamEstimator
+   :members: fit, predict, sample, score
    :undoc-members:
-   :show-inheritance:
 
-LoadForecastRegressor
----------------------
+Direct multi-horizon forecasting
+--------------------------------
 
-.. automodule:: load_model_estimator
+Use ``TsgamForecastEstimator`` to predict several horizons from each forecast
+origin. Each output row corresponds to one origin, with a column per horizon.
+
+.. autoclass:: tsgam.TsgamForecastEstimator
+   :members: fit, predict
+   :undoc-members:
+
+Configuration and utilities
+---------------------------
+
+.. automodule:: tsgam
    :members:
+   :exclude-members: TsgamEstimator, TsgamForecastEstimator
    :undoc-members:
    :show-inheritance:
 

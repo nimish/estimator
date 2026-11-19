@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath('..'))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'estimator'
+project = 'TSGAM'
 copyright = '2025, Alliance for Sustainable Energy, LLC and Nimish Telang'
 author = 'Alliance for Sustainable Energy, LLC and Nimish Telang'
 release = '0.1.0'
@@ -38,7 +38,6 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
 
 # -- Extension configuration -------------------------------------------------
 
