@@ -8,8 +8,9 @@ runtime `tsgam_estimator.__version__` is read from installed package metadata.
 
 Configure a trusted publisher for this repository in PyPI:
 
-- Repository: `nimish/estimator`
-- Workflow: `.github/workflows/release.yml`
+- GitHub owner: `cvxgrp`
+- Repository name: `tsgam`
+- Workflow filename: `release.yml`
 - Environment: leave blank unless the workflow is later updated to use one
 
 No long-lived PyPI API token is required.
