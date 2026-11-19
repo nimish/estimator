@@ -40,9 +40,9 @@ viz = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/nimish/estimator"
-Repository = "https://github.com/nimish/estimator"
-Issues = "https://github.com/nimish/estimator/issues"
+Homepage = "https://github.com/cvxgrp/tsgam"
+Repository = "https://github.com/cvxgrp/tsgam"
+Issues = "https://github.com/cvxgrp/tsgam/issues"
 
 [dependency-groups]
 test = [
