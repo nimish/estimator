@@ -1,5 +1,7 @@
 # Time-series generalized additive model (tsgam)
 
+> **TSGAM has moved to [cvxgrp/tsgam](https://github.com/cvxgrp/tsgam).** Please use that repository for installation instructions, documentation, issues, and pull requests. The package and Python import are now named `tsgam`; public class names also drop the `Tsgam` prefix—for example, `TsgamEstimator` becomes `Estimator`.
+
 Time series generalized additive model (tsgam) is a package for fitting "generalized addive models" (GAMs) augmented with time-dependent features. The idea is to fit a statistical model that estimates a target time-series based on linear or nonlinear responses to exogenous variables, features encoding one or more natural periodicies, and a features encoding long-term trends. For nonlinear exogenous variables, we model the response with natural cubic basis splines. The (multi-)periodic components are modeled with trucated Fourier series, plus cross terms when multiple periods are present (e.g., daily and year periodicities). We currently have long-term trend models for linear trends and monotonic nonlinear trends. Nonlinear trends can now be configured explicitly as `nonlinear_decreasing` or `nonlinear_increasing`, while legacy `nonlinear` remains a backward-compatible alias for the decreasing form.
 
 ## Installation
